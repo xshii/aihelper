@@ -1,0 +1,8 @@
+name: skill-cpp-pybind-facade
+type: skill
+description: Wrap ugly flat C++ APIs (combinatorial type-explosion) into clean Pythonic facade via pybind11, with torch tensor frontend
+language: python
+tags: [pybind11, cpp, binding, facade, type-dispatch, codegen, torch, tensor]
+difficulty: advanced
+status: active
+created: 2026-04-03

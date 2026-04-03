@@ -1,0 +1,60 @@
+{
+  "source_header": "libsigproc.h",
+  "types": [
+    {"name": "IQ16", "kind": "struct", "original_declaration": "typedef struct { int16_t i; int16_t q; } IQ16;"},
+    {"name": "IQ32", "kind": "struct", "original_declaration": "typedef struct { int32_t i; int32_t q; } IQ32;"},
+    {"name": "Float32", "kind": "typedef", "original_declaration": "typedef float Float32;"},
+    {"name": "Float64", "kind": "typedef", "original_declaration": "typedef double Float64;"},
+    {"name": "FixPoint", "kind": "struct", "original_declaration": "typedef struct { int32_t value; int8_t frac_bits; } FixPoint;"}
+  ],
+  "conversions": [
+    {"c_func": "sp_convert_IQ16_to_IQ32", "src_type": "IQ16", "dst_type": "IQ32", "params": "const IQ16* src, IQ32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ16_to_Float32", "src_type": "IQ16", "dst_type": "Float32", "params": "const IQ16* src, Float32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ16_to_Float64", "src_type": "IQ16", "dst_type": "Float64", "params": "const IQ16* src, Float64* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ16_to_FixPoint", "src_type": "IQ16", "dst_type": "FixPoint", "params": "const IQ16* src, FixPoint* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ32_to_IQ16", "src_type": "IQ32", "dst_type": "IQ16", "params": "const IQ32* src, IQ16* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ32_to_Float32", "src_type": "IQ32", "dst_type": "Float32", "params": "const IQ32* src, Float32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ32_to_Float64", "src_type": "IQ32", "dst_type": "Float64", "params": "const IQ32* src, Float64* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_IQ32_to_FixPoint", "src_type": "IQ32", "dst_type": "FixPoint", "params": "const IQ32* src, FixPoint* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float32_to_IQ16", "src_type": "Float32", "dst_type": "IQ16", "params": "const Float32* src, IQ16* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float32_to_IQ32", "src_type": "Float32", "dst_type": "IQ32", "params": "const Float32* src, IQ32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float32_to_Float64", "src_type": "Float32", "dst_type": "Float64", "params": "const Float32* src, Float64* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float32_to_FixPoint", "src_type": "Float32", "dst_type": "FixPoint", "params": "const Float32* src, FixPoint* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float64_to_IQ16", "src_type": "Float64", "dst_type": "IQ16", "params": "const Float64* src, IQ16* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float64_to_IQ32", "src_type": "Float64", "dst_type": "IQ32", "params": "const Float64* src, IQ32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float64_to_Float32", "src_type": "Float64", "dst_type": "Float32", "params": "const Float64* src, Float32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_Float64_to_FixPoint", "src_type": "Float64", "dst_type": "FixPoint", "params": "const Float64* src, FixPoint* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_FixPoint_to_IQ16", "src_type": "FixPoint", "dst_type": "IQ16", "params": "const FixPoint* src, IQ16* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_FixPoint_to_IQ32", "src_type": "FixPoint", "dst_type": "IQ32", "params": "const FixPoint* src, IQ32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_FixPoint_to_Float32", "src_type": "FixPoint", "dst_type": "Float32", "params": "const FixPoint* src, Float32* dst, int count", "return_type": "int"},
+    {"c_func": "sp_convert_FixPoint_to_Float64", "src_type": "FixPoint", "dst_type": "Float64", "params": "const FixPoint* src, Float64* dst, int count", "return_type": "int"}
+  ],
+  "computations": [
+    {"c_func": "sp_compute_add_IQ16_IQ16", "op": "add", "input_types": ["IQ16", "IQ16"], "output_type": "IQ16", "params": "const IQ16* a, const IQ16* b, IQ16* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_IQ16_IQ32", "op": "add", "input_types": ["IQ16", "IQ32"], "output_type": "IQ32", "params": "const IQ16* a, const IQ32* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_IQ16_Float32", "op": "add", "input_types": ["IQ16", "Float32"], "output_type": "Float32", "params": "const IQ16* a, const Float32* b, Float32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_IQ32_IQ32", "op": "add", "input_types": ["IQ32", "IQ32"], "output_type": "IQ32", "params": "const IQ32* a, const IQ32* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_IQ32_Float32", "op": "add", "input_types": ["IQ32", "Float32"], "output_type": "Float32", "params": "const IQ32* a, const Float32* b, Float32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_Float32_Float32", "op": "add", "input_types": ["Float32", "Float32"], "output_type": "Float32", "params": "const Float32* a, const Float32* b, Float32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_add_Float64_Float64", "op": "add", "input_types": ["Float64", "Float64"], "output_type": "Float64", "params": "const Float64* a, const Float64* b, Float64* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_mul_IQ16_IQ16", "op": "mul", "input_types": ["IQ16", "IQ16"], "output_type": "IQ32", "params": "const IQ16* a, const IQ16* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_mul_IQ16_Float32", "op": "mul", "input_types": ["IQ16", "Float32"], "output_type": "Float32", "params": "const IQ16* a, const Float32* b, Float32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_mul_IQ32_IQ32", "op": "mul", "input_types": ["IQ32", "IQ32"], "output_type": "IQ32", "params": "const IQ32* a, const IQ32* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_mul_Float32_Float32", "op": "mul", "input_types": ["Float32", "Float32"], "output_type": "Float32", "params": "const Float32* a, const Float32* b, Float32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_mul_Float64_Float64", "op": "mul", "input_types": ["Float64", "Float64"], "output_type": "Float64", "params": "const Float64* a, const Float64* b, Float64* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_correlate_IQ16_IQ16", "op": "correlate", "input_types": ["IQ16", "IQ16"], "output_type": "IQ32", "params": "const IQ16* a, const IQ16* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_correlate_IQ32_IQ32", "op": "correlate", "input_types": ["IQ32", "IQ32"], "output_type": "IQ32", "params": "const IQ32* a, const IQ32* b, IQ32* out, int n", "return_type": "int"},
+    {"c_func": "sp_compute_correlate_Float32_Float32", "op": "correlate", "input_types": ["Float32", "Float32"], "output_type": "Float32", "params": "const Float32* a, const Float32* b, Float32* out, int n", "return_type": "int"}
+  ],
+  "unknown": [
+    {"c_func": "sp_init", "params": "void", "return_type": "int", "notes": "Library initialization"},
+    {"c_func": "sp_cleanup", "params": "void", "return_type": "void", "notes": "Library cleanup"},
+    {"c_func": "sp_version", "params": "void", "return_type": "const char*", "notes": "Version string"},
+    {"c_func": "sp_set_thread_count", "params": "int threads", "return_type": "int", "notes": "Configure thread pool"}
+  ],
+  "naming_patterns": {
+    "conversion": "sp_convert_{src}_to_{dst}",
+    "computation": "sp_compute_{op}_{typeA}_{typeB}",
+    "notes": "All functions prefixed with sp_. Types use CamelCase. Operations use lowercase."
+  }
+}
