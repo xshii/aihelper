@@ -1,6 +1,8 @@
 name: project-name
+type: skill
 description: One-line description
 language: python
 tags: []
+difficulty: beginner
 status: experimental
 created: 2026-04-03
