@@ -6,7 +6,11 @@
 ## 任务
 当硬件团队提供新的 C 函数，在 `@register_op` 的 `golden_c` 参数中添加 ComputeKey 条目。
 
-## 背景：三层精度 + DType 枚举
+## 背景
+
+> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+
+### 三层精度 + DType 枚举
 
 ```python
 from dsp.core.enums import DType

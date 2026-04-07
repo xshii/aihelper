@@ -7,6 +7,9 @@
 当 C 函数的参数模式和已有的不同时，注册一个新的 OpConvention。
 
 ## 背景
+
+> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+
 OpConvention 声明两件事：
 1. `output_shape(*inputs)` — 输出 shape 怎么从输入推算
 2. `call_c_func(func, *inputs_np, **params)` — 怎么调 C 函数
