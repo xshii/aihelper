@@ -31,10 +31,17 @@ ComputeKey(
 ```
 
 ## 规则
-1. 必须：用关键字参数填 ComputeKey（不要数位置）
-2. 必须：用 DType 枚举值（不用字符串）
-3. 必须：C 函数名从头文件复制粘贴（不手打）
-4. 禁止：合并不同类型组合到一个条目
+1. MUST: 用关键字参数填 ComputeKey（不要数位置）
+2. MUST: 用 DType 枚举值（`D.IQ16`，不用字符串 `"iq16"`）
+3. MUST: C 函数名从头文件复制粘贴（不手打）
+4. NEVER: 合并不同类型组合到一个条目
+
+## 步骤
+1. 从硬件团队的头文件中找到 C 函数名（精确复制，不手打）
+2. 确定精度组合：输入类型 × 输出类型 × 累加器格式 × 计算精度
+3. 构造 ComputeKey（用 DType 枚举值填每个槽位，不需要的填 None）
+4. 添加到 `@register_op(golden_c={...})`（推荐）或 `manifest.py COMPUTE`
+5. 运行 `make test` 验证
 
 ## 在哪里添加
 
@@ -49,6 +56,10 @@ ComputeKey(
 })
 def conv2d(input, kernel): ...
 ```
+
+**选择标准：**
+- 方式 A（推荐）：op 文件已存在，只是增加精度组合 → 直接加在 `@register_op golden_c={}` 里
+- 方式 B：op 文件还没有（只有 manifest 先行）或需要批量注册多个 op → 加在 `manifest.py COMPUTE` 里
 
 **方式 B：在 manifest.py COMPUTE 表中**
 
@@ -67,6 +78,34 @@ ComputeKey(op="conv2d", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32,
 | acc 和 out0 混淆 | 精度丢失 | acc=累加器（宽），out0=最终输出（可窄）|
 | 漏了 compute 字段 | ManifestNotFound | 看函数名末尾的精度标记 |
 | C 函数名手打 typo | GoldenNotAvailable | 从头文件复制 |
+
+## 样例
+
+### 样例 1: 为 linear 添加新精度组合
+
+已有 iq16×iq16→iq16 的映射（见 `src/dsp/ops/linear.py`）。现在硬件新增了 float16 混合精度版本：
+
+**输入：** 头文件中新增 `sp_fused_linear_fp16_fp16_ofp16_acc_q12_22`
+
+**操作：** 在 linear.py 的 `@register_op golden_c` 字典中添加：
+```python
+ComputeKey(op="linear", in0=R.FLOAT16, in1=R.FLOAT16, in2=R.FLOAT16, out0=R.FLOAT16,
+           acc=A.Q12_22, compute=R.FLOAT16):
+    "sp_fused_linear_fp16_fp16_ofp16_acc_q12_22",
+```
+
+**验证：** `make test` 通过
+
+### 样例 2: 错误 — acc 和 out0 混淆
+
+**错误写法：**
+```python
+ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, out0=A.Q12_22, acc=D.IQ16, ...)
+#                                                  ^^^^^^^^^^^    ^^^^^^^^^
+```
+**问题：** out0 是最终输出精度（通常是 DUT），acc 是累加器内部格式（通常更宽）。写反会导致精度丢失。
+
+**正确：** `out0=D.IQ16, acc=A.Q12_22`
 
 ## 自检清单
 - [ ] 用关键字参数 + DType 枚举

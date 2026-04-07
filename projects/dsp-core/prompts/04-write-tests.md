@@ -20,10 +20,31 @@ make ci               # lint + 架构 + 全部测试
 ```
 
 ## 规则
-1. 文件顶部标记级别：`pytestmark = pytest.mark.ut`
-2. 用 conftest.py 的 fixtures：`iq16_pair`, `float32_pair`, `sample_pipe`, `tmp_output_dir`
-3. golden C 不可用时：伪量化/golden_c 测试用 `pytest.skip` 或 `pytest.raises(GoldenNotAvailable)`
-4. 禁止：依赖 GPU
+1. MUST: 文件顶部标记级别 `pytestmark = pytest.mark.ut`
+2. MUST: 用 conftest.py 的 fixtures（见下方表格）
+3. SHOULD: golden C 不可用时用 `pytest.skip` 或 `pytest.raises(GoldenNotAvailable)` 保护
+4. NEVER: 依赖 GPU
+5. NEVER: 在测试中修改全局状态（`reset_state` fixture 自动处理）
+
+## 可用 Fixtures（定义在 `tests/conftest.py`）
+
+| Fixture | 类型 | 说明 |
+|---------|------|------|
+| `iq16_pair` | `(DSPTensor, DSPTensor)` | shape=(64,), dtype=iq16 的 (a, b) |
+| `float32_pair` | `(DSPTensor, DSPTensor)` | shape=(64,), dtype=float32 的 (a, b) |
+| `iq16_matrix` | `DSPTensor` | shape=(4, 8), dtype=iq16 |
+| `float32_matrix` | `DSPTensor` | shape=(4, 8), dtype=float32 |
+| `tmp_output_dir` | `str` | 临时目录，测试后自动清理 |
+| `sample_pipe` | `DataPipe` | shape=(4, 8), dtype=float32 |
+| `reset_state` | autouse | 每个测试后自动重置 mode + runloop |
+
+## 步骤
+1. 确定测试级别：新函数 → UT，多模块交互 → IT，完整 E2E → ST
+2. 创建测试文件 `tests/test_<feature>.py`
+3. 文件顶部加 `pytestmark = pytest.mark.ut`（或 it/st）
+4. 用 conftest fixtures 构造测试数据
+5. 写正常路径 + 至少 1 个边界/错误用例
+6. 运行 `make test-ut`（开发中）→ `make ci`（提交前）
 
 ## 测试模板
 
@@ -98,6 +119,12 @@ class TestBeamformE2E:
 - [ ] 覆盖正常路径 + 边界
 - [ ] golden C 相关测试有 skip/raises 保护
 - [ ] `make test` 通过
+
+## 边界情况
+- golden C 不可用：用 `pytest.skip("golden C 不可用")` 跳过，不要让测试失败
+- 如果需要特殊 shape 的数据：直接用 `dsp.data.randn(...)` 构造，不要修改 conftest
+- 复数类型测试：用 `dsp.core.iq16`（is_complex=True 的类型）测试 complex tensor 行为
+- 如果不确定测试级别：默认选 UT，除非测试了多模块交互
 
 ---
 [操作员：在此行下方粘贴新增代码，说明需要测试什么。]
