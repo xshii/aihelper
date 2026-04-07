@@ -1,0 +1,10 @@
+name: dsp-core
+type: demo
+description: Unified DSP frontend — torch-like API with custom dtypes, multi-mode verification, and C++ facade prompt chain
+language: python
+tags: [torch, dsp, quantization, pybind11, custom-op, tensor-subclass, facade, codegen]
+difficulty: advanced
+status: active
+created: 2026-04-03
+run: cd src && python -c "import dsp; print(dsp.ops.randn(4, dtype=dsp.core.iq16))"
+test: cd src && python -m pytest ../tests/ -v

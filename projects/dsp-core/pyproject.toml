@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dsp-core"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.0",
+    "numpy>=1.21",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# ============================================================
+# import-linter: 强制分层依赖
+# ============================================================
+
+[tool.importlinter]
+root_packages = ["dsp"]
+
+[[tool.importlinter.contracts]]
+name = "core 不依赖任何上层"
+type = "forbidden"
+source_modules = ["dsp.core"]
+forbidden_modules = ["dsp.ops", "dsp.context", "dsp.data"]
+
+[[tool.importlinter.contracts]]
+name = "golden 不依赖 ops/context"
+type = "forbidden"
+source_modules = ["dsp.golden"]
+forbidden_modules = ["dsp.ops", "dsp.context"]
+
+[[tool.importlinter.contracts]]
+name = "data 不依赖 ops/context"
+type = "forbidden"
+source_modules = ["dsp.data"]
+forbidden_modules = ["dsp.ops"]
+
+[[tool.importlinter.contracts]]
+name = "分层顺序: core → golden → data → ops → context"
+type = "layers"
+layers = ["dsp.context", "dsp.ops", "dsp.data", "dsp.golden", "dsp.core"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+markers = [
+    "ut: 单元测试 — 单函数/单类，无 I/O，无副作用",
+    "it: 集成测试 — 多模块协作，可有临时文件",
+    "st: 系统测试 — 完整端到端流程",
+]

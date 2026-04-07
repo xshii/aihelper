@@ -49,44 +49,35 @@
 
 每个 `projects/` 下的项目都是以下三种类型之一：
 
-### 2.1 Skill (技能)
+### 2.1 Demo (样例代码 + 配套 Prompt)
 
-一个**结构化的技能定义**，让弱 AI 在特定任务上具备可重复的能力。
-
-```
-projects/skill-code-review/
-├── project.yaml          # type: skill
-├── README.md             # 人类概览
-├── SKILL.md              # ★ 技能定义（五要素）
-├── PROMPT.md             # ★ 可直接喂给弱 AI 的提示词
-├── examples/             # ★ 输入→输出样例（few-shot）
-│   ├── 01-input.md
-│   ├── 01-output.md
-│   ├── 02-input.md
-│   └── 02-output.md
-└── tests/                # 验证技能有效性的测试
-```
-
-### 2.2 Demo (样例代码)
-
-一个**可运行的参考实现**，弱 AI 可以直接模仿其模式。
+**首选类型。** 可运行的参考实现 + 配套的 prompt 链，代码和提示词住一起。
+弱 AI 既可以读代码学模式，也可以按 prompt 链扩展。
 
 ```
-projects/demo-cli-tool/
+projects/dsp-core/
 ├── project.yaml          # type: demo
 ├── README.md             # 人类概览
-├── PROMPT.md             # ★ "按这个模式写类似工具"的提示词
+├── PROMPT.md             # ★ Prompt 索引（指向 prompts/ 下的各组）
+├── SKILL.md              # (可选) 技能定义
+├── DESIGN.md             # (可选) 架构设计
 ├── src/                  # ★ 可运行的参考代码
-│   ├── main.py
-│   ├── cli.py
-│   └── config.py
+├── prompts/              # ★ Prompt 链（按主题分组）
+│   ├── facade/           #   从零构建的 prompt 链
+│   │   ├── 01-parse-header.md
+│   │   └── ...
+│   └── extend/           #   扩展已有框架的 prompt 链
+│       ├── 01-add-codec.md
+│       └── ...
+├── examples/             # 输入→输出样例
 └── tests/
-    └── test_main.py
 ```
 
-### 2.3 Prompt (提示词)
+**核心原则：Prompt 跟着 Demo 走。** 不拆分为独立的 skill/prompt 项目。
 
-一个**独立的提示词**，无需配套代码，直接提升弱 AI 在某任务上的表现。
+### 2.2 Prompt (独立提示词)
+
+只有在**没有配套代码**时才单独建 prompt 项目。
 
 ```
 projects/prompt-error-handling/
@@ -94,11 +85,9 @@ projects/prompt-error-handling/
 ├── README.md             # 人类概览
 ├── PROMPT.md             # ★ 完整的提示词
 └── examples/             # ★ 使用前后的对比样例
-    ├── before-01.md
-    └── after-01.md
 ```
 
-### 2.4 Tool (工具)
+### 2.3 Tool (工具)
 
 传统的可运行工具/脚本。不以教学为主要目的，但仍可被弱 AI 参考。
 
@@ -446,10 +435,9 @@ from text_summarizer.core.engine.summarizer import SummarizerEngine
 aihelper/
 ├── projects/               # All projects, flat
 │   ├── _template/          # just new copies this
-│   ├── skill-*/            # Skills for the weaker AI
-│   ├── demo-*/             # Demo code for the weaker AI
-│   ├── prompt-*/           # Standalone prompts
-│   └── tool-*/             # Utility tools
+│   ├── <name>/             # Demo 项目（代码 + prompt 住一起）
+│   ├── prompt-*/           # 独立提示词（无配套代码时）
+│   └── tool-*/             # 工具/脚本
 ├── shared/                 # Shared code (2+ consumers required)
 ├── CATALOG.md              # Index of all projects
 ├── CLAUDE.md               # This file
@@ -459,17 +447,16 @@ aihelper/
 
 ### 6.2 Naming Convention
 
-项目名以类型为前缀，方便扫描：
-- `skill-code-review` — 代码审查技能
-- `demo-cli-tool` — CLI 工具样例
-- `prompt-error-handling` — 错误处理提示词
-- `tool-log-parser` — 日志解析工具
+项目名简洁明了，不强制类型前缀（代码和 prompt 住一起，无需区分）：
+- `dsp-core` — DSP 前端框架 + 配套 prompt 链
+- `prompt-error-handling` — 独立提示词（无配套代码时才用 prompt- 前缀）
+- `tool-log-parser` — 日志解析工具（纯工具用 tool- 前缀）
 
 ### 6.3 project.yaml Schema
 
 ```yaml
 name: string              # same as directory name
-type: string              # skill | demo | prompt | tool
+type: string              # demo | prompt | tool
 description: string       # one-line description
 language: string           # python | typescript | go | shell | ...
 tags: [string]            # free-form tags
@@ -482,15 +469,16 @@ test: string              # (optional) command to run tests
 
 ### 6.4 Required Files by Type
 
-| 文件 | skill | demo | prompt | tool |
-|------|-------|------|--------|------|
-| project.yaml | MUST | MUST | MUST | MUST |
-| README.md | MUST | MUST | MUST | MUST |
-| PROMPT.md | MUST | SHOULD | MUST | — |
-| SKILL.md | MUST | — | — | — |
-| examples/ | MUST (≥3) | — | SHOULD | — |
-| src/ or code | SHOULD | MUST | — | MUST |
-| tests/ | SHOULD | SHOULD | — | SHOULD |
+| 文件 | demo | prompt | tool |
+|------|------|--------|------|
+| project.yaml | MUST | MUST | MUST |
+| README.md | MUST | MUST | MUST |
+| PROMPT.md | MUST | MUST | — |
+| prompts/ | MUST | — | — |
+| SKILL.md | SHOULD | — | — |
+| examples/ | SHOULD | SHOULD | — |
+| src/ or code | MUST | — | MUST |
+| tests/ | SHOULD | — | SHOULD |
 
 ### 6.5 Conventions
 
