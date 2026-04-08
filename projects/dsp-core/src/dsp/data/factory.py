@@ -45,9 +45,13 @@ def randn(*size, dtype: DSPDtype = None) -> DSPTensor:
     if _randn_interceptor is not None:
         result = _randn_interceptor(*size, dtype=dtype or _float32)
         if result is not None:
+            if result._source is None:
+                result._source = "randn"
             return result
     dtype = dtype or _float32
-    return DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    t = DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    t._source = "randn"
+    return t
 
 
 def zeros_like(t: DSPTensor) -> DSPTensor:

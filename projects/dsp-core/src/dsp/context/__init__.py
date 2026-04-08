@@ -20,6 +20,7 @@ from .runloop import (
     set_global_runmode, is_global_done, is_runmode_active,
     submit_output, export,
     save_op_inputs, save_op_output, intercepted_randn,
+    get_current_strategy,
 )
 
 # 注入 hooks 到 ops 和 data（解除反向依赖）
@@ -30,6 +31,7 @@ set_ops_hooks(
     save_op_inputs=save_op_inputs,
     save_op_output=save_op_output,
     get_compute_config=lambda: get_compute_config(),
+    get_current_strategy=get_current_strategy,
 )
 
 from ..data.factory import set_randn_interceptor
@@ -87,9 +89,9 @@ def run(
         compute:      计算精度 (DType.DUT/REAL)    config.compute.default_compute = None（不过滤）
         output_dtype: 输出类型 (DType.DUT/REAL)    config.compute.default_output_dtype = None（不过滤）
         strategies:   数据策略列表                  config.run.strategies = [
-                                                     precision_exact, random,
+                                                     math, precision_exact, random,
                                                      sparse_30/50/90/9999, corner_all_zero
-                                                   ]（共 7 种）
+                                                   ]（共 8 种）
         modes:        use_input 模式列表           config.run.modes = [torch, pseudo_quant, golden_c]
 
     用法:

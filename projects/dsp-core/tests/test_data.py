@@ -49,7 +49,7 @@ class TestDatagen:
         assert (t == 0).all()
 
     def test_default_strategies_count(self):
-        assert len(DEFAULT_STRATEGIES) == 7
+        assert len(DEFAULT_STRATEGIES) == 8
 
 
 # ============================================================

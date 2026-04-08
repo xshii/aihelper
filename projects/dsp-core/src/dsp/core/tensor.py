@@ -29,6 +29,7 @@ class DSPTensor(torch.Tensor):
 
     # 标记: 告诉 torch 这是一个 Tensor 子类
     _dsp_dtype: Optional[DSPDtype] = None
+    _source: Optional[str] = None  # "randn" | "op_output" | None
 
     # ------------------------------------------------------------------
     # 创建

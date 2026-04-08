@@ -29,6 +29,7 @@ class DataStrategy:
 
 
 DEFAULT_STRATEGIES = [
+    DataStrategy("math"),  # 数学验证：由各 op 的 math_strategy 构造已知解
     DataStrategy("precision_exact", precision_exact=True, value_range=(-100, 100)),
     DataStrategy("random"),
     DataStrategy("sparse_30", sparsity=0.3),

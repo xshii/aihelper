@@ -25,7 +25,7 @@ class TestGenerateInput:
             rounds += 1
         dsp.context.export()
 
-        assert rounds == 7  # 7 种策略
+        assert rounds == 8  # 8 种策略（含 math）
 
         # 找到用例目录
         case_dirs = [d for d in os.listdir(tmp_output_dir)
@@ -36,7 +36,7 @@ class TestGenerateInput:
         # 检查日志
         log = json.loads(open(os.path.join(case_dir, "run_log.json")).read())
         assert log["seed"] == 42
-        assert len(log["rounds"]) == 7
+        assert len(log["rounds"]) == 8
 
         # 检查策略目录有数据
         assert os.path.isdir(os.path.join(case_dir, "precision_exact"))
@@ -100,7 +100,7 @@ class TestUseInput:
                 rounds += 1
             dsp.context.export()
 
-            assert rounds == 7 * 2  # 7 策略 × 2 模式
+            assert rounds == 8 * 2  # 8 策略 × 2 模式（含 math）
 
             # 检查日志存在
             case_dirs = [d for d in os.listdir(tmp_output_dir)
@@ -108,6 +108,6 @@ class TestUseInput:
             case_dir = os.path.join(tmp_output_dir, case_dirs[0])
             log = json.loads(open(os.path.join(case_dir, "run_log.json")).read())
             assert log["seed"] == 99
-            assert len(log["rounds"]) == 14  # 7 策略 × 2 模式
+            assert len(log["rounds"]) == 16  # 8 策略 × 2 模式（含 math）
         finally:
             USE_INPUT_MODES[:] = original_modes

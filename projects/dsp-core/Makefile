@@ -84,6 +84,9 @@ quality:
 	@echo "=== 死代码 ==="
 	$(VULTURE) src/dsp/ --min-confidence 80
 	@echo ""
+	@echo "=== 函数长度 (非空非注释 ≤50 行) ==="
+	@$(PYTHON) scripts/check_func_length.py
+	@echo ""
 	@echo "=== 平均复杂度 ==="
 	$(RADON) cc src/dsp/ -a -s 2>&1 | tail -1
 	@echo "QUALITY DONE"

@@ -302,20 +302,38 @@ def _prepare_dir(path: str):
 # 数据拦截（由 ops 调用）
 # ============================================================
 
+def get_current_strategy():
+    """返回当前 DataStrategy（供 ops wrapper 查询）。无活跃策略时返回 None。"""
+    if _state.active and _state.current_strategy is not None:
+        return _state.current_strategy
+    return None
+
+
 def intercepted_randn(*size, dtype: DSPDtype) -> DSPTensor:
     counter = _state.randn_counter
     _state.randn_counter += 1
 
     if _state.runmode == RunMode.GENERATE_INPUT:
+        strategy = _state.current_strategy
+        if strategy is not None and strategy.name == "math":  # 同 ops.MATH_STRATEGY_NAME
+            # math 策略：生成随机数据，打标 randn，由 op-level 拦截替换
+            t = torch.randn(*size, dtype=dtype.torch_dtype)
+            result = DSPTensor.create(t, dtype)
+            result._source = "randn"
+            return result
         t = generate_by_strategy(
-            *size, dtype_torch=dtype.torch_dtype, strategy=_state.current_strategy,
+            *size, dtype_torch=dtype.torch_dtype, strategy=strategy,
         )
-        return DSPTensor.create(t, dtype)
+        result = DSPTensor.create(t, dtype)
+        result._source = "randn"
+        return result
 
     if _state.runmode == RunMode.USE_INPUT:
         return _load_randn_input(counter, size, dtype)
 
-    return DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    result = DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    result._source = "randn"
+    return result
 
 
 def _load_randn_input(counter, size, dtype):

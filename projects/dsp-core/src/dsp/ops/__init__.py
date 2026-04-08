@@ -4,13 +4,14 @@
     Layer 0: @register_op — 纯 torch，零参数
     Layer 1: @register_op(weight=Format.NN) — 加默认格式标注
     Layer 2: @register_op(golden_c={...}) — 接 golden C
+    Layer 3: @register_op(math_strategy=fn) — 数学验证（已知解）
 
 用法:
     @register_op
     def conv2d(input, kernel):
         return torch.nn.functional.conv2d(...)
 
-    @register_op(golden_c={ComputeKey(...): "sp_func_name"}, weight=Format.NN)
+    @register_op(golden_c={...}, math_strategy=_math_fn, weight=Format.NN)
     def linear(x, weight, bias):
         return torch.matmul(x, weight) + bias
 
@@ -22,6 +23,7 @@ from __future__ import annotations
 
 import functools
 import inspect
+import logging
 from typing import Callable, Optional
 
 import torch
@@ -29,6 +31,10 @@ import torch
 from ..core.tensor import DSPTensor
 from ..core.dtype import DSPDtype
 from ..core.enums import Mode, Format
+
+logger = logging.getLogger("dsp.ops")
+
+MATH_STRATEGY_NAME = "math"  # 和 datagen.py 中 DataStrategy("math") 一致
 
 
 # ============================================================
@@ -52,6 +58,7 @@ _hooks = {
     "save_op_inputs": lambda *a, **k: None,
     "save_op_output": lambda *a, **k: None,
     "get_compute_config": lambda: {},
+    "get_current_strategy": lambda: None,
 }
 
 
@@ -64,12 +71,17 @@ def set_ops_hooks(**hooks):
 # @register_op 装饰器
 # ============================================================
 
-def register_op(_func=None, *, golden_c: dict = None, **default_formats):
+def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = None, **default_formats):
     """注册自定义算子。
 
     Args:
         _func: 被装饰的函数（@register_op 无参数时）
         golden_c: {ComputeKey: "c_func_name"} 映射，选填
+        math_strategy: 数学验证策略函数，选填
+            签名: math_strategy(inputs: list, source_map: list[str|None]) -> dict[int, Tensor]
+            inputs: 原始参数列表
+            source_map: 每个参数的 _source ("randn" | "op_output" | None)
+            返回: {arg_index: replacement_tensor} — 只替换 randn 源的参数
         **default_formats: 参数名→Format 的默认格式标注，选填
             未标注的参数按自动推断（矩阵→zz，向量→nd）
 
@@ -95,6 +107,9 @@ def register_op(_func=None, *, golden_c: dict = None, **default_formats):
             call_compute = kwargs.pop("compute", None)
             call_output_dtype = kwargs.pop("output_dtype", None)
             active_formats = {**default_formats, **(runtime_formats or {})}
+
+            # --- math strategy 拦截（在 save_op_inputs 之前）---
+            args = _apply_math_strategy(op_name, math_strategy, args)
 
             # --- 出数（通过 hook，不直接 import context）---
             if _hooks["is_runmode_active"]():
@@ -123,6 +138,10 @@ def register_op(_func=None, *, golden_c: dict = None, **default_formats):
             if not isinstance(result, DSPTensor) and out_dtype is not None:
                 result = DSPTensor.create(result, out_dtype)
 
+            # --- 标记结果来源 ---
+            if isinstance(result, DSPTensor):
+                result._source = "op_output"
+
             # --- 出数 ---
             if _hooks["is_runmode_active"]():
                 _hooks["save_op_output"](op_name, result)
@@ -133,13 +152,12 @@ def register_op(_func=None, *, golden_c: dict = None, **default_formats):
         wrapper._dsp_op_name = op_name
         wrapper._dsp_param_names = param_names
         wrapper._dsp_default_formats = default_formats
+        wrapper._dsp_math_strategy = math_strategy
         return wrapper
 
     if _func is not None:
         return decorator(_func)
     return decorator
-
-
 
 
 def dispatch(op_name: str, *args, **kwargs) -> DSPTensor:
@@ -179,6 +197,36 @@ def infer_output_dtype(op: str, dtype_a: DSPDtype, dtype_b: DSPDtype) -> DSPDtyp
     if out_name is not None:
         return get_dtype(out_name)
     return dtype_a
+
+
+def _apply_math_strategy(op_name, math_strategy_fn, args):
+    """math 轮 + op 有 math_strategy 时替换 randn 源的输入。"""
+    if math_strategy_fn is None:
+        return args
+
+    strategy = _hooks["get_current_strategy"]()
+    if strategy is None or strategy.name != MATH_STRATEGY_NAME:
+        return args
+
+    source_map = [
+        getattr(a, "_source", None) if isinstance(a, DSPTensor) else None
+        for a in args
+    ]
+    replacements = math_strategy_fn(list(args), source_map)
+    if not replacements:
+        logger.debug("[math] %s: no replacements (all args from op_output)", op_name)
+        return args
+
+    replaced_indices = sorted(replacements.keys())
+    args = list(args)
+    for idx, new_tensor in replacements.items():
+        args[idx] = new_tensor
+    logger.info(
+        "[math] %s: replaced %d args (indices %s), sources were %s",
+        op_name, len(replacements), replaced_indices,
+        [source_map[i] for i in replaced_indices],
+    )
+    return tuple(args)
 
 
 def _infer_output_from_args(op_name: str, args) -> Optional[DSPDtype]:

@@ -72,9 +72,36 @@ def beamform(signal, weights, **kwargs):
 阶段 1: @register_op 无参数 → 纯 torch，先跑通
 阶段 2: 加 golden_c={...} → 接 C++ 实现
 阶段 3: 加 format hints → 出数格式标注
+阶段 4: 加 math_strategy → 数学验证（已知解 + 精确匹配）
 ```
 
 不需要一步到位。
+
+### math_strategy（阶段 4 — 最后适配）
+
+> **信息安全声明：** 当前 math_strategy 实现为架构示例。实际使用时需结合真实硬件精度特性调整目标 pattern 和正则化参数。
+
+math_strategy 为算子提供数学验证数据（已知解），在 generate_input 的 math 轮中自动替换 randn 输入。
+
+**签名：**
+```python
+def _my_op_math(inputs, source_map):
+    """
+    inputs:     原始参数列表 [arg0, arg1, ...]
+    source_map: 每个参数的来源 ["randn"|"op_output"|None, ...]
+    
+    返回: {arg_index: replacement_tensor} — 只替换 source=="randn" 的参数
+          source=="op_output" 的参数来自上游算子，被动接受不替换
+    """
+```
+
+**设计原则：**
+1. 首算子（全 randn）：构造 near-diagonal 输入 + 设计权重使输出为 near-diagonal
+2. 后续算子（部分 op_output）：被动接受上游输出，用 lstsq/ridge 设计权重回归目标 pattern
+3. linear/matmul 天然承担回归职责 — 利用矩阵乘法把累积误差收回 near-diagonal
+4. 如果不确定怎么写：先不加 math_strategy，op 会自动使用随机数据
+
+**完整样例见 `src/dsp/ops/linear.py` 中 `_linear_math_strategy`。**
 
 ## 样例
 

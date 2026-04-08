@@ -46,7 +46,8 @@ src/dsp/
 步骤 2: 用 prompt 03 在 @register_op 的 golden_c 参数中添加 ComputeKey
 步骤 3: 如果 C 函数参数模式不同，用 prompt 06 注册 OpConvention
 步骤 4: 用 prompt 04 写测试
-步骤 5: make ci
+步骤 5: （最后适配）为算子添加 math_strategy — 见 prompt 02 "阶段 4" 说明
+步骤 6: make ci
 ```
 
 验收：`make ci` 全绿。
