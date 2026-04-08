@@ -90,9 +90,29 @@ dsp.context.run(main)
 ```
 
 ```bash
-python my_test.py                      # 默认 generate_input
-python my_test.py use_input            # 比数
+python my_test.py                      # 默认 generate_input（8 种策略含 math）
+python my_test.py use_input            # 比数 → 终端摘要 + run_log.json + HTML 报告
 ```
+
+## 比数报告
+
+`use_input` 完成后自动生成三种输出：
+
+| 输出 | 位置 | 说明 |
+|------|------|------|
+| 终端摘要 | stdout | PASS/WARN/FAIL + max_diff + cosine |
+| run_log.json | case 目录内 | 机读，含所有轮次 + diff 统计 |
+| compare_*.html | output 根目录 | 交互式 Plotly 报告，自动打开浏览器 |
+
+HTML 报告结构（渐进式披露）：
+1. **汇总表** — 默认展开，10 秒定性
+2. **策略对比柱状图** — 默认展开，哪种数据模式误差最大
+3. **详情（折叠）** — 点击展开，每个策略/输出文件：
+   - 误差 CDF（"99% 元素误差 < 阈值？"）
+   - Bland-Altman（"误差和信号幅度有关吗？"）
+   - 信号+误差叠加（逐元素定位）
+
+依赖: `pip install plotly`（可选，未安装时跳过 HTML 报告）
 
 ## 关键枚举
 

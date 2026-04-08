@@ -132,8 +132,8 @@ def export_html(data_path: str, report: dict, modes_list: list[str],
     from ..config import config as cfg
 
     parts = [_HTML_HEADER]
-    parts.append(_build_summary_table(report, cfg.compare))
-    parts.append(_build_strategy_bars(report))
+    parts.append(_safe_render(_build_summary_table, report, cfg.compare))
+    parts.append(_safe_render(_build_strategy_bars, report))
     parts.extend(_build_detail_sections(data_path, report, modes_list))
     parts.append("</body></html>")
 
@@ -220,13 +220,15 @@ def _build_detail_sections(data_path, report, modes_list):
             tensors = _load_tensors(fname, mode_dirs)
             if len(tensors) < 2:
                 continue
-            op_parts.append(
-                f'<details><summary>{fname}</summary>'
-                + _plot_error_cdf(tensors)
-                + _plot_bland_altman(tensors)
-                + _plot_signal_and_error(tensors)
-                + '</details>'
-            )
+            charts = "".join([
+                _safe_render(_plot_error_cdf, tensors),
+                _safe_render(_plot_bland_altman, tensors),
+                _safe_render(_plot_signal_and_error, tensors),
+            ])
+            if charts:
+                op_parts.append(
+                    f'<details><summary>{fname}</summary>{charts}</details>'
+                )
         if op_parts:
             sections.append(
                 f'<details><summary><strong>{strategy}</strong></summary>'
@@ -329,6 +331,15 @@ def _plot_signal_and_error(tensors: dict) -> str:
 
 
 # --- 共享工具 ---
+
+def _safe_render(render_fn, *args) -> str:
+    """容错包裹：渲染失败则跳过，不影响其他图表。"""
+    try:
+        return render_fn(*args)
+    except Exception as e:
+        logger.warning("图表渲染失败 (%s): %s", render_fn.__name__, e)
+        return ""
+
 
 def _fig_to_div(fig) -> str:
     return fig.to_html(full_html=False, include_plotlyjs="cdn")
