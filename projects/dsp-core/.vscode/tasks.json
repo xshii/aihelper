@@ -1,0 +1,54 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "运行当前文件",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${file}"],
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$python"],
+      "detail": "用 .venv 的 python 运行当前打开的文件",
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "运行当前文件（带参数）",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": ["${file}", "${input:args}"],
+      "problemMatcher": ["$python"],
+      "detail": "运行当前文件 + 自定义参数",
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "CI 全量检查",
+      "type": "shell",
+      "command": "make ci",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$python"],
+      "detail": "ruff + import-linter + radon + vulture + pytest（8 种策略）",
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "选择检查项",
+      "type": "shell",
+      "command": "make ${input:target}",
+      "problemMatcher": ["$python"],
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ],
+  "inputs": [
+    {
+      "id": "args",
+      "type": "promptString",
+      "description": "输入参数（如: generate_input, use_input）"
+    },
+    {
+      "id": "target",
+      "type": "pickString",
+      "description": "选择要运行的检查",
+      "options": ["ci", "test", "test-ut", "test-it", "test-st", "test-cov", "lint", "quality", "smoke", "check", "build-golden", "clean"],
+      "default": "test"
+    }
+  ]
+}
