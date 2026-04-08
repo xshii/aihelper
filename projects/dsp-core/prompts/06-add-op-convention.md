@@ -120,6 +120,7 @@ class FFTConvention(OpConvention, op="fft"):
 - [ ] `output_shape` 用 `*inputs`
 - [ ] 没有 quantize/dequantize 调用
 - [ ] `make test` 通过
+- [ ] 验证: `.venv/bin/python -c "from dsp.golden.op_convention import get_convention; print(get_convention('YOUR_OP'))"`
 
 ## 边界情况
 - 如果 output shape 依赖运行时参数（如 FFT 的 N）：在 call_c_func 中处理，output_shape 只负责静态推断

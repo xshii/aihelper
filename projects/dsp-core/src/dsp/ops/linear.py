@@ -88,7 +88,9 @@ def _linear_math_strategy(inputs, source_map):
     if bias_from_randn:
         replacements[2] = _wrap(bias, _get_dsp_dtype(inputs[2]))
 
-    return replacements
+    # expected output = target pattern（用于比数时验证 torch 输出正确性）
+    expected = _wrap(target, dsp_dtype)
+    return replacements, expected
 
 
 def _get_dsp_dtype(t):

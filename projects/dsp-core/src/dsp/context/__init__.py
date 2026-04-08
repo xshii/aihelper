@@ -19,7 +19,7 @@ from .mode import (
 from .runloop import (
     set_global_runmode, is_global_done, is_runmode_active,
     submit_output, export,
-    save_op_inputs, save_op_output, intercepted_randn,
+    save_op_inputs, save_op_output, save_op_expected, intercepted_randn,
     get_current_strategy,
 )
 
@@ -32,6 +32,7 @@ set_ops_hooks(
     save_op_output=save_op_output,
     get_compute_config=lambda: get_compute_config(),
     get_current_strategy=get_current_strategy,
+    save_op_expected=save_op_expected,
 )
 
 from ..data.factory import set_randn_interceptor

@@ -404,6 +404,27 @@ def save_op_output(op_name, result):
     )
 
 
+def save_op_expected(op_name, expected):
+    """保存 math strategy 的期望输出，文件名用 expected0 标识。"""
+    from ..data.pipe import DataPipe
+
+    if not isinstance(expected, torch.Tensor):
+        return
+
+    op_id = _state.op_id_counter - 1  # save_op_output 已经 +1 了
+    out_dir = _current_round_dir()
+    dtype_name = "float32"
+    if isinstance(expected, DSPTensor) and expected._dsp_dtype is not None:
+        dtype_name = expected._dsp_dtype.name
+
+    fmt = infer_format(expected)
+    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(expected.shape), fmt)
+    DataPipe(expected, dtype=dtype_name).layout(fmt).export(
+        str(Path(out_dir) / filename)
+    )
+    logger.info("[math] %s: saved expected output → %s", op_name, filename)
+
+
 def clear_current_op():
     _state.current_op_name = ""
 

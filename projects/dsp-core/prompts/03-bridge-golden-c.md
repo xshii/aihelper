@@ -116,6 +116,7 @@ ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, out0=A.Q12_22, acc=D.IQ16, ...)
 - [ ] C 函数名和头文件完全一致
 - [ ] 每个类型组合一个 ComputeKey
 - [ ] `make test` 通过
+- [ ] 验证: `.venv/bin/python -c "from dsp.golden.manifest import get_compute_func; print(get_compute_func('YOUR_OP', 'YOUR_IN0', 'YOUR_IN1'))"`
 
 ---
 [操作员：在此行下方提供 C++ 函数列表或头文件。]

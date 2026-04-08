@@ -59,6 +59,7 @@ _hooks = {
     "save_op_output": lambda *a, **k: None,
     "get_compute_config": lambda: {},
     "get_current_strategy": lambda: None,
+    "save_op_expected": lambda *a, **k: None,
 }
 
 
@@ -109,7 +110,7 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             active_formats = {**default_formats, **(runtime_formats or {})}
 
             # --- math strategy 拦截（在 save_op_inputs 之前）---
-            args = _apply_math_strategy(op_name, math_strategy, args)
+            args, math_expected = _apply_math_strategy(op_name, math_strategy, args)
 
             # --- 出数（通过 hook，不直接 import context）---
             if _hooks["is_runmode_active"]():
@@ -145,6 +146,8 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             # --- 出数 ---
             if _hooks["is_runmode_active"]():
                 _hooks["save_op_output"](op_name, result)
+                if math_expected is not None:
+                    _hooks["save_op_expected"](op_name, math_expected)
 
             return result
 
@@ -200,22 +203,36 @@ def infer_output_dtype(op: str, dtype_a: DSPDtype, dtype_b: DSPDtype) -> DSPDtyp
 
 
 def _apply_math_strategy(op_name, math_strategy_fn, args):
-    """math 轮 + op 有 math_strategy 时替换 randn 源的输入。"""
+    """math 轮 + op 有 math_strategy 时替换 randn 源的输入。
+
+    math_strategy_fn 可返回:
+      - dict: {idx: tensor} — 只替换输入
+      - (dict, expected_tensor) — 替换输入 + 提供期望输出
+    返回: (new_args, expected_or_None)
+    """
     if math_strategy_fn is None:
-        return args
+        return args, None
 
     strategy = _hooks["get_current_strategy"]()
     if strategy is None or strategy.name != MATH_STRATEGY_NAME:
-        return args
+        return args, None
 
     source_map = [
         getattr(a, "_source", None) if isinstance(a, DSPTensor) else None
         for a in args
     ]
-    replacements = math_strategy_fn(list(args), source_map)
+    result = math_strategy_fn(list(args), source_map)
+
+    # 解包: dict 或 (dict, expected)
+    expected = None
+    if isinstance(result, tuple):
+        replacements, expected = result
+    else:
+        replacements = result
+
     if not replacements:
         logger.debug("[math] %s: no replacements (all args from op_output)", op_name)
-        return args
+        return args, expected
 
     replaced_indices = sorted(replacements.keys())
     args = list(args)
@@ -226,7 +243,7 @@ def _apply_math_strategy(op_name, math_strategy_fn, args):
         op_name, len(replacements), replaced_indices,
         [source_map[i] for i in replaced_indices],
     )
-    return tuple(args)
+    return tuple(args), expected
 
 
 def _infer_output_from_args(op_name: str, args) -> Optional[DSPDtype]:

@@ -160,6 +160,7 @@ def my_op(a, b, **kwargs):
 - [ ] 参数名有语义
 - [ ] `ops/__init__.py` import + 便捷函数
 - [ ] `make test` 通过
+- [ ] 验证: `.venv/bin/python -c "import dsp; print('YOUR_OP' in dsp.ops.list_ops())"`
 
 ## 边界情况
 - 如果不确定 ComputeKey 的 acc/compute 字段怎么填：先不加 golden_c，用阶段 1 纯 torch 跑通

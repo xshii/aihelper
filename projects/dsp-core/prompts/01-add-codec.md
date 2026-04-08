@@ -105,6 +105,7 @@ class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
 - [ ] `dtype=` 指定了正确的 DSPDtype 实例
 - [ ] 没有实现任何方法（全走 golden C）
 - [ ] `make test` 通过
+- [ ] 验证: `.venv/bin/python -c "from dsp.core.codec import get_codec; print(get_codec(dsp.core.YOUR_DTYPE))"`
 
 ## 边界情况
 - golden C 不可用时会抛 `GoldenNotAvailable`，这是正确行为

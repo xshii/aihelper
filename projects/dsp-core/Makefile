@@ -56,10 +56,8 @@ test-cov:
 	$(PYTEST) tests/ -v --cov=dsp --cov-report=term-missing
 
 smoke:
-	rm -rf output/
-	$(PYTHON) examples/matmul_example.py generate_input
-	$(PYTHON) examples/matmul_example.py use_input
-	@echo "=== smoke passed ==="
+	@echo "=== Smoke Test (E2E + 断言) ==="
+	$(PYTHON) scripts/smoke_test.py
 
 # ============================================================
 # Layer 2: 代码质量
@@ -72,6 +70,8 @@ lint:
 	$(RUFF) check src/dsp/ --select E,W,F --ignore E501,F401,E402
 	@echo "=== import-linter (架构分层) ==="
 	$(LINT_IMPORTS)
+	@echo "=== prompt 引用校验 ==="
+	@$(PYTHON) scripts/check_prompt_refs.py
 	@echo "LINT DONE"
 
 quality:
@@ -95,7 +95,7 @@ quality:
 # Layer 3: 全量 CI
 # ============================================================
 
-ci: lint quality test
+ci: lint quality test smoke
 	@echo "CI PASSED"
 
 # ============================================================

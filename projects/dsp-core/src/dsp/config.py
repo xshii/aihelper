@@ -51,6 +51,7 @@ class CompareConfig:
 class RunConfig:
     """验证循环默认配置。"""
     strategies: list = field(default_factory=lambda: [
+        {"name": "math"},
         {"name": "precision_exact", "precision_exact": True, "value_range": (-100, 100)},
         {"name": "random"},
         {"name": "sparse_30", "sparsity": 0.3},

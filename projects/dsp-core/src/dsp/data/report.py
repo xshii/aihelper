@@ -28,9 +28,18 @@ def compare_all_modes(data_path: str, saved_dirs: list[str],
     """
     from ..core.enums import RunMode
     base = Path(data_path) / RunMode.USE_INPUT
+    gen_base = Path(data_path)
     report = {}
     for strategy_name in saved_dirs:
         strategy_report = _compare_strategy(base / strategy_name, modes_list)
+        # math 策略：额外对比 expected vs torch actual
+        expected_report = _compare_expected(
+            gen_dir=gen_base / strategy_name,
+            use_dir=base / strategy_name,
+            modes_list=modes_list,
+        )
+        if expected_report:
+            strategy_report.update(expected_report)
         if strategy_report:
             report[strategy_name] = strategy_report
     return report
@@ -64,6 +73,39 @@ def print_compare_summary(report: dict):
                     f"max_diff={max_d:.2e}  cosine={cos_s:.6f}  [{status}]"
                 )
     print("=" * 60)
+
+
+def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> dict:
+    """对比 math strategy 的 expected 文件 vs 各模式 actual 输出。"""
+    if not gen_dir.exists():
+        return {}
+    expected_files = list(gen_dir.glob("*_expected0_*"))
+    if not expected_files:
+        return {}
+
+    result = {}
+    for exp_path in expected_files:
+        try:
+            exp_tensor = DataPipe.load(str(exp_path)).tensor
+        except Exception as e:
+            logger.warning("加载 expected 失败 %s: %s", exp_path, e)
+            continue
+
+        # 从 expected 文件名推导对应的 output 文件名
+        out_fname = exp_path.name.replace("_expected0_", "_output0_")
+        pairs = {}
+        for m in modes_list:
+            out_path = use_dir / m / out_fname
+            if not out_path.exists():
+                continue
+            try:
+                actual = DataPipe.load(str(out_path)).tensor
+                pairs[f"expected vs {m}"] = compute_diff(exp_tensor, actual)
+            except Exception as e:
+                logger.warning("对比 expected vs %s 失败: %s", m, e)
+        if pairs:
+            result[exp_path.name] = pairs
+    return result
 
 
 def _compare_strategy(strategy_dir: Path, modes_list: list[str]) -> dict:

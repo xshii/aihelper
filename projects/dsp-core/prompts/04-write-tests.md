@@ -122,6 +122,7 @@ class TestBeamformE2E:
 - [ ] 覆盖正常路径 + 边界
 - [ ] golden C 相关测试有 skip/raises 保护
 - [ ] `make test` 通过
+- [ ] 验证: `make test-ut` (新测试应出现在列表中)
 
 ## 边界情况
 - golden C 不可用：用 `pytest.skip("golden C 不可用")` 跳过，不要让测试失败

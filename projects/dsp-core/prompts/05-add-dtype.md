@@ -127,6 +127,7 @@ from .dtype import (..., iq8)
 - [ ] Codec 继承 GoldenCCodec（一行，无方法）
 - [ ] `core/__init__.py` 导出
 - [ ] `make test` 通过
+- [ ] 验证: `.venv/bin/python -c "import dsp; print(dsp.core.YOUR_DTYPE)"`
 
 ## 边界情况
 - 如果漏改了其中一个文件：`make test` 会报 KeyError 或 ImportError，按报错信息逐个补
