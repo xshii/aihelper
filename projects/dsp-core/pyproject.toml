@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+viz = ["plotly>=5.0", "matplotlib>=3.5"]
 dev = ["pytest>=7.0", "pytest-cov"]
 
 [tool.setuptools.packages.find]
