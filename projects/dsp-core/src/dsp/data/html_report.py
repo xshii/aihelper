@@ -11,6 +11,8 @@
 from __future__ import annotations
 
 import logging
+import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 import torch
@@ -18,8 +20,12 @@ import torch
 logger = logging.getLogger("dsp.data")
 
 
-def export_html(data_path: str, report: dict, modes_list: list[str]):
-    """生成 HTML 比数报告。"""
+def export_html(data_path: str, report: dict, modes_list: list[str],
+                auto_open: bool = True):
+    """生成 HTML 比数报告。
+
+    文件放在 data_path 的父目录（output 根），命名含时间戳。
+    """
     try:
         import plotly  # noqa: F401
     except ImportError:
@@ -34,9 +40,15 @@ def export_html(data_path: str, report: dict, modes_list: list[str]):
     parts.extend(_build_detail_sections(data_path, report, modes_list))
     parts.append("</body></html>")
 
-    out_path = Path(data_path) / "report.html"
+    case_name = Path(data_path).name
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_dir = Path(data_path).parent
+    out_path = out_dir / f"compare_{case_name}_{ts}.html"
     out_path.write_text("\n".join(parts))
     logger.info("HTML 报告: %s", out_path)
+
+    if auto_open:
+        webbrowser.open(out_path.as_uri())
 
 
 # ============================================================
