@@ -72,6 +72,8 @@ lint:
 	$(LINT_IMPORTS)
 	@echo "=== prompt 引用校验 ==="
 	@$(PYTHON) scripts/check_prompt_refs.py
+	@echo "=== 算子结构校验 ==="
+	@$(PYTHON) scripts/check_structure.py
 	@echo "LINT DONE"
 
 quality:
