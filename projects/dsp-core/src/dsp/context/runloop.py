@@ -182,6 +182,7 @@ def export():
 
     if compare_report:
         _print_compare_summary(compare_report)
+        _export_html(compare_report)
 
 
 # ============================================================
@@ -425,6 +426,11 @@ def _write_input_order(out_dir, op_name, op_id, param_names, args):
 def _compare_all_modes():
     from ..data.report import compare_all_modes
     return compare_all_modes(_state.data_path, _state.saved_dirs, _state.modes_list)
+
+
+def _export_html(compare_report):
+    from ..data.html_report import export_html
+    export_html(_state.data_path, compare_report, _state.modes_list)
 
 
 def _print_compare_summary(report):
