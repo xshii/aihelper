@@ -429,7 +429,7 @@ def _compare_all_modes():
 
 
 def _export_html(compare_report):
-    from ..data.html_report import export_html
+    from ..data.viz import export_html
     export_html(_state.data_path, compare_report, _state.modes_list)
 
 
