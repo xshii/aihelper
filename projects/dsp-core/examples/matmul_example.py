@@ -1,11 +1,15 @@
 """示例：linear (matmul + bias)。
 
 用法:
-    python examples/matmul_example.py                  # 默认 generate_input
-    python examples/matmul_example.py use_input
+    python examples/matmul_example.py                  # 一键：生成数据 → 多模式比数 → 报告
+    python examples/matmul_example.py generate_input   # 只生成（torch 模式）
+    python examples/matmul_example.py use_input        # 只比数（加载已有数据）
 """
 
+import sys
+
 import dsp
+from dsp.core.enums import RunMode
 
 
 def main():
@@ -18,4 +22,8 @@ def main():
 
 
 if __name__ == "__main__":
-    dsp.context.run(main)
+    if len(sys.argv) > 1:
+        dsp.context.run(main)
+    else:
+        dsp.context.run(main, runmode=RunMode.GENERATE_INPUT)
+        dsp.context.run(main, runmode=RunMode.USE_INPUT)

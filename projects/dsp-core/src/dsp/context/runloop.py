@@ -357,33 +357,36 @@ def _load_randn_input(counter, size, dtype):
 # ============================================================
 
 def save_op_inputs(op_name, param_names, args, format_hints):
+    """保存算子输入。所有模式统一 double + ND，golden_c 额外导出 DUT 格式。"""
     from ..data.pipe import DataPipe
 
     _state.current_op_name = op_name
     op_id = _state.op_id_counter
     out_dir = _current_round_dir()
+    is_gc = _state.current_mode == Mode.GOLDEN_C
 
     for i, arg in enumerate(args):
         if not isinstance(arg, torch.Tensor):
             continue
         name = param_names[i] if i < len(param_names) else f"input{i}"
         operand = f"input{i}"
+        dtype_name = _get_dtype_name(arg)
 
-        dtype_name = "float32"
-        if isinstance(arg, DSPTensor) and arg._dsp_dtype is not None:
-            dtype_name = arg._dsp_dtype.name
+        # 统一: ND 格式（不分块）
+        filename = make_filename(op_name, op_id, operand, dtype_name, tuple(arg.shape), Format.ND)
+        DataPipe(arg, dtype=dtype_name).export(str(Path(out_dir) / filename))
 
-        fmt = format_hints.get(name, infer_format(arg))
-
-        filename = make_filename(op_name, op_id, operand, dtype_name, tuple(arg.shape), fmt)
-        DataPipe(arg, dtype=dtype_name).layout(fmt).export(
-            str(Path(out_dir) / filename)
-        )
+        # golden_c 额外: DUT 格式（带分块 + padding）
+        if is_gc:
+            dut_fmt = format_hints.get(name, infer_format(arg))
+            dut_name = make_filename(op_name, op_id, operand + "_dut", dtype_name, tuple(arg.shape), dut_fmt)
+            DataPipe(arg, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
 
     _write_input_order(out_dir, op_name, op_id, param_names, args)
 
 
 def save_op_output(op_name, result):
+    """保存算子输出。所有模式统一 double + ND，golden_c 额外导出 DUT 格式。"""
     from ..data.pipe import DataPipe
 
     op_id = _state.op_id_counter
@@ -393,19 +396,35 @@ def save_op_output(op_name, result):
         return
 
     out_dir = _current_round_dir()
-    dtype_name = "float32"
-    if isinstance(result, DSPTensor) and result._dsp_dtype is not None:
-        dtype_name = result._dsp_dtype.name
+    dtype_name = _get_dtype_name(result)
+    is_gc = _state.current_mode == Mode.GOLDEN_C
 
-    fmt = infer_format(result)
-    filename = make_filename(op_name, op_id, "output0", dtype_name, tuple(result.shape), fmt)
-    DataPipe(result, dtype=dtype_name).layout(fmt).export(
-        str(Path(out_dir) / filename)
-    )
+    # 统一: ND 格式
+    filename = make_filename(op_name, op_id, "output0", dtype_name, tuple(result.shape), Format.ND)
+    DataPipe(result, dtype=dtype_name).export(str(Path(out_dir) / filename))
+
+    # golden_c 额外: DUT 格式
+    if is_gc:
+        dut_fmt = infer_format(result)
+        dut_name = make_filename(op_name, op_id, "output0_dut", dtype_name, tuple(result.shape), dut_fmt)
+        DataPipe(result, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
+
+
+def _get_dtype_name(t):
+    if isinstance(t, DSPTensor) and t._dsp_dtype is not None:
+        return t._dsp_dtype.name
+    return "float64"
+
+
+def _to_double(t):
+    """complex → complex128, real → float64。避免 complex→real 警告。"""
+    if t.is_complex():
+        return t.to(torch.complex128)
+    return t.double()
 
 
 def save_op_expected(op_name, expected):
-    """保存 math strategy 的期望输出，文件名用 expected0 标识。"""
+    """保存 math strategy 的期望输出。统一 double + ND。"""
     from ..data.pipe import DataPipe
 
     if not isinstance(expected, torch.Tensor):
@@ -413,15 +432,10 @@ def save_op_expected(op_name, expected):
 
     op_id = _state.op_id_counter - 1  # save_op_output 已经 +1 了
     out_dir = _current_round_dir()
-    dtype_name = "float32"
-    if isinstance(expected, DSPTensor) and expected._dsp_dtype is not None:
-        dtype_name = expected._dsp_dtype.name
+    dtype_name = _get_dtype_name(expected)
 
-    fmt = infer_format(expected)
-    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(expected.shape), fmt)
-    DataPipe(expected, dtype=dtype_name).layout(fmt).export(
-        str(Path(out_dir) / filename)
-    )
+    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(expected.shape), Format.ND)
+    DataPipe(expected, dtype=dtype_name).export(str(Path(out_dir) / filename))
     logger.info("[math] %s: saved expected output → %s", op_name, filename)
 
 

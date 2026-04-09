@@ -31,12 +31,15 @@ def compare_all_modes(data_path: str, saved_dirs: list[str],
     gen_base = Path(data_path)
     report = {}
     for strategy_name in saved_dirs:
-        strategy_report = _compare_strategy(base / strategy_name, modes_list)
+        strategy_report = _compare_strategy(
+            base / strategy_name, modes_list,
+            gen_dir=gen_base / strategy_name,  # generate_input 的 torch 输出作为基准
+        )
         # math 策略：额外对比 expected vs torch actual
         expected_report = _compare_expected(
             gen_dir=gen_base / strategy_name,
             use_dir=base / strategy_name,
-            modes_list=modes_list,
+            modes_list=["torch"] + modes_list,  # torch 从 gen_dir 取
         )
         if expected_report:
             strategy_report.update(expected_report)
@@ -95,7 +98,11 @@ def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> di
         out_fname = exp_path.name.replace("_expected0_", "_output0_")
         pairs = {}
         for m in modes_list:
-            out_path = use_dir / m / out_fname
+            # torch 输出在 gen_dir，其他在 use_dir/{mode}/
+            if m == "torch":
+                out_path = gen_dir / out_fname
+            else:
+                out_path = use_dir / m / out_fname
             if not out_path.exists():
                 continue
             try:
@@ -108,17 +115,26 @@ def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> di
     return result
 
 
-def _compare_strategy(strategy_dir: Path, modes_list: list[str]) -> dict:
+def _compare_strategy(strategy_dir: Path, modes_list: list[str],
+                      gen_dir: Path = None) -> dict:
+    """对比各模式输出。gen_dir 是 generate_input 的 torch 输出目录（作为基准）。"""
     if not strategy_dir.exists():
         return {}
 
+    # use_input 的各模式目录
     mode_dirs = {m: strategy_dir / m for m in modes_list
                  if (strategy_dir / m).exists()}
+
+    # 加入 generate_input 的 torch 输出作为基准
+    if gen_dir is not None and gen_dir.exists():
+        mode_dirs["torch"] = gen_dir
+
     if len(mode_dirs) < 2:
         return {}
 
-    first_mode = next(iter(mode_dirs))
-    output_files = [f.name for f in mode_dirs[first_mode].glob("*_output*_*.txt")]
+    # 从任一模式目录取 output 文件列表
+    ref_dir = next(iter(mode_dirs.values()))
+    output_files = [f.name for f in ref_dir.glob("*_output*_*.txt")]
 
     result = {}
     for fname in output_files:

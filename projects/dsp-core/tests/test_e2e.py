@@ -73,9 +73,9 @@ class TestUseInput:
         """generate_input → use_input 完整流程。"""
         import dsp
 
-        # torch + pseudo_quant（fake_so 支持伪量化）
+        # pseudo_quant only（torch 已在 generate_input 跑过）
         original_modes = list(USE_INPUT_MODES)
-        USE_INPUT_MODES[:] = [Mode.TORCH, Mode.PSEUDO_QUANT]
+        USE_INPUT_MODES[:] = [Mode.PSEUDO_QUANT]
 
         try:
             # generate_input
@@ -100,7 +100,7 @@ class TestUseInput:
                 rounds += 1
             dsp.context.export()
 
-            assert rounds == 8 * 2  # 8 策略 × 2 模式（含 math）
+            assert rounds == 8 * 1  # 8 策略 × 1 模式（pseudo_quant only）
 
             # 检查日志存在
             case_dirs = [d for d in os.listdir(tmp_output_dir)
@@ -108,6 +108,6 @@ class TestUseInput:
             case_dir = os.path.join(tmp_output_dir, case_dirs[0])
             log = json.loads(open(os.path.join(case_dir, "run_log.json")).read())
             assert log["seed"] == 99
-            assert len(log["rounds"]) == 16  # 8 策略 × 2 模式（含 math）
+            assert len(log["rounds"]) == 8  # 8 策略 × 1 模式
         finally:
             USE_INPUT_MODES[:] = original_modes

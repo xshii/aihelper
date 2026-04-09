@@ -131,6 +131,9 @@ def export_html(data_path: str, report: dict, modes_list: list[str],
 
     from ..config import config as cfg
 
+    global _plotly_js_included
+    _plotly_js_included = False
+
     parts = [_HTML_HEADER]
     parts.append(_safe_render(_build_summary_table, report, cfg.compare))
     parts.append(_safe_render(_build_strategy_bars, report))
@@ -341,8 +344,16 @@ def _safe_render(render_fn, *args) -> str:
         return ""
 
 
+_plotly_js_included = False
+
+
 def _fig_to_div(fig) -> str:
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    """第一个图表加载 CDN，后续复用。"""
+    global _plotly_js_included
+    if not _plotly_js_included:
+        _plotly_js_included = True
+        return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    return fig.to_html(full_html=False, include_plotlyjs=False)
 
 
 _HTML_HEADER = """<!DOCTYPE html>

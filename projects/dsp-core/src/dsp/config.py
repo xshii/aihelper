@@ -60,7 +60,7 @@ class RunConfig:
         {"name": "sparse_9999", "sparsity": 0.9999},
         {"name": "corner_all_zero", "sparsity": 1.0},
     ])
-    modes: list = field(default_factory=lambda: ["torch", "pseudo_quant", "golden_c"])
+    modes: list = field(default_factory=lambda: ["pseudo_quant", "golden_c"])
 
 
 @dataclass

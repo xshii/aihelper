@@ -39,9 +39,9 @@ DEFAULT_STRATEGIES = [
     DataStrategy("corner_all_zero", sparsity=1.0),
 ]
 
-# use_input 时的运行模式顺序
+# use_input 时的运行模式（torch 已在 generate_input 跑过，不重复）
 from ..core.enums import Mode
-USE_INPUT_MODES = [Mode.TORCH, Mode.PSEUDO_QUANT, Mode.GOLDEN_C]
+USE_INPUT_MODES = [Mode.PSEUDO_QUANT, Mode.GOLDEN_C]
 
 
 def generate_by_strategy(

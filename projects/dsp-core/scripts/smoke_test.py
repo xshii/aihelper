@@ -25,8 +25,9 @@ EXPECTED_STRATEGIES = 8
 def main():
     with tempfile.TemporaryDirectory(prefix="dsp_smoke_") as tmp:
         # 只用 torch + pseudo_quant（不需要真 golden C）
+        # pseudo_quant only（torch 已在 generate_input 跑过）
         original_modes = list(USE_INPUT_MODES)
-        USE_INPUT_MODES[:] = [Mode.TORCH, Mode.PSEUDO_QUANT]
+        USE_INPUT_MODES[:] = [Mode.PSEUDO_QUANT]
 
         try:
             _run_generate(tmp)
@@ -64,7 +65,7 @@ def _run_use_input(tmp):
         dsp.context.submit_output(result)
         rounds += 1
     dsp.context.export()
-    expected_rounds = EXPECTED_STRATEGIES * 2  # × 2 modes
+    expected_rounds = EXPECTED_STRATEGIES * 1  # × 1 mode (pseudo_quant only)
     assert rounds == expected_rounds, f"use_input rounds: {rounds} != {expected_rounds}"
     print(f"  use_input: {rounds} rounds OK")
 
