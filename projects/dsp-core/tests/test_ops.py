@@ -15,11 +15,10 @@ class TestCorrelate:
         # 互相关输出长度 = len(a) + len(b) - 1
         assert c.shape[-1] == a.shape[-1] + b.shape[-1] - 1
 
-    def test_complex_correlate(self, iq16_pair):
+    def test_int16_correlate(self, int16_pair):
         import dsp
-        a, b = iq16_pair
+        a, b = int16_pair
         c = dsp.ops.correlate(a, b)
-        assert c.is_complex()
         assert c.shape[-1] == a.shape[-1] + b.shape[-1] - 1
 
     def test_autocorrelation(self):

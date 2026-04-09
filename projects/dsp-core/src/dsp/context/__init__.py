@@ -56,10 +56,10 @@ def set_compute_config(compute=None, output_dtype=None):
 
     Args:
         compute: DType.DUT 或 DType.REAL 枚举值
-        output_dtype: 输出类型名，如 "iq16"
+        output_dtype: 输出类型名，如 "int16"
 
     用法:
-        dsp.context.set_compute_config(compute=DType.DUT.IQ16, output_dtype=DType.DUT.IQ16)
+        dsp.context.set_compute_config(compute=DType.DUT.INT16, output_dtype=DType.DUT.INT16)
     """
     _compute_config["compute"] = compute.value if hasattr(compute, 'value') else compute
     _compute_config["output_dtype"] = output_dtype.value if hasattr(output_dtype, 'value') else output_dtype
@@ -99,7 +99,7 @@ def run(
         dsp.context.run(main)                      # 零配置
         dsp.context.run(main, seed=42)             # 只改 seed
         dsp.context.run(main,                      # 全配置
-            compute=DType.DUT.IQ16,
+            compute=DType.DUT.INT16,
             strategies=[DataStrategy("random")],
             modes=[Mode.TORCH, Mode.PSEUDO_QUANT],
         )

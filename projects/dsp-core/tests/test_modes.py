@@ -36,8 +36,8 @@ class TestPseudoQuant:
     def test_pseudo_quant_changes_values(self):
         """伪量化应截断精度，使结果与纯 torch 不完全相同。"""
         import dsp
-        a = dsp.ops.randn(64, dtype=dsp.core.iq16) * 100
-        b = dsp.ops.randn(64, dtype=dsp.core.iq16) * 100
+        a = dsp.ops.randn(64, dtype=dsp.core.int16)
+        b = dsp.ops.randn(64, dtype=dsp.core.int16)
 
         with dsp.context.mode_context(Mode.TORCH):
             result_torch = dsp.ops.correlate(a, b)

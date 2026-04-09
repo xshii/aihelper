@@ -44,6 +44,10 @@ from ..core.enums import Mode
 USE_INPUT_MODES = [Mode.PSEUDO_QUANT, Mode.GOLDEN_C]
 
 
+def _is_int_dtype(dtype_torch: torch.dtype) -> bool:
+    return dtype_torch in (torch.int8, torch.int16, torch.int32, torch.int64)
+
+
 def generate_by_strategy(
     *size,
     dtype_torch: torch.dtype,
@@ -58,11 +62,16 @@ def generate_by_strategy(
     if strategy.sparsity >= 1.0:
         return torch.zeros(*size, dtype=dtype_torch)
 
+    if _is_int_dtype(dtype_torch):
+        # int 类型: 先生成 float，再 round+clamp+cast
+        t = torch.randn(*size, dtype=torch.float32)
+        if strategy.sparsity > 0:
+            mask = torch.rand(*size) < strategy.sparsity
+            t[mask] = 0.0
+        return t.round().clamp(-32768, 32767).to(dtype_torch)
+
     t = torch.randn(*size, dtype=dtype_torch)
     if strategy.sparsity > 0:
         mask = torch.rand(*size) < strategy.sparsity
-        if t.is_complex():
-            t[mask] = 0 + 0j
-        else:
-            t[mask] = 0.0
+        t[mask] = 0.0
     return t

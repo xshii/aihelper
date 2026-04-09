@@ -2,7 +2,7 @@
 
 用法:
     import dsp
-    a = dsp.data.randn(4, 8, dtype=dsp.core.iq16)
+    a = dsp.data.randn(4, 8, dtype=dsp.core.int16)
     b = dsp.data.zeros(10, dtype=dsp.core.float32)
 """
 
@@ -23,6 +23,18 @@ def set_randn_interceptor(interceptor):
     """由 context 模块注入。data 不直接 import context。"""
     global _randn_interceptor
     _randn_interceptor = interceptor
+
+
+def _to_int_dtype(data: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
+    """将 float tensor 转为 int dtype: round + clamp + cast。"""
+    torch_dt = dtype.torch_dtype
+    if torch_dt == torch.int8:
+        return data.round().clamp(-128, 127).to(torch_dt)
+    elif torch_dt == torch.int16:
+        return data.round().clamp(-32768, 32767).to(torch_dt)
+    elif torch_dt == torch.int32:
+        return data.round().clamp(-(1 << 31), (1 << 31) - 1).to(torch_dt)
+    return data.to(torch_dt)
 
 
 def tensor(data, dtype: DSPDtype = None, requires_grad: bool = False) -> DSPTensor:
@@ -49,9 +61,16 @@ def randn(*size, dtype: DSPDtype = None) -> DSPTensor:
                 result._source = "randn"
             return result
     dtype = dtype or _float32
-    t = DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
-    t._source = "randn"
-    return t
+    torch_dt = dtype.torch_dtype
+    if not torch_dt.is_floating_point:
+        # int 类型: 先生成 float，再 round+clamp+cast
+        t_float = torch.randn(*size, dtype=torch.float32)
+        t = _to_int_dtype(t_float, dtype)
+    else:
+        t = torch.randn(*size, dtype=torch_dt)
+    result = DSPTensor.create(t, dtype)
+    result._source = "randn"
+    return result
 
 
 def zeros_like(t: DSPTensor) -> DSPTensor:

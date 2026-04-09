@@ -1,10 +1,9 @@
 """类型编解码器: 自定义格式 ↔ torch float 的转换。
 
-三个方法全部通过 golden C 的 convert 函数实现。
-Python 层不知道 DUT 格式的内部细节（frac_bits 等），全交给 C++。
+DUT 格式的细节由 golden C 处理，Python 不感知。
 
 新增 codec 用 __init_subclass__:
-    class BFP16Codec(GoldenCCodec, dtype=bfp16):  # ← 定义即注册，无需实现任何方法
+    class BFP16Codec(GoldenCCodec, dtype=bfp16):
         pass
 """
 
@@ -18,8 +17,6 @@ from .dtype import DSPDtype
 
 
 class TypeCodec(ABC):
-    """编解码器基类。"""
-
     @abstractmethod
     def to_float(self, raw: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
 
@@ -45,8 +42,7 @@ def get_codec(dtype: DSPDtype) -> TypeCodec:
     codec = _CODEC_REGISTRY.get(dtype.name)
     if codec is None:
         raise TypeError(
-            f"未注册类型 {dtype} 的编解码器。"
-            f"已注册: {list(_CODEC_REGISTRY.keys())}"
+            f"未注册类型 {dtype} 的编解码器。已注册: {list(_CODEC_REGISTRY.keys())}"
         )
     return codec
 
@@ -56,10 +52,8 @@ def get_codec(dtype: DSPDtype) -> TypeCodec:
 # ============================================================
 
 class PassthroughCodec(TypeCodec):
-    """直通 codec: float32 / float64。"""
-
     def to_float(self, raw, dtype):
-        return raw.float() if dtype.torch_dtype == torch.float32 else raw.double()
+        return raw.float()
 
     def from_float(self, t, dtype):
         return t.to(dtype.torch_dtype)
@@ -69,18 +63,14 @@ class PassthroughCodec(TypeCodec):
 
 
 # ============================================================
-# GoldenCCodec: 全部走 golden C convert，无 Python fallback
+# GoldenCCodec: 全部走 golden C convert
 # ============================================================
 
 class GoldenCCodec(TypeCodec):
     """通过 golden C convert 函数实现的 codec。
 
-    所有转换调 golden.convert(data, src_type, dst_type)。
-    Python 层不知道 DUT 格式细节，全交给 C++。
-    golden C 不可用时直接报错。
-
-    子类用 __init_subclass__ 自动注册，无需实现任何方法:
-        class BFP16Codec(GoldenCCodec, dtype=bfp16):
+    子类用 __init_subclass__ 自动注册:
+        class Int8Codec(GoldenCCodec, dtype=int8):
             pass
     """
 
@@ -89,7 +79,6 @@ class GoldenCCodec(TypeCodec):
 
     @classmethod
     def set_golden_converter(cls, converter, is_available_fn):
-        """由 golden 模块注入 convert 函数。core 不直接 import golden。"""
         cls._converter = staticmethod(converter)
         cls._is_available = staticmethod(is_available_fn)
 
@@ -105,66 +94,60 @@ class GoldenCCodec(TypeCodec):
 
     def to_float(self, raw, dtype):
         self._require_golden()
-        flat = _to_flat_float(raw)
+        import numpy as np
+        flat = raw.detach().cpu().float().numpy().flatten().astype(np.float32)
         out = self._converter(flat, dtype.name, "float32")
-        return _from_flat_float(out, raw.shape, raw.is_complex())
+        return torch.from_numpy(out.copy()).reshape(raw.shape)
 
     def from_float(self, t, dtype):
         self._require_golden()
-        flat = _to_flat_float(t)
+        import numpy as np
+        flat = t.detach().cpu().float().numpy().flatten().astype(np.float32)
         out = self._converter(flat, "float32", dtype.name)
-        return _from_flat_float(out, t.shape, t.is_complex())
+        return torch.from_numpy(out.copy()).reshape(t.shape)
 
     def fake_quantize(self, t, dtype):
         self._require_golden()
-        flat = _to_flat_float(t)
+        import numpy as np
+        flat = t.detach().cpu().float().numpy().flatten().astype(np.float32)
         quantized = self._converter(flat, "float32", dtype.name)
         result_np = self._converter(quantized, dtype.name, "float32")
-        result = _from_flat_float(result_np, t.shape, t.is_complex())
+        result = torch.from_numpy(result_np.copy()).reshape(t.shape)
+        # 转回原始 torch dtype（int16 等）
+        result = result.to(dtype.torch_dtype)
         if t.requires_grad:
             result = t + (result - t).detach()
         return result
 
 
 # ============================================================
-# Complex ↔ float 辅助（interleaved real/imag）
-# ============================================================
-
-def _to_flat_float(t: torch.Tensor):
-    """tensor → flat float32 numpy。complex 展开为 interleaved [re, im, re, im, ...]。"""
-    import numpy as np
-    if t.is_complex():
-        real = t.real.detach().cpu().float().numpy().flatten()
-        imag = t.imag.detach().cpu().float().numpy().flatten()
-        return np.stack([real, imag], axis=-1).flatten().astype(np.float32)
-    return t.detach().cpu().float().numpy().flatten().astype(np.float32)
-
-
-def _from_flat_float(data, shape: tuple, is_complex: bool):
-    """flat float32 numpy → tensor。complex 从 interleaved 还原。"""
-    result = torch.from_numpy(data.copy())
-    if is_complex:
-        real = result[0::2]
-        imag = result[1::2]
-        return torch.complex(real, imag).reshape(shape)
-    return result.reshape(shape)
-
-
-# ============================================================
-# 内置 codec（定义即注册，无需实现任何方法）
+# 内置 codec（定义即注册）
 # ============================================================
 
 from . import dtype as _dtypes  # noqa: E402
 
 
-class IQ16Codec(GoldenCCodec, dtype=_dtypes.iq16):
+class Int16Codec(GoldenCCodec, dtype=_dtypes.int16):
     pass
 
 
-class IQ32Codec(GoldenCCodec, dtype=_dtypes.iq32):
+class Int8Codec(GoldenCCodec, dtype=_dtypes.int8):
     pass
 
 
-# Passthrough 手动注册
+class Int32Codec(GoldenCCodec, dtype=_dtypes.int32):
+    pass
+
+
 register_codec(_dtypes.float32, PassthroughCodec())
 register_codec(_dtypes.float64, PassthroughCodec())
+
+
+# ============================================================
+# 辅助函数
+# ============================================================
+
+def _to_flat_float(t: torch.Tensor):
+    """tensor → flat float32 numpy array。"""
+    import numpy as np
+    return t.detach().cpu().float().numpy().flatten().astype(np.float32)

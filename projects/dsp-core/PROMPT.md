@@ -30,10 +30,10 @@ src/dsp/
 当前 `golden/fake_so/` 是 Python 模拟。硬件团队提供 `.h` + `.so` 后：
 
 ```
-步骤 1: 把 .h 放入 golden_c/include/，.so 放入 golden_c/lib/
+步骤 1: 运行 ./scripts/extract_golden.sh path/to/golden_release.rar（解压 .h + .so 到 golden_c/）
 步骤 2: 用 prompt 03 在 manifest.py 注册 C 函数名
 步骤 3: make build-golden 编译 pybind11 绑定
-步骤 4: make test — 81 个测试应全过（真 .so 自动替换 fake_so）
+步骤 4: make test（真 .so 自动替换 fake_so）
 步骤 5: make smoke — E2E 比数报告应显示 torch vs pseudo_quant 精度差异
 ```
 
@@ -72,7 +72,7 @@ src/dsp/
 | 02 | [02-add-op.md](prompts/02-add-op.md) | 添加算子（@register_op + golden_c ComputeKey 映射） |
 | 03 | [03-bridge-golden-c.md](prompts/03-bridge-golden-c.md) | 注册 C 函数到 manifest（ComputeKey 固定槽位 + DType 枚举） |
 | 04 | [04-write-tests.md](prompts/04-write-tests.md) | 写测试（UT/IT/ST 分级，pytest markers） |
-| 05 | [05-add-dtype.md](prompts/05-add-dtype.md) | 定义 DSPDtype（name + torch_dtype + bits + is_complex） |
+| 05 | [05-add-dtype.md](prompts/05-add-dtype.md) | 定义 DSPDtype（name + torch_dtype） |
 | 06 | [06-add-op-convention.md](prompts/06-add-op-convention.md) | 注册 OpConvention（__init_subclass__ 自动注册） |
 
 ## 最简用法
@@ -81,9 +81,9 @@ src/dsp/
 import dsp
 
 def main():
-    x = dsp.data.randn(4, 8, dtype=dsp.core.iq16)
-    w = dsp.data.randn(8, 4, dtype=dsp.core.iq16)
-    b = dsp.data.randn(1, 4, dtype=dsp.core.iq16)
+    x = dsp.data.randn(4, 8, dtype=dsp.core.int16)
+    w = dsp.data.randn(8, 4, dtype=dsp.core.int16)
+    b = dsp.data.randn(1, 4, dtype=dsp.core.int16)
     return dsp.ops.linear(x, w, b)
 
 dsp.context.run(main)
@@ -119,8 +119,8 @@ HTML 报告结构（渐进式披露）：
 ```python
 from dsp.core.enums import DType, Mode, Format
 
-DType.DUT.IQ16        # 芯片原生定点
-DType.REAL.FLOAT16    # 标准浮点
+DType.DUT.INT16        # 芯片原生定点
+DType.REAL.FLOAT32    # 标准浮点
 DType.ACC.Q12_22      # 累加器格式
 
 Mode.TORCH            # 纯 torch

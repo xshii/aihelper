@@ -6,7 +6,6 @@ import torch
 
 from ..core.errors import GoldenNotAvailable
 from ..core.tensor import DSPTensor
-from ..core.codec import _to_flat_float
 from .call import compute as golden_compute, is_available
 
 
@@ -49,11 +48,11 @@ def _extract_types(dsp_args):
 
 
 def _args_to_numpy(args):
-    """所有 tensor 参数转 flat float numpy。"""
+    """所有 tensor 参数转 float32 numpy（保持原始 shape）。"""
+    import numpy as np
     result = []
     for a in args:
-        if isinstance(a, DSPTensor):
-            result.append(_to_flat_float(a.torch()))
-        elif isinstance(a, torch.Tensor):
-            result.append(_to_flat_float(a))
+        if isinstance(a, (DSPTensor, torch.Tensor)):
+            t = a.torch() if isinstance(a, DSPTensor) else a
+            result.append(t.detach().cpu().float().numpy())
     return result

@@ -37,23 +37,23 @@ class TestRunMode:
 
 class TestDType:
     def test_real(self):
-        assert DType.REAL.FLOAT16 == "float16"
         assert DType.REAL.FLOAT32 == "float32"
         assert DType.REAL.FLOAT64 == "float64"
 
     def test_dut(self):
-        assert DType.DUT.IQ16 == "iq16"
-        assert DType.DUT.IQ32 == "iq32"
+        assert DType.DUT.INT8 == "int8"
+        assert DType.DUT.INT16 == "int16"
 
     def test_acc(self):
+        assert DType.ACC.INT32 == "int32"
         assert DType.ACC.Q12_22 == "q12.22"
         assert DType.ACC.Q8_26 == "q8.26"
         assert DType.ACC.Q24_40 == "q24.40"
 
     def test_is_str(self):
-        assert isinstance(DType.DUT.IQ16, str)
+        assert isinstance(DType.DUT.INT16, str)
         assert isinstance(DType.ACC.Q12_22, str)
-        assert isinstance(DType.REAL.FLOAT16, str)
+        assert isinstance(DType.REAL.FLOAT32, str)
 
     def test_hierarchy(self):
         """三级分类互不冲突。"""

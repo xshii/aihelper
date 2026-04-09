@@ -90,11 +90,11 @@ class TestIO:
     pytestmark = pytest.mark.ut
 
     def test_make_parse_filename(self):
-        fname = make_filename("linear", 0, "input0", "iq16", (4, 8), "zz")
-        assert fname == "linear_0_input0_iq16_4x8_zz.txt"
+        fname = make_filename("linear", 0, "input0", "int16", (4, 8), "zz")
+        assert fname == "linear_0_input0_int16_4x8_zz.txt"
         meta = parse_filename(fname)
         assert meta["op"] == "linear"
-        assert meta["dtype"] == "iq16"
+        assert meta["dtype"] == "int16"
         assert meta["shape"] == (4, 8)
         assert meta["format"] == "zz"
 
@@ -122,8 +122,8 @@ class TestCompare:
         diff = compute_diff(a, b)
         assert diff["max_diff"] == 1.0
 
-    def test_complex_tensors(self):
-        a = torch.randn(10, dtype=torch.complex64)
+    def test_int_tensors(self):
+        a = torch.randint(-100, 100, (10,), dtype=torch.int16)
         diff = compute_diff(a, a)
         assert diff["max_diff"] == 0.0
 

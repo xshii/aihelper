@@ -13,9 +13,9 @@ from dsp.core.enums import RunMode
 
 
 def main():
-    x = dsp.data.randn(4, 8, dtype=dsp.core.iq16)
-    weight = dsp.data.randn(8, 4, dtype=dsp.core.iq16)
-    bias = dsp.data.randn(1, 4, dtype=dsp.core.iq16)
+    x = dsp.data.randn(4, 8, dtype=dsp.core.int16)
+    weight = dsp.data.randn(8, 4, dtype=dsp.core.int16)
+    bias = dsp.data.randn(1, 4, dtype=dsp.core.int16)
     out = dsp.ops.linear(x, weight, bias)
     print(f"  result: {out.shape}, dtype={out.dsp_dtype}")
     return out

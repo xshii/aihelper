@@ -13,7 +13,7 @@
 DSPDtype 只存最基本的元数据。DUT 格式的细节（frac_bits 等）由 golden C 处理，Python 不感知。
 
 ## 规则
-1. MUST: 填写 `name`, `torch_dtype`, `bits`（`is_complex` 默认 False，复数类型必须设 True）
+1. MUST: 填写 `name`, `torch_dtype`
 2. MUST: `name` 全小写，和 DType 枚举的 value 一致
 3. MUST: 同步在 `core/enums.py` 的 `DType.DUT`（或 `DType.ACC`）加枚举值
 4. NEVER: 填 `frac_bits`、`qmin`、`qmax`（已移除，由 golden C 处理）
@@ -22,10 +22,10 @@ DSPDtype 只存最基本的元数据。DUT 格式的细节（frac_bits 等）由
 
 | 特征 | torch_dtype |
 |------|------------|
-| 实数 ≤ 32bit | `torch.float32` |
-| 实数 > 32bit | `torch.float64` |
-| 复数（IQ）≤ 32bit/分量 | `torch.complex64` |
-| 复数 > 32bit/分量 | `torch.complex128` |
+| int8 | `torch.int8` |
+| int16 | `torch.int16` |
+| int32 | `torch.int32` |
+| float32 | `torch.float32` |
 
 ## 步骤
 1. 在 `src/dsp/core/enums.py` 的 `DType.DUT` 加枚举值
@@ -37,92 +37,87 @@ DSPDtype 只存最基本的元数据。DUT 格式的细节（frac_bits 等）由
 
 ```python
 # 1. core/enums.py DType.DUT 加:
-BFP16 = "bfp16"
+INT4 = "int4"
 
 # 2. core/dtype.py 底部加:
-bfp16 = DSPDtype(
-    name="bfp16",
-    torch_dtype=torch.float32,
-    bits=16,
+int4 = DSPDtype(
+    name="int4",
+    torch_dtype=torch.int8,
 )
-register_dtype(bfp16)
+register_dtype(int4)
 
 # 3. core/codec.py 底部加:
-class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
+class INT4Codec(GoldenCCodec, dtype=_dtypes.int4):
     pass
 
 # 4. core/__init__.py 导出:
-from .dtype import (..., bfp16)
+from .dtype import (..., int4)
 ```
 
 ## 样例
 
-完整样例见 `src/dsp/core/dtype.py` 中 `iq16` 和 `float32` 的定义。
+完整样例见 `src/dsp/core/dtype.py` 中 `int16` 和 `float32` 的定义。
 
-### Example 1: 添加 bfp16（16bit 实数类型）
+### Example 1: 添加 int4（4bit 整数类型）
 
-**输入：** 硬件规格要求添加 bfp16，16bit 块浮点实数格式。
-
-**输出：**
-
-```python
-# 1. core/enums.py — DType.DUT 加:
-BFP16 = "bfp16"
-
-# 2. core/dtype.py — 底部加:
-bfp16 = DSPDtype(
-    name="bfp16",
-    torch_dtype=torch.float32,   # 实数 ≤ 32bit → float32
-    bits=16,
-)
-register_dtype(bfp16)
-
-# 3. core/codec.py — 底部加:
-class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
-    pass
-
-# 4. core/__init__.py — 导出:
-from .dtype import (..., bfp16)
-```
-
-**Why this output:**
-- `is_complex` 省略，因为默认 False，bfp16 是实数类型
-- `torch_dtype` 选 `torch.float32`，因为 16bit ≤ 32bit 实数
-
-### Example 2: 添加 iq8（8bit IQ 复数类型）
-
-**输入：** 硬件规格要求添加 iq8，8bit IQ 复数格式（I/Q 各 4bit）。
+**输入：** 硬件规格要求添加 int4，4bit 定点整数格式。
 
 **输出：**
 
 ```python
 # 1. core/enums.py — DType.DUT 加:
-IQ8 = "iq8"
+INT4 = "int4"
 
 # 2. core/dtype.py — 底部加:
-iq8 = DSPDtype(
-    name="iq8",
-    torch_dtype=torch.complex64,  # 复数 ≤ 32bit/分量 → complex64
-    bits=8,
-    is_complex=True,              # IQ 格式必须设 True
+int4 = DSPDtype(
+    name="int4",
+    torch_dtype=torch.int8,   # 最小的整数容器
 )
-register_dtype(iq8)
+register_dtype(int4)
 
 # 3. core/codec.py — 底部加:
-class IQ8Codec(GoldenCCodec, dtype=_dtypes.iq8):
+class INT4Codec(GoldenCCodec, dtype=_dtypes.int4):
     pass
 
 # 4. core/__init__.py — 导出:
-from .dtype import (..., iq8)
+from .dtype import (..., int4)
 ```
 
 **Why this output:**
-- `is_complex=True` 必须显式设置，否则默认 False 会导致 IQ 数据被当作实数处理
-- `torch_dtype` 选 `torch.complex64` 而不是 `torch.float32`，因为 IQ 数据有虚部；用 float 会丢失虚部
-- `bits=8` 是 I+Q 的总位宽，不是单分量位宽
+- `torch_dtype` 选 `torch.int8`，因为 PyTorch 没有 int4，用最近的整数容器
+- DSPDtype 只记 name 和 torch_dtype，具体定点细节由 golden C 处理
+
+### Example 2: 添加 uint8（8bit 无符号整数类型）
+
+**输入：** 硬件规格要求添加 uint8，8bit 无符号整数格式。
+
+**输出：**
+
+```python
+# 1. core/enums.py — DType.DUT 加:
+UINT8 = "uint8"
+
+# 2. core/dtype.py — 底部加:
+uint8 = DSPDtype(
+    name="uint8",
+    torch_dtype=torch.int8,   # PyTorch 无 uint8 tensor，用 int8 容器
+)
+register_dtype(uint8)
+
+# 3. core/codec.py — 底部加:
+class UINT8Codec(GoldenCCodec, dtype=_dtypes.uint8):
+    pass
+
+# 4. core/__init__.py — 导出:
+from .dtype import (..., uint8)
+```
+
+**Why this output:**
+- `torch_dtype` 选 `torch.int8`，因为 PyTorch 对 uint8 的 tensor 支持有限，用 int8 作为容器
+- 无符号的细节由 golden C 处理，Python 层不需要区分
 
 ## 自检清单
-- [ ] DSPDtype 字段：name, torch_dtype, bits, is_complex
+- [ ] DSPDtype 字段：name, torch_dtype
 - [ ] DType.DUT 枚举值和 DSPDtype.name 一致
 - [ ] Codec 继承 GoldenCCodec（一行，无方法）
 - [ ] `core/__init__.py` 导出
@@ -131,8 +126,7 @@ from .dtype import (..., iq8)
 
 ## 边界情况
 - 如果漏改了其中一个文件：`make test` 会报 KeyError 或 ImportError，按报错信息逐个补
-- 如果 torch_dtype 选错了：complex 类型必须用 torch.complex64/128，否则虚部会丢失
-- 如果 bits 不确定：看硬件规格中的"word width"字段
+- 如果 torch_dtype 选错了：查看上面的选择表
 - 如果类型是累加器格式（ACC）：加到 `DType.ACC` 而不是 `DType.DUT`
 
 ---

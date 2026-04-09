@@ -48,9 +48,9 @@ D, A = DType.DUT, DType.ACC
     weights=Format.NN,
     # golden C 映射（可选，没有 C++ 时不填）
     golden_c={
-        ComputeKey(op="beamform", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32,
-                   acc=A.Q12_22, compute=D.IQ16):
-            "sp_beamform_iq16_iq16_oiq32_acc_q12_22",
+        ComputeKey(op="beamform", in0=D.INT16, in1=D.INT16, out0=D.INT32,
+                   acc=A.Q12_22, compute=D.INT16):
+            "sp_beamform_int16_int16_oint32_acc_q12_22",
     },
 )
 def beamform(signal: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
@@ -112,8 +112,8 @@ def _my_op_math(inputs, source_map):
 @register_op(
     weight=Format.NN,
     golden_c={
-        ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, in2=D.IQ32, out0=D.IQ16,
-                   acc=A.Q12_22, compute=D.IQ16): "sp_fused_linear_iq16_iq16_oiq16_acc_q12_22",
+        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=D.INT32, out0=D.INT16,
+                   acc=A.Q12_22, compute=D.INT16): "sp_fused_linear_int16_int16_oint16_acc_q12_22",
     },
 )
 def linear(input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:

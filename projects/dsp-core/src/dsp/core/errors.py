@@ -23,7 +23,7 @@ class GoldenNotAvailable(DSPError):
 
     修复:
         1. make build-golden（编译 C++ 绑定）
-        2. 或确认 golden_c/lib/ 下有 .so 文件
+        2. 或确认 golden_c/ 下有 .h 和 .so 文件
         3. 开发阶段可用 fake_so（自动降级）
     """
 

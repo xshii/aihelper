@@ -13,7 +13,7 @@ class ConvertMixin:
         """类型转换。返回 self（链式）。
 
         Args:
-            target_dtype: 目标类型名（如 "iq16", "float32"）
+            target_dtype: 目标类型名（如 "int16", "float32"）
         """
         if target_dtype == self._dtype_name:
             return self

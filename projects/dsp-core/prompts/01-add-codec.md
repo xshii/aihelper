@@ -44,7 +44,7 @@ class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
 
 ## Examples (样例)
 
-完整样例见 `src/dsp/core/codec.py` 中 `IQ16Codec` 和 `IQ32Codec`。
+完整样例见 `src/dsp/core/codec.py` 中 `INT16Codec` 和 `INT32Codec`。
 
 ### Example 1 (典型): 添加 bfp16 Codec
 
@@ -56,11 +56,11 @@ class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
 --- a/src/dsp/core/codec.py
 +++ b/src/dsp/core/codec.py
 @@ existing codecs
- class IQ16Codec(GoldenCCodec, dtype=_dtypes.iq16):
-     """iq16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
+ class INT16Codec(GoldenCCodec, dtype=_dtypes.int16):
+     """int16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
 
- class IQ32Codec(GoldenCCodec, dtype=_dtypes.iq32):
-     """iq32 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
+ class INT32Codec(GoldenCCodec, dtype=_dtypes.int32):
+     """int32 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
 +
 +class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
 +    """bfp16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
@@ -75,7 +75,7 @@ make test
 **Why this output:**
 - 继承 `GoldenCCodec`，三个方法（`to_float`/`from_float`/`fake_quantize`）全部由基类委托给 golden C，子类不需要实现任何方法。
 - `dtype=_dtypes.bfp16` 通过 `__init_subclass__` 自动完成注册，无需手动调用。
-- 只需在文件底部添加一行类定义，和 `IQ16Codec`/`IQ32Codec` 模式完全一致。
+- 只需在文件底部添加一行类定义，和 `INT16Codec`/`INT32Codec` 模式完全一致。
 
 ### Example 2 (错误): 继承了 TypeCodec 而不是 GoldenCCodec
 

@@ -33,9 +33,9 @@ make ci               # lint + 架构 + 全部测试
 
 | Fixture | 类型 | 说明 |
 |---------|------|------|
-| `iq16_pair` | `(DSPTensor, DSPTensor)` | shape=(64,), dtype=iq16 的 (a, b) |
+| `int16_pair` | `(DSPTensor, DSPTensor)` | shape=(64,), dtype=int16 的 (a, b) |
 | `float32_pair` | `(DSPTensor, DSPTensor)` | shape=(64,), dtype=float32 的 (a, b) |
-| `iq16_matrix` | `DSPTensor` | shape=(4, 8), dtype=iq16 |
+| `int16_matrix` | `DSPTensor` | shape=(4, 8), dtype=int16 |
 | `float32_matrix` | `DSPTensor` | shape=(4, 8), dtype=float32 |
 | `tmp_output_dir` | `str` | 临时目录，测试后自动清理 |
 | `sample_pipe` | `DataPipe` | shape=(4, 8), dtype=float32 |
@@ -81,8 +81,8 @@ pytestmark = pytest.mark.ut
 
 class TestBeamform:
     def test_basic_call(self):
-        signal = dsp.data.randn(4, 100, dtype=dsp.core.iq16)
-        weights = dsp.data.randn(4, dtype=dsp.core.iq16)
+        signal = dsp.data.randn(4, 100, dtype=dsp.core.int16)
+        weights = dsp.data.randn(4, dtype=dsp.core.int16)
         result = dsp.ops.beamform(signal, weights)
         assert result.shape == (100,)
 
@@ -109,8 +109,8 @@ pytestmark = pytest.mark.st
 class TestBeamformE2E:
     def test_generate_and_compare(self, tmp_output_dir):
         def main():
-            signal = dsp.data.randn(4, 32, dtype=dsp.core.iq16)
-            weights = dsp.data.randn(4, dtype=dsp.core.iq16)
+            signal = dsp.data.randn(4, 32, dtype=dsp.core.int16)
+            weights = dsp.data.randn(4, dtype=dsp.core.int16)
             return dsp.ops.beamform(signal, weights)
 
         dsp.context.run(main, data_path=tmp_output_dir, seed=42)
@@ -127,7 +127,6 @@ class TestBeamformE2E:
 ## 边界情况
 - golden C 不可用：用 `pytest.skip("golden C 不可用")` 跳过，不要让测试失败
 - 如果需要特殊 shape 的数据：直接用 `dsp.data.randn(...)` 构造，不要修改 conftest
-- 复数类型测试：用 `dsp.core.iq16`（is_complex=True 的类型）测试 complex tensor 行为
 - 如果不确定测试级别：默认选 UT，除非测试了多模块交互
 
 ---

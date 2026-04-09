@@ -6,7 +6,7 @@
     import dsp
 
     # 链式处理
-    pipe = (dsp.data.from_tensor(x, dtype="iq16")
+    pipe = (dsp.data.from_tensor(x, dtype="int16")
         .convert("float32")
         .layout("zz")
         .export("output.txt"))

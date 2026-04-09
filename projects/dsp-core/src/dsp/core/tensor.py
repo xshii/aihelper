@@ -5,8 +5,8 @@
 __torch_function__ 只做一件事: 操作后传播 native_type 元数据到结果。
 
 用法:
-    a = DSPTensor.create(torch.randn(100, dtype=torch.complex64), dsp.iq16)
-    b = a + a          # 返回 DSPTensor, dtype=dsp.iq16
+    a = DSPTensor.create(torch.randn(100, dtype=torch.int16), dsp.int16)
+    b = a + a          # 返回 DSPTensor, dtype=dsp.int16
     c = torch.abs(a)   # 返回 DSPTensor, dtype 自动推断
     t = a.torch()      # 脱壳为标准 torch.Tensor
 """
@@ -23,8 +23,8 @@ from .dtype import DSPDtype
 class DSPTensor(torch.Tensor):
     """torch.Tensor 子类，附加 DSPDtype 元数据。
 
-    底层数据存储在标准 torch dtype (float32/complex64/...) 中。
-    _dsp_dtype 属性记录原生类型（iq16/fixpoint/...）。
+    底层数据存储在标准 torch dtype (float32/int16/...) 中。
+    _dsp_dtype 属性记录原生类型（int16/int8/...）。
     """
 
     # 标记: 告诉 torch 这是一个 Tensor 子类
@@ -92,7 +92,7 @@ class DSPTensor(torch.Tensor):
         """获取 DSP 数据类型。"""
         return self._dsp_dtype
 
-    # 覆盖 dtype 属性: 打印时显示 dsp.iq16 而非 torch.complex64
+    # 覆盖 dtype 属性: 打印时显示 dsp.int16 而非 torch.int16
     # 注意: 不覆盖真正的 torch dtype，因为 torch 内部需要它
     # 用 .dsp_dtype 获取 DSP 类型，用 .torch_dtype 获取 torch 类型
 
@@ -111,7 +111,7 @@ class DSPTensor(torch.Tensor):
         return self.as_subclass(torch.Tensor)
 
     def to_dsp(self, target_dtype: DSPDtype) -> DSPTensor:
-        """DSP 类型转换: dsp.iq16 → dsp.iq32 等。
+        """DSP 类型转换: dsp.int16 → dsp.int32 等。
 
         底层 torch dtype 也会相应改变。
         """

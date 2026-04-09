@@ -31,7 +31,7 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
 
     Args:
         data: flat float32 numpy array（原始字节）
-        src_type: 源类型名（如 "iq16"）
+        src_type: 源类型名（如 "int16"）
         dst_type: 目标类型名（如 "float32"）
 
     Returns:

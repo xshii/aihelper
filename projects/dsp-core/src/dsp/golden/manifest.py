@@ -4,13 +4,13 @@
 弱 AI 新增类型/算子时，只需要往这三张表加行。
 
 三张表:
-  TYPES    — 硬件数据类型：C 命名、block shape、位宽
+  TYPES    — 硬件数据类型：C 命名、block shape
   CONVERT  — 类型转换函数：(src, dst) → C 函数名
   COMPUTE  — 计算函数：ComputeKey → C 函数名
 
 设计原则:
   - 显式胜于隐式：每个 C 函数名都明确写出来，不靠命名规则猜
-  - 屏蔽底层格式：block_shapes、bits 等硬件细节集中在此，上层不感知
+  - 屏蔽底层格式：block_shapes 等硬件细节集中在此，上层不感知
   - 计算精度可见：acc_type 和 out_type 分开声明，不混淆
 """
 
@@ -29,7 +29,7 @@ from ..core.enums import DType
 #
 #   输入/输出 (in0~in2, out0~out2)
 #     从 DType.DUT 或 DType.REAL 选。
-#     如 DType.DUT.IQ16, DType.REAL.FLOAT16
+#     如 DType.DUT.INT16, DType.REAL.FLOAT32
 #
 #   ACC (acc)
 #     累加器内部格式。从 DType.ACC 选。
@@ -38,8 +38,8 @@ from ..core.enums import DType
 #
 #   计算精度 (compute)
 #     乘加运算的实际精度。从 DType.DUT 或 DType.REAL 选。
-#     如 DType.REAL.FLOAT16（FP16 混合精度计算）
-#     如 DType.DUT.IQ16（定点计算）
+#     如 DType.REAL.FLOAT32（FP32 混合精度计算）
+#     如 DType.DUT.INT16（定点计算）
 #
 # 各算子槽位:
 #   abs:     in0=x                        out0=y
@@ -54,9 +54,9 @@ class ComputeKey(NamedTuple):
     用关键字参数 + DType 枚举:
         ComputeKey(
             op="linear",
-            in0=DType.DUT.IQ16,    in1=DType.DUT.IQ16,   in2=DType.DUT.IQ32,
-            out0=DType.DUT.IQ16,
-            acc=DType.ACC.Q12_22,  compute=DType.DUT.IQ16,
+            in0=DType.DUT.INT16,    in1=DType.DUT.INT16,   in2=DType.ACC.INT32,
+            out0=DType.DUT.INT16,
+            acc=DType.ACC.Q12_22,  compute=DType.DUT.INT16,
         )
     """
     op: str
@@ -73,17 +73,21 @@ class ComputeKey(NamedTuple):
 # ============================================================
 # TYPES — Golden C 硬件特定信息
 #
-# 基础类型信息（bits, frac_bits, signed, is_complex）在 core/dtype.py，
+# 基础类型信息在 core/dtype.py，
 # 这里只存 golden C 特有的：C 命名别名 + block 分型 shape。
 # ============================================================
 
 TYPES = {
-    "iq16": {
-        "c_names": ["iq16", "IQ16", "iq16_t", "Iq16Data", "Iq16"],
+    "int8": {
+        "c_names": ["int8", "INT8", "int8_t", "Int8Data", "Int8"],
+        "block_shapes": {"zz": (32, 32), "nn": (32, 64)},
+    },
+    "int16": {
+        "c_names": ["int16", "INT16", "int16_t", "Int16Data", "Int16"],
         "block_shapes": {"zz": (16, 16), "nn": (16, 32)},
     },
-    "iq32": {
-        "c_names": ["iq32", "IQ32", "iq32_t"],
+    "int32": {
+        "c_names": ["int32", "INT32", "int32_t"],
         "block_shapes": {"zz": (8, 8), "nn": (8, 16)},
     },
     "float32": {
@@ -102,12 +106,16 @@ TYPES = {
 # ============================================================
 
 CONVERT = {
-    ("iq16",    "float32"): "convert_iq16_to_float32",
-    ("float32", "iq16"):    "convert_float32_to_iq16",
-    ("iq32",    "float32"): "convert_iq32_to_float32",
-    ("float32", "iq32"):    "convert_float32_to_iq32",
-    ("iq16",    "iq32"):    "convert_iq16_to_iq32",
-    ("iq32",    "iq16"):    "convert_iq32_to_iq16",
+    ("int8",    "float32"): "convert_int8_to_float32",
+    ("float32", "int8"):    "convert_float32_to_int8",
+    ("int16",   "float32"): "convert_int16_to_float32",
+    ("float32", "int16"):   "convert_float32_to_int16",
+    ("int32",   "float32"): "convert_int32_to_float32",
+    ("float32", "int32"):   "convert_float32_to_int32",
+    ("int8",    "int16"):   "convert_int8_to_int16",
+    ("int16",   "int32"):   "convert_int16_to_int32",
+    ("int32",   "int16"):   "convert_int32_to_int16",
+    ("int16",   "int8"):    "convert_int16_to_int8",
 }
 
 
@@ -128,36 +136,36 @@ A = DType.ACC
 
 COMPUTE = {
     # --- abs: 一元 ---
-    ComputeKey(op="abs", in0=D.IQ16, out0=D.IQ16):
-        "sp_abs_iq16",
-    ComputeKey(op="abs", in0=D.IQ32, out0=D.IQ32):
-        "sp_abs_iq32",
+    ComputeKey(op="abs", in0=D.INT16, out0=D.INT16):
+        "sp_abs_int16",
+    ComputeKey(op="abs", in0=A.INT32, out0=A.INT32):
+        "sp_abs_int32",
 
     # --- add: 二元逐元素 ---
-    ComputeKey(op="add", in0=D.IQ16, in1=D.IQ16, out0=D.IQ16):
-        "sp_vadd_iq16",
-    ComputeKey(op="add", in0=D.IQ32, in1=D.IQ32, out0=D.IQ32):
-        "sp_vadd_iq32",
+    ComputeKey(op="add", in0=D.INT16, in1=D.INT16, out0=D.INT16):
+        "sp_vadd_int16",
+    ComputeKey(op="add", in0=A.INT32, in1=A.INT32, out0=A.INT32):
+        "sp_vadd_int32",
 
     # --- mul: 二元逐元素，输出比输入宽 ---
-    ComputeKey(op="mul", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32, acc=A.Q12_22, compute=D.IQ16):
-        "sp_vmul_iq16_iq16_oiq32_acc_q12_22",
+    ComputeKey(op="mul", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
+        "sp_vmul_int16_int16_oint32_acc_q12_22",
 
     # --- matmul: 二元矩阵乘 ---
-    ComputeKey(op="matmul", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32, acc=A.Q12_22, compute=D.IQ16):
-        "sp_gemm_iq16_iq16_oiq32_acc_q12_22",
-    ComputeKey(op="matmul", in0=D.IQ16, in1=D.IQ16, out0=D.IQ16, acc=A.Q12_22, compute=D.IQ16):
-        "sp_gemm_iq16_iq16_oiq16_acc_q12_22",
-    ComputeKey(op="matmul", in0=D.IQ32, in1=D.IQ32, out0=D.IQ32, acc=A.Q24_40, compute=D.IQ32):
-        "sp_gemm_iq32_iq32_oiq32_acc_q24_40",
+    ComputeKey(op="matmul", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
+        "sp_gemm_int16_int16_oint32_acc_q12_22",
+    ComputeKey(op="matmul", in0=D.INT16, in1=D.INT16, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
+        "sp_gemm_int16_int16_oint16_acc_q12_22",
+    ComputeKey(op="matmul", in0=A.INT32, in1=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
+        "sp_gemm_int32_int32_oint32_acc_q24_40",
 
     # --- linear: 三元 fused（matmul + bias + scale）---
-    ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, in2=D.IQ32, out0=D.IQ16, acc=A.Q12_22, compute=D.IQ16):
-        "sp_fused_linear_iq16_iq16_biq32_oiq16_acc_q12_22",
-    ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, in2=D.IQ32, out0=D.IQ32, acc=A.Q12_22, compute=D.IQ16):
-        "sp_fused_linear_iq16_iq16_biq32_oiq32_acc_q12_22",
-    ComputeKey(op="linear", in0=D.IQ32, in1=D.IQ32, in2=D.IQ32, out0=D.IQ32, acc=A.Q24_40, compute=D.IQ32):
-        "sp_fused_linear_iq32_iq32_biq32_oiq32_acc_q24_40",
+    ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
+        "sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22",
+    ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
+        "sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22",
+    ComputeKey(op="linear", in0=A.INT32, in1=A.INT32, in2=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
+        "sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40",
 }
 
 del D, R, A  # 清理临时别名

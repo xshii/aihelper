@@ -8,7 +8,7 @@
     VizMixin      — 可视化
 
 用法:
-    pipe = DataPipe.from_tensor(x, dtype="iq16")
+    pipe = DataPipe.from_tensor(x, dtype="int16")
     pipe.convert("float32").layout("zz").export("out.txt")
 
     diff = DataPipe.load("a.txt").compare(DataPipe.load("b.txt"))

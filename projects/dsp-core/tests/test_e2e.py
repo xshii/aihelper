@@ -17,9 +17,9 @@ class TestGenerateInput:
         dsp.context.set_global_runmode(RunMode.GENERATE_INPUT, tmp_output_dir, seed=42)
         rounds = 0
         while not dsp.context.is_global_done():
-            x = dsp.ops.randn(4, 8, dtype=dsp.core.iq16)
-            w = dsp.ops.randn(8, 4, dtype=dsp.core.iq16)
-            b = dsp.ops.randn(1, 4, dtype=dsp.core.iq16)
+            x = dsp.ops.randn(4, 8, dtype=dsp.core.int16)
+            w = dsp.ops.randn(8, 4, dtype=dsp.core.int16)
+            b = dsp.ops.randn(1, 4, dtype=dsp.core.int16)
             result = dsp.ops.linear(x, w, b)
             dsp.context.submit_output(result)
             rounds += 1
@@ -81,9 +81,9 @@ class TestUseInput:
             # generate_input
             dsp.context.set_global_runmode(RunMode.GENERATE_INPUT, tmp_output_dir, seed=99)
             while not dsp.context.is_global_done():
-                x = dsp.ops.randn(4, 8, dtype=dsp.core.iq16)
-                w = dsp.ops.randn(8, 4, dtype=dsp.core.iq16)
-                b = dsp.ops.randn(1, 4, dtype=dsp.core.iq16)
+                x = dsp.ops.randn(4, 8, dtype=dsp.core.int16)
+                w = dsp.ops.randn(8, 4, dtype=dsp.core.int16)
+                b = dsp.ops.randn(1, 4, dtype=dsp.core.int16)
                 result = dsp.ops.linear(x, w, b)
                 dsp.context.submit_output(result)
             dsp.context.export()
@@ -92,9 +92,9 @@ class TestUseInput:
             dsp.context.set_global_runmode(RunMode.USE_INPUT, tmp_output_dir, seed=99)
             rounds = 0
             while not dsp.context.is_global_done():
-                x = dsp.ops.randn(4, 8, dtype=dsp.core.iq16)
-                w = dsp.ops.randn(8, 4, dtype=dsp.core.iq16)
-                b = dsp.ops.randn(1, 4, dtype=dsp.core.iq16)
+                x = dsp.ops.randn(4, 8, dtype=dsp.core.int16)
+                w = dsp.ops.randn(8, 4, dtype=dsp.core.int16)
+                b = dsp.ops.randn(1, 4, dtype=dsp.core.int16)
                 result = dsp.ops.linear(x, w, b)
                 dsp.context.submit_output(result)
                 rounds += 1

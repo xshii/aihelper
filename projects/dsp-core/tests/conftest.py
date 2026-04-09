@@ -12,9 +12,9 @@
     pytest -m st              — 只跑端到端
 
 Fixtures（弱 AI 直接用，不需要自己造数据）:
-    iq16_pair      — 一对 iq16 DSPTensor (64,)
+    int16_pair     — 一对 int16 DSPTensor (64,)
     float32_pair   — 一对 float32 DSPTensor (64,)
-    iq16_matrix    — iq16 矩阵 (4, 8)
+    int16_matrix   — int16 矩阵 (4, 8)
     tmp_output_dir — 临时输出目录（自动清理）
     sample_pipe    — 预建的 DataPipe 实例
 """
@@ -35,11 +35,11 @@ import shutil
 # ============================================================
 
 @pytest.fixture
-def iq16_pair():
-    """一对 IQ16 DSPTensor (64,)。"""
+def int16_pair():
+    """一对 INT16 DSPTensor (64,)。"""
     import dsp
-    a = dsp.ops.randn(64, dtype=dsp.core.iq16)
-    b = dsp.ops.randn(64, dtype=dsp.core.iq16)
+    a = dsp.ops.randn(64, dtype=dsp.core.int16)
+    b = dsp.ops.randn(64, dtype=dsp.core.int16)
     return a, b
 
 
@@ -53,10 +53,10 @@ def float32_pair():
 
 
 @pytest.fixture
-def iq16_matrix():
-    """IQ16 矩阵 (4, 8)。"""
+def int16_matrix():
+    """INT16 矩阵 (4, 8)。"""
     import dsp
-    return dsp.ops.randn(4, 8, dtype=dsp.core.iq16)
+    return dsp.ops.randn(4, 8, dtype=dsp.core.int16)
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 // pybind11 绑定：把硬件团队的纯 C 函数包成 Python 可调用
 //
 // 编译: make build-golden
-// 依赖: golden_c/include/golden_ops.h + golden_c/lib/libgolden.so
+// 依赖: golden_c/golden_ops.h + golden_c/libgolden.so
 
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>

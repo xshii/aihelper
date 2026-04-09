@@ -21,11 +21,17 @@ def _near_diagonal(m, n, dtype_torch, scale=1.0, noise=0.01, seed=42):
     """对角 + 小扰动：满秩、条件数低。
 
     固定 seed 保证同 shape 的 target 在链条中每次调用都一致。
+    int 类型先用 float64 构造，再 round+clamp 转换。
     """
     rng = torch.Generator().manual_seed(seed)
-    base = torch.eye(m, n, dtype=dtype_torch) * scale
-    perturbation = torch.randn(m, n, dtype=dtype_torch, generator=rng) * noise
-    return base + perturbation
+    # 始终用 float64 构造
+    base = torch.eye(m, n, dtype=torch.float64) * scale
+    perturbation = torch.randn(m, n, dtype=torch.float64, generator=rng) * noise
+    result = base + perturbation
+    if dtype_torch.is_floating_point:
+        return result.to(dtype_torch)
+    # int 类型: round + clamp + cast
+    return result.round().clamp(-32768, 32767).to(dtype_torch)
 
 
 def _linear_math_strategy(inputs, source_map):
@@ -51,7 +57,8 @@ def _linear_math_strategy(inputs, source_map):
 
     # 目标输出 pattern: near-diagonal（seed=42 保证链条中每个 linear 的 target 一致）
     target = _near_diagonal(M, N, dtype_torch, seed=42)
-    solve_dtype = torch.complex128 if dtype_torch.is_complex else torch.float64
+    # 统一用 float64 做 solve
+    solve_dtype = torch.float64
 
     # bias: randn 来源 → 替换为零；op_output 来源 → 保留原值
     if bias_from_randn:
@@ -73,12 +80,12 @@ def _linear_math_strategy(inputs, source_map):
         }
     else:
         # 后续算子：x 来自上游，被动接受
-        # ridge regression: (X^H X + λI)^{-1} X^H (target - bias) — 防秩亏
+        # ridge regression: (X^T X + λI)^{-1} X^T (target - bias) — 防秩亏
         x_s = x.to(solve_dtype).reshape(-1, K)
         rhs = (target - bias).to(solve_dtype)
         lam = 1e-4
-        xhx = x_s.conj().T @ x_s + lam * torch.eye(K, dtype=solve_dtype)
-        new_weight = torch.linalg.solve(xhx, x_s.conj().T @ rhs).to(dtype_torch)
+        xtx = x_s.T @ x_s + lam * torch.eye(K, dtype=solve_dtype)
+        new_weight = torch.linalg.solve(xtx, x_s.T @ rhs).to(dtype_torch)
 
         logger.debug("[math] linear: subsequent-op (ridge), w(%s) b(%s)",
                      list(new_weight.shape), list(bias.shape))
@@ -112,12 +119,12 @@ def _wrap(data, dsp_dtype):
     weight=Format.NN,
     math_strategy=_linear_math_strategy,
     golden_c={
-        ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, in2=D.IQ32, out0=D.IQ16, acc=A.Q12_22, compute=D.IQ16):
-            "sp_fused_linear_iq16_iq16_biq32_oiq16_acc_q12_22",
-        ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, in2=D.IQ32, out0=D.IQ32, acc=A.Q12_22, compute=D.IQ16):
-            "sp_fused_linear_iq16_iq16_biq32_oiq32_acc_q12_22",
-        ComputeKey(op="linear", in0=D.IQ32, in1=D.IQ32, in2=D.IQ32, out0=D.IQ32, acc=A.Q24_40, compute=D.IQ32):
-            "sp_fused_linear_iq32_iq32_biq32_oiq32_acc_q24_40",
+        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
+            "sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22",
+        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
+            "sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22",
+        ComputeKey(op="linear", in0=A.INT32, in1=A.INT32, in2=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
+            "sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40",
     },
 )
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
@@ -127,5 +134,15 @@ def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.T
         x: [M, K] 输入矩阵
         weight: [K, N] 权重矩阵（默认 nn 格式，运行时可覆盖）
         bias: [1, N] 或 [N] 偏置向量
+
+    int 类型输入先转 float 计算，结果转回原 dtype。
     """
-    return torch.matmul(x, weight) + bias
+    orig_dtype = x.dtype
+    if not x.dtype.is_floating_point:
+        x = x.float()
+        weight = weight.float()
+        bias = bias.float()
+    result = torch.matmul(x, weight) + bias
+    if not orig_dtype.is_floating_point:
+        result = result.to(orig_dtype)
+    return result

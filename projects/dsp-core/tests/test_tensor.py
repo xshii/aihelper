@@ -9,10 +9,10 @@ pytestmark = pytest.mark.ut
 class TestCreate:
     def test_randn(self):
         import dsp
-        a = dsp.ops.randn(100, dtype=dsp.core.iq16)
+        a = dsp.ops.randn(100, dtype=dsp.core.int16)
         assert isinstance(a, dsp.core.DSPTensor)
         assert isinstance(a, torch.Tensor)
-        assert a.dsp_dtype == dsp.core.iq16
+        assert a.dsp_dtype == dsp.core.int16
         assert a.shape == (100,)
 
     def test_zeros(self):
@@ -71,24 +71,24 @@ class TestTorchCompat:
         assert a.shape == (3, 4)
         assert a.device.type == "cpu"
 
-    def test_complex_add(self, iq16_pair):
-        """IQ16 (complex) 的加法也直接能用。"""
-        a, b = iq16_pair
+    def test_int16_add(self, int16_pair):
+        """INT16 的加法也直接能用。"""
+        a, b = int16_pair
         c = a + b
         assert c.shape == a.shape
-        assert c.is_complex()
+        assert c.dtype == torch.int16
 
 
 class TestDtypePropagation:
     """验证 __torch_function__ 正确传播 dsp_dtype。"""
 
-    def test_add_preserves_dtype(self, iq16_pair):
+    def test_add_preserves_dtype(self, int16_pair):
         import dsp
-        a, b = iq16_pair
+        a, b = int16_pair
         c = a + b
         # __torch_function__ 应传播 dsp_dtype
         if isinstance(c, dsp.core.DSPTensor):
-            assert c.dsp_dtype == dsp.core.iq16
+            assert c.dsp_dtype == dsp.core.int16
 
     def test_abs_preserves_dtype(self):
         import dsp
@@ -102,7 +102,7 @@ class TestConversion:
     def test_torch_escape(self):
         """DSPTensor.torch() 脱壳为标准 torch.Tensor。"""
         import dsp
-        a = dsp.ops.randn(10, dtype=dsp.core.iq16)
+        a = dsp.ops.randn(10, dtype=dsp.core.int16)
         t = a.torch()
         assert type(t) is torch.Tensor  # 不是 DSPTensor
         assert not isinstance(t, dsp.core.DSPTensor)
@@ -117,9 +117,9 @@ class TestConversion:
     def test_fake_quantize(self):
         """fake_quantize 截断精度，shape 和 dtype 不变。"""
         import dsp
-        a = dsp.ops.randn(10, dtype=dsp.core.iq16)
+        a = dsp.ops.randn(10, dtype=dsp.core.int16)
         b = a.fake_quantize()
         assert b.shape == a.shape
-        assert b.dsp_dtype == dsp.core.iq16
+        assert b.dsp_dtype == dsp.core.int16
         assert b.torch_dtype == a.torch_dtype
-        assert b.dsp_dtype == dsp.core.iq16
+        assert b.dsp_dtype == dsp.core.int16

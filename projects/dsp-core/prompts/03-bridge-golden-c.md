@@ -14,8 +14,8 @@
 
 ```python
 from dsp.core.enums import DType
-D = DType.DUT    # 芯片原生定点：D.IQ16, D.IQ32
-R = DType.REAL   # 标准浮点：R.FLOAT16, R.FLOAT32
+D = DType.DUT    # 芯片原生定点：D.INT16, D.INT32
+R = DType.REAL   # 标准浮点：R.FLOAT32, R.FLOAT64
 A = DType.ACC    # 累加器格式：A.Q12_22, A.Q8_26, A.Q24_40
 ```
 
@@ -24,19 +24,19 @@ ComputeKey 固定 3 输入 + 3 输出槽位，None 填空：
 ```python
 ComputeKey(
     op="linear",
-    in0=D.IQ16,         # 输入 x（DUT 或 REAL）
-    in1=D.IQ16,         # 权重（DUT 或 REAL）
-    in2=D.IQ32,         # bias（通常 ACC 精度）
-    out0=D.IQ16,        # 输出
+    in0=D.INT16,         # 输入 x（DUT 或 REAL）
+    in1=D.INT16,         # 权重（DUT 或 REAL）
+    in2=D.INT32,         # bias（通常 ACC 精度）
+    out0=D.INT16,        # 输出
     # out1, out2 不填 = None
     acc=A.Q12_22,        # 累加器内部格式
-    compute=D.IQ16,      # 计算精度（DUT 或 REAL，如 FP16 混合精度）
+    compute=D.INT16,      # 计算精度（DUT 或 REAL，如 FP16 混合精度）
 )
 ```
 
 ## 规则
 1. MUST: 用关键字参数填 ComputeKey（不要数位置）
-2. MUST: 用 DType 枚举值（`D.IQ16`，不用字符串 `"iq16"`）
+2. MUST: 用 DType 枚举值（`D.INT16`，不用字符串 `"int16"`）
 3. MUST: C 函数名从头文件复制粘贴（不手打）
 4. NEVER: 合并不同类型组合到一个条目
 
@@ -54,9 +54,9 @@ ComputeKey(
 ```python
 # ops/conv2d.py
 @register_op(golden_c={
-    ComputeKey(op="conv2d", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32,
-               acc=A.Q12_22, compute=D.IQ16):
-        "sp_conv2d_iq16_iq16_oiq32_acc_q12_22",
+    ComputeKey(op="conv2d", in0=D.INT16, in1=D.INT16, out0=D.INT32,
+               acc=A.Q12_22, compute=D.INT16):
+        "sp_conv2d_int16_int16_oint32_acc_q12_22",
 })
 def conv2d(input, kernel): ...
 ```
@@ -69,16 +69,16 @@ def conv2d(input, kernel): ...
 
 ```python
 # golden/manifest.py
-ComputeKey(op="conv2d", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32,
-           acc=A.Q12_22, compute=D.IQ16):
-    "sp_conv2d_iq16_iq16_oiq32_acc_q12_22",
+ComputeKey(op="conv2d", in0=D.INT16, in1=D.INT16, out0=D.INT32,
+           acc=A.Q12_22, compute=D.INT16):
+    "sp_conv2d_int16_int16_oint32_acc_q12_22",
 ```
 
 ## 常见错误
 
 | 错误 | 症状 | 正确做法 |
 |------|------|---------|
-| 用字符串 `"iq16"` 不用枚举 | 查询可能失败 | 用 `D.IQ16` |
+| 用字符串 `"int16"` 不用枚举 | 查询可能失败 | 用 `D.INT16` |
 | acc 和 out0 混淆 | 精度丢失 | acc=累加器（宽），out0=最终输出（可窄）|
 | 漏了 compute 字段 | ManifestNotFound | 看函数名末尾的精度标记 |
 | C 函数名手打 typo | GoldenNotAvailable | 从头文件复制 |
@@ -87,14 +87,14 @@ ComputeKey(op="conv2d", in0=D.IQ16, in1=D.IQ16, out0=D.IQ32,
 
 ### 样例 1: 为 linear 添加新精度组合
 
-已有 iq16×iq16→iq16 的映射（见 `src/dsp/ops/linear.py`）。现在硬件新增了 float16 混合精度版本：
+已有 int16×int16→int16 的映射（见 `src/dsp/ops/linear.py`）。现在硬件新增了 float16 混合精度版本：
 
 **输入：** 头文件中新增 `sp_fused_linear_fp16_fp16_ofp16_acc_q12_22`
 
 **操作：** 在 linear.py 的 `@register_op golden_c` 字典中添加：
 ```python
-ComputeKey(op="linear", in0=R.FLOAT16, in1=R.FLOAT16, in2=R.FLOAT16, out0=R.FLOAT16,
-           acc=A.Q12_22, compute=R.FLOAT16):
+ComputeKey(op="linear", in0=R.FLOAT32, in1=R.FLOAT32, in2=R.FLOAT32, out0=R.FLOAT32,
+           acc=A.Q12_22, compute=R.FLOAT32):
     "sp_fused_linear_fp16_fp16_ofp16_acc_q12_22",
 ```
 
@@ -104,12 +104,12 @@ ComputeKey(op="linear", in0=R.FLOAT16, in1=R.FLOAT16, in2=R.FLOAT16, out0=R.FLOA
 
 **错误写法：**
 ```python
-ComputeKey(op="linear", in0=D.IQ16, in1=D.IQ16, out0=A.Q12_22, acc=D.IQ16, ...)
+ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, out0=A.Q12_22, acc=D.INT16, ...)
 #                                                  ^^^^^^^^^^^    ^^^^^^^^^
 ```
 **问题：** out0 是最终输出精度（通常是 DUT），acc 是累加器内部格式（通常更宽）。写反会导致精度丢失。
 
-**正确：** `out0=D.IQ16, acc=A.Q12_22`
+**正确：** `out0=D.INT16, acc=A.Q12_22`
 
 ## 自检清单
 - [ ] 用关键字参数 + DType 枚举

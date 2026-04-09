@@ -310,6 +310,15 @@ def get_current_strategy():
     return None
 
 
+
+def _randn_for_dtype(*size, torch_dtype):
+    """Generate random data compatible with both float and int dtypes."""
+    if torch_dtype.is_floating_point:
+        return torch.randn(*size, dtype=torch_dtype)
+    # int 类型: 先生成 float，再 round+clamp+cast
+    t = torch.randn(*size, dtype=torch.float32)
+    return t.round().clamp(-32768, 32767).to(torch_dtype)
+
 def intercepted_randn(*size, dtype: DSPDtype) -> DSPTensor:
     counter = _state.randn_counter
     _state.randn_counter += 1
@@ -318,7 +327,7 @@ def intercepted_randn(*size, dtype: DSPDtype) -> DSPTensor:
         strategy = _state.current_strategy
         if strategy is not None and strategy.name == "math":  # 同 ops.MATH_STRATEGY_NAME
             # math 策略：生成随机数据，打标 randn，由 op-level 拦截替换
-            t = torch.randn(*size, dtype=dtype.torch_dtype)
+            t = _randn_for_dtype(*size, torch_dtype=dtype.torch_dtype)
             result = DSPTensor.create(t, dtype)
             result._source = "randn"
             return result
@@ -332,7 +341,7 @@ def intercepted_randn(*size, dtype: DSPDtype) -> DSPTensor:
     if _state.runmode == RunMode.USE_INPUT:
         return _load_randn_input(counter, size, dtype)
 
-    result = DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    result = DSPTensor.create(_randn_for_dtype(*size, torch_dtype=dtype.torch_dtype), dtype)
     result._source = "randn"
     return result
 
@@ -349,7 +358,7 @@ def _load_randn_input(counter, size, dtype):
         return DSPTensor.create(pipe.tensor, dtype)
 
     logger.warning("未找到 input%d 文件 (dir=%s)，降级为随机", counter, src_dir)
-    return DSPTensor.create(torch.randn(*size, dtype=dtype.torch_dtype), dtype)
+    return DSPTensor.create(_randn_for_dtype(*size, torch_dtype=dtype.torch_dtype), dtype)
 
 
 # ============================================================
@@ -372,15 +381,16 @@ def save_op_inputs(op_name, param_names, args, format_hints):
         operand = f"input{i}"
         dtype_name = _get_dtype_name(arg)
 
-        # 统一: ND 格式（不分块）
-        filename = make_filename(op_name, op_id, operand, dtype_name, tuple(arg.shape), Format.ND)
-        DataPipe(arg, dtype=dtype_name).export(str(Path(out_dir) / filename))
+        # 统一: ND 格式（不分块），对齐 torch dtype
+        aligned = _align_torch_dtype(arg)
+        filename = make_filename(op_name, op_id, operand, dtype_name, tuple(aligned.shape), Format.ND)
+        DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
 
         # golden_c 额外: DUT 格式（带分块 + padding）
         if is_gc:
-            dut_fmt = format_hints.get(name, infer_format(arg))
-            dut_name = make_filename(op_name, op_id, operand + "_dut", dtype_name, tuple(arg.shape), dut_fmt)
-            DataPipe(arg, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
+            dut_fmt = format_hints.get(name, infer_format(aligned))
+            dut_name = make_filename(op_name, op_id, operand + "_dut", dtype_name, tuple(aligned.shape), dut_fmt)
+            DataPipe(aligned, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
 
     _write_input_order(out_dir, op_name, op_id, param_names, args)
 
@@ -399,15 +409,16 @@ def save_op_output(op_name, result):
     dtype_name = _get_dtype_name(result)
     is_gc = _state.current_mode == Mode.GOLDEN_C
 
-    # 统一: ND 格式
-    filename = make_filename(op_name, op_id, "output0", dtype_name, tuple(result.shape), Format.ND)
-    DataPipe(result, dtype=dtype_name).export(str(Path(out_dir) / filename))
+    # 统一: ND 格式，对齐 torch dtype
+    aligned = _align_torch_dtype(result)
+    filename = make_filename(op_name, op_id, "output0", dtype_name, tuple(aligned.shape), Format.ND)
+    DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
 
     # golden_c 额外: DUT 格式
     if is_gc:
-        dut_fmt = infer_format(result)
-        dut_name = make_filename(op_name, op_id, "output0_dut", dtype_name, tuple(result.shape), dut_fmt)
-        DataPipe(result, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
+        dut_fmt = infer_format(aligned)
+        dut_name = make_filename(op_name, op_id, "output0_dut", dtype_name, tuple(aligned.shape), dut_fmt)
+        DataPipe(aligned, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
 
 
 def _get_dtype_name(t):
@@ -416,11 +427,13 @@ def _get_dtype_name(t):
     return "float64"
 
 
-def _to_double(t):
-    """complex → complex128, real → float64。避免 complex→real 警告。"""
-    if t.is_complex():
-        return t.to(torch.complex128)
-    return t.double()
+def _align_torch_dtype(t):
+    """确保 tensor 的 torch dtype 和 DSP dtype 一致（防止序列化/反序列化 byte 数不匹配）。"""
+    if isinstance(t, DSPTensor) and t._dsp_dtype is not None:
+        expected = t._dsp_dtype.torch_dtype
+        if t.dtype != expected:
+            return t.to(expected)
+    return t
 
 
 def save_op_expected(op_name, expected):
@@ -434,8 +447,9 @@ def save_op_expected(op_name, expected):
     out_dir = _current_round_dir()
     dtype_name = _get_dtype_name(expected)
 
-    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(expected.shape), Format.ND)
-    DataPipe(expected, dtype=dtype_name).export(str(Path(out_dir) / filename))
+    aligned = _align_torch_dtype(expected)
+    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(aligned.shape), Format.ND)
+    DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
     logger.info("[math] %s: saved expected output → %s", op_name, filename)
 
 
