@@ -2,19 +2,19 @@
  * PATTERN: 只实现 termios 连接/断开，协议部分复用 transport_cmdline
  * FOR: 弱 AI 参考如何用 Template Method 消除 transport 间的协议重复 */
 
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+
 #include "transport_serial.h"
 #include "transport_cmdline.h"
 #include "transport_factory.h"
 #include "../util/log.h"
-
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-
-#include <termios.h>
 
 /* ---------- IO 回调：POSIX read/write ---------- */
 
@@ -120,7 +120,9 @@ static int serial_open(dsc_transport_t *self)
     int flags = fcntl(st->cmd.fd, F_GETFL, 0);
     fcntl(st->cmd.fd, F_SETFL, flags & ~O_NONBLOCK);
 
-    tcgetattr(st->cmd.fd, &st->orig_tios);
+    if (tcgetattr(st->cmd.fd, &st->orig_tios) < 0) {
+        DSC_LOG_WARN("tcgetattr(%s): %s", st->device, strerror(errno));
+    }
 
     int rc = configure_termios(st->cmd.fd, st->baudrate, st->device);
     if (rc != DSC_OK) {
@@ -137,7 +139,9 @@ static void serial_close(dsc_transport_t *self)
 {
     serial_transport_t *st = to_serial(self);
     if (st->cmd.fd >= 0) {
-        tcsetattr(st->cmd.fd, TCSANOW, &st->orig_tios);
+        if (tcsetattr(st->cmd.fd, TCSANOW, &st->orig_tios) < 0) {
+            DSC_LOG_WARN("tcsetattr(%s): %s", st->device, strerror(errno));
+        }
         close(st->cmd.fd);
         st->cmd.fd = -1;
     }

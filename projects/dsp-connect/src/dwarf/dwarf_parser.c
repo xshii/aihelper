@@ -3,14 +3,14 @@
  *          single-pass DIE traversal, hashmap-based type cache
  * FOR: Weak AI to reference when implementing ELF/DWARF debug info extraction */
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "dwarf_parser.h"
 #include "../core/dsc_errors.h"
 #include "../util/hashmap.h"
 #include "../util/log.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 /* ------------------------------------------------------------------ */
 /* Internal parser state                                              */

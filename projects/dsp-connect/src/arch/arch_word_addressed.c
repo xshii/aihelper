@@ -14,13 +14,13 @@
  *              logical  = physical * word_bytes
  */
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "arch_word_addressed.h"
 #include "arch_factory.h"
 #include "../core/dsc_errors.h"
 #include "../util/endian.h"
-
-#include <stdlib.h>
-#include <string.h>
 
 /* --- Private data: extends base with word config --- */
 typedef struct {

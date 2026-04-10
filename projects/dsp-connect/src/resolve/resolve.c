@@ -5,12 +5,11 @@
  *          byte offsets while descending through the type tree.
  * FOR: 弱 AI 参考如何实现路径表达式解析（如 "a.b[3].c"） */
 
-#include "resolve.h"
-
-#include <string.h>
-#include <stdlib.h>
 #include <ctype.h>
+#include <stdlib.h>
+#include <string.h>
 
+#include "resolve.h"
 #include "../core/dsc_errors.h"
 #include "../util/log.h"
 

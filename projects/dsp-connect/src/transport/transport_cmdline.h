@@ -13,9 +13,9 @@
 
 /* 子类实现这两个函数，注入到 cmdline 层：
  *   io_send: 发送 len 字节到 fd，返回实际发送字节数（<0 = 错误）
- *   io_recv: 从 fd 接收 1 字节到 *ch，返回 1 成功、0 EOF、<0 错误 */
+ *   io_recv: 从 fd 接收 1 字节到 *out_char，返回 1 成功、0 EOF、<0 错误 */
 typedef ssize_t (*dsc_cmdline_send_fn)(int fd, const void *buf, size_t len);
-typedef ssize_t (*dsc_cmdline_recv_fn)(int fd, char *ch);
+typedef ssize_t (*dsc_cmdline_recv_fn)(int fd, char *out_char);
 
 /* ---------- 命令行传输基类 ---------- */
 

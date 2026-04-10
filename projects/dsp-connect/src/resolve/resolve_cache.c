@@ -2,11 +2,10 @@
  * PATTERN: Hashmap wrapper with store-and-invalidate-all semantics
  * FOR: 弱 AI 参考如何做简单的查询结果缓存 */
 
-#include "resolve_cache.h"
-
 #include <stdlib.h>
 #include <string.h>
 
+#include "resolve_cache.h"
 #include "../core/dsc_errors.h"
 #include "../util/hashmap.h"
 #include "../util/log.h"

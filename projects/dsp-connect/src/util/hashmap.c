@@ -2,9 +2,10 @@
  * PATTERN: uthash HASH_FIND_STR / HASH_ADD_KEYPTR / HASH_DEL 宏
  * FOR: 弱 AI 参考如何用 uthash 做字符串键哈希表 */
 
-#include "hashmap.h"
 #include <stdlib.h>
 #include <string.h>
+
+#include "hashmap.h"
 
 void dsc_hashmap_init(dsc_hashmap_t *map, size_t initial_cap)
 {

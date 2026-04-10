@@ -2,19 +2,19 @@
  * PATTERN: Embed base struct as first member, implement vtable, auto-register
  * FOR: 弱 AI 参考如何用 mmap 实现共享内存直接读写 */
 
-#include "transport_shm.h"
-#include "transport_factory.h"
-#include "../util/log.h"
-
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
+#include <fcntl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
+
+#include "transport_shm.h"
+#include "transport_factory.h"
+#include "../util/log.h"
 
 /* ---------- Doorbell layout ---------- */
 

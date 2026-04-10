@@ -3,15 +3,15 @@
  * PATTERN: Dispatcher — resolve typedefs, switch on type->kind, delegate to sub-formatters
  * FOR: 弱 AI 参考如何做类型分派和递归格式化 */
 
-#include "format.h"
-#include "format_primitive.h"
-#include "format_struct.h"
-#include "format_enum.h"
-#include "format_array.h"
-#include "../core/dsc_errors.h"
-
 #include <stdlib.h>
 #include <string.h>
+
+#include "format.h"
+#include "format_array.h"
+#include "format_enum.h"
+#include "format_primitive.h"
+#include "format_struct.h"
+#include "../core/dsc_errors.h"
 
 /* ------------------------------------------------------------------ */
 /* Default options — Layer 0 (zero config)                             */

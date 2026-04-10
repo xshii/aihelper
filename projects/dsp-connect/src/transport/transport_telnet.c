@@ -2,21 +2,21 @@
  * PATTERN: 只实现连接/断开，协议部分复用 transport_cmdline
  * FOR: 弱 AI 参考如何用 Template Method 消除 transport 间的协议重复 */
 
-#include "transport_telnet.h"
-#include "transport_cmdline.h"
-#include "transport_factory.h"
-#include "../util/log.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <unistd.h>
+
+#include "transport_telnet.h"
+#include "transport_cmdline.h"
+#include "transport_factory.h"
+#include "../util/log.h"
 
 /* ---------- IO 回调：socket send/recv ---------- */
 

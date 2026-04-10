@@ -6,13 +6,12 @@
  *          transports with limited buffer sizes still work.
  * FOR: 弱 AI 参考如何做地址转换 + 分块传输 + 字节序处理 */
 
-#include "memory.h"
-
 #include <string.h>
 
+#include "memory.h"
 #include "../core/dsc_errors.h"
-#include "../util/log.h"
 #include "../util/dsc_common.h"
+#include "../util/log.h"
 
 /* Maximum bytes per single transport read/write.
  * Keeps individual operations small for transports with limited buffers. */

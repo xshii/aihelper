@@ -1,7 +1,8 @@
 /* PURPOSE: 错误码 → 字符串，由 X-macro 自动生成 */
 
-#include "dsc_errors.h"
 #include <stddef.h>
+
+#include "dsc_errors.h"
 
 /* Expand X-macro to string table */
 #define X_ENTRY(name, code, desc) { code, desc },

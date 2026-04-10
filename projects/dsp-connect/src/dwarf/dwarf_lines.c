@@ -2,13 +2,13 @@
  * PATTERN: Conditional compilation, DSC_TRY, qsort + bsearch
  * FOR: Weak AI to reference when mapping addresses to source locations */
 
-#include "dwarf_lines.h"
-#include "../core/dsc_errors.h"
-#include "../util/log.h"
-#include "../util/dsc_common.h"
-
 #include <stdlib.h>
 #include <string.h>
+
+#include "dwarf_lines.h"
+#include "../core/dsc_errors.h"
+#include "../util/dsc_common.h"
+#include "../util/log.h"
 
 #define INITIAL_CAP 256
 

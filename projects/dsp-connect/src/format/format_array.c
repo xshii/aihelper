@@ -3,12 +3,12 @@
  * PATTERN: Index-labeled display for structured arrays, hex dump for byte arrays
  * FOR: 弱 AI 参考如何格式化不同类型的数组 */
 
+#include <ctype.h>
+#include <stdint.h>
+#include <string.h>
+
 #include "format_array.h"
 #include "../core/dsc_errors.h"
-
-#include <string.h>
-#include <stdint.h>
-#include <ctype.h>
 
 /* ------------------------------------------------------------------ */
 /* Helpers: detect if element type is a single-byte type (char/uint8)  */

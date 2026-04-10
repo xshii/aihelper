@@ -2,10 +2,10 @@
  * PATTERN: fixed-size array registry with linear search (simple, bounded, predictable)
  * FOR: 弱 AI 参考如何实现 name → constructor 的工厂注册表 */
 
+#include <string.h>
+
 #include "transport_factory.h"
 #include "../util/log.h"
-
-#include <string.h>
 
 /* ---------- Registry storage ---------- */
 

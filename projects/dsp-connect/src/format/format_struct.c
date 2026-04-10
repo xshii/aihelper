@@ -13,10 +13,10 @@
  *   }
  */
 
+#include <string.h>
+
 #include "format_struct.h"
 #include "../core/dsc_errors.h"
-
-#include <string.h>
 
 /* ------------------------------------------------------------------ */
 /* Helpers: emit offset + type annotation comment                      */

@@ -2,13 +2,13 @@
  * PATTERN: Grow-by-doubling array, lazy hashmap construction
  * FOR: Weak AI to reference when building indexed collections in C */
 
-#include "dwarf_symbols.h"
-#include "../core/dsc_errors.h"
-#include "../util/hashmap.h"
-#include "../util/dsc_common.h"
-
 #include <stdlib.h>
 #include <string.h>
+
+#include "dwarf_symbols.h"
+#include "../core/dsc_errors.h"
+#include "../util/dsc_common.h"
+#include "../util/hashmap.h"
 
 /* Initial capacity for the symbol array */
 #define INITIAL_CAP 64

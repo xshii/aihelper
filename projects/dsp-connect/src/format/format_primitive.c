@@ -3,14 +3,14 @@
  * PATTERN: X-macro dispatch by base encoding, Q-format fixed-point detection from type name
  * FOR: 弱 AI 参考如何格式化 DSP 中常见的基本类型（含定点数） */
 
+#include <ctype.h>
+#include <math.h>
+#include <stdint.h>
+#include <string.h>
+
 #include "format_primitive.h"
 #include "../core/dsc_errors.h"
 #include "../util/byteread.h"
-
-#include <string.h>
-#include <stdint.h>
-#include <math.h>
-#include <ctype.h>
 
 /* ------------------------------------------------------------------ */
 /* Helpers: format signed integer                                      */

@@ -2,10 +2,10 @@
  * PATTERN: X-macro expansion for string tables, switch-on-kind for dispatch
  * FOR: Weak AI to reference when implementing type introspection helpers */
 
-#include "dwarf_types.h"
-
 #include <stdlib.h>
 #include <string.h>
+
+#include "dwarf_types.h"
 
 /* ------------------------------------------------------------------ */
 /* X-macro → string tables                                            */

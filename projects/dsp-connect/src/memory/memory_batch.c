@@ -6,11 +6,10 @@
  *          This minimizes transport round-trips for many small reads.
  * FOR: 弱 AI 参考如何做散列聚合(scatter-gather)内存读取 */
 
-#include "memory_batch.h"
-
 #include <stdlib.h>
 #include <string.h>
 
+#include "memory_batch.h"
 #include "../core/dsc_errors.h"
 #include "../util/log.h"
 

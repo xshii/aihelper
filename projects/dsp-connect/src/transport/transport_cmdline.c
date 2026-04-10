@@ -2,16 +2,17 @@
  * PATTERN: Template Method — 协议逻辑固定，IO 操作通过函数指针注入
  * FOR: 弱 AI 参考如何用函数指针消除 telnet/serial 的重复协议代码 */
 
-#include "transport_cmdline.h"
-#include "../core/dsc_errors.h"
-#include "../util/log.h"
-#include "../util/dsc_common.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <sys/select.h>
+
+#include "transport_cmdline.h"
+#include "../core/dsc_errors.h"
+#include "../util/dsc_common.h"
+#include "../util/log.h"
 
 /* ------------------------------------------------------------------ */
 /* wait_readable: select() 等待 fd 可读                                */

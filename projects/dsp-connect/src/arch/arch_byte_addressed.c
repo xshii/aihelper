@@ -2,13 +2,13 @@
  * PATTERN: Concrete vtable impl — struct embeds base, ops are static functions
  * FOR: Weak AI to copy as a starting point for new arch backends */
 
+#include <stdlib.h>
+#include <string.h>
+
 #include "arch_byte_addressed.h"
 #include "arch_factory.h"
 #include "../core/dsc_errors.h"
 #include "../util/endian.h"
-
-#include <stdlib.h>
-#include <string.h>
 
 /* --- Private data: extends base with config --- */
 typedef struct {

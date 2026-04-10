@@ -4,24 +4,24 @@
  *          public functions chain: resolve → mem_read → format
  * FOR: Weak AI to reference when building a top-level integration layer */
 
-#include "dsc.h"
-#include "dsc_errors.h"
-#include "../dwarf/dwarf_parser.h"
-#include "../dwarf/dwarf_symbols.h"
-#include "../transport/transport.h"
-#include "../transport/transport_factory.h"
-#include "../arch/arch.h"
-#include "../arch/arch_factory.h"
-#include "../resolve/resolve.h"
-#include "../resolve/resolve_cache.h"
-#include "../memory/memory.h"
-#include "../format/format.h"
-#include "../util/log.h"
-
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
+
+#include "dsc.h"
+#include "dsc_errors.h"
+#include "../arch/arch.h"
+#include "../arch/arch_factory.h"
+#include "../dwarf/dwarf_parser.h"
+#include "../dwarf/dwarf_symbols.h"
+#include "../format/format.h"
+#include "../memory/memory.h"
+#include "../resolve/resolve.h"
+#include "../resolve/resolve_cache.h"
+#include "../transport/transport.h"
+#include "../transport/transport_factory.h"
+#include "../util/log.h"
 
 /* ------------------------------------------------------------------ */
 /* Error buffer size for last_error                                   */

@@ -2,9 +2,10 @@
  * PATTERN: 全局函数指针 + 默认实现
  * FOR: 弱 AI 参考如何做可替换的日志后端 */
 
-#include "log.h"
 #include <stdarg.h>
 #include <time.h>
+
+#include "log.h"
 
 static const char *level_names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 

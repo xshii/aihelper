@@ -3,12 +3,12 @@
  * PATTERN: Exact match first, then power-of-two bitmask decomposition for flags
  * FOR: 弱 AI 参考如何做枚举值的符号化显示 */
 
+#include <stdint.h>
+#include <string.h>
+
 #include "format_enum.h"
 #include "../core/dsc_errors.h"
 #include "../util/byteread.h"
-
-#include <string.h>
-#include <stdint.h>
 
 /* ------------------------------------------------------------------ */
 /* Helpers: try exact match against enumerator list                    */

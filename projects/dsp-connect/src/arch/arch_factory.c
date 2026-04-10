@@ -2,12 +2,12 @@
  * PATTERN: Static array registry, linear scan lookup — simple and predictable
  * FOR: Weak AI to copy when building any factory/registry system */
 
+#include <string.h>
+
 #include "arch_factory.h"
 #include "arch_byte_addressed.h"
 #include "arch_word_addressed.h"
 #include "../core/dsc_errors.h"
-
-#include <string.h>
 
 /* --- Registry: fixed-size table of (name -> creator) pairs --- */
 #define MAX_ARCH_BACKENDS 16

@@ -2,13 +2,13 @@
  * PATTERN: Conditional compilation, DSC_TRY, X-macro string table
  * FOR: Weak AI to reference when implementing CFA-based stack unwinding */
 
-#include "dwarf_frames.h"
-#include "../core/dsc_errors.h"
-#include "../util/log.h"
-#include "../util/dsc_common.h"
-
 #include <stdlib.h>
 #include <string.h>
+
+#include "dwarf_frames.h"
+#include "../core/dsc_errors.h"
+#include "../util/dsc_common.h"
+#include "../util/log.h"
 
 #define INITIAL_CAP 128
 
