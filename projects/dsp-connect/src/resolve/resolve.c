@@ -151,6 +151,7 @@ int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
 
     const char *cursor = path;
     segment_t seg;
+    int deref = 0; /* 1 if pointer was indexed (needs dereference in core) */
 
     /* -------------------------------------------------------------- */
     /* Step 1: parse the root symbol name                             */
@@ -244,9 +245,8 @@ int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
                 if (!pointee) {
                     return DSC_ERR_TYPE_INCOMPLETE;
                 }
-                /* 标记需要 dereference（存在 transport 依赖，
-                 * 这里只计算偏移，实际读取在上层） */
-                out->needs_deref = 1;
+                /* 标记需要 dereference（实际读取在 core 层） */
+                deref = 1;
                 addr += seg.u.index * pointee->byte_size;
                 type = pointee;
                 size = pointee->byte_size;
@@ -264,19 +264,23 @@ int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
     }
 
     /* -------------------------------------------------------------- */
-    /* Step 3: 如果最终类型是指针且没有显式 [N]，自动 deref [0]          */
+    /* Step 3: fill output, auto-deref bare pointer variables         */
     /* -------------------------------------------------------------- */
-    const dsc_type_t *final = unwrap_modifiers(type);
-    if (final && final->kind == DSC_TYPE_POINTER && final->u.pointer.pointee) {
-        out->needs_deref = 1;
-        out->type = (dsc_type_t *)unwrap_modifiers(final->u.pointer.pointee);
-        out->size = out->type ? out->type->byte_size : 0;
-        out->addr = addr; /* addr 指向指针变量本身，core 层读取后 deref */
-    } else {
-        out->needs_deref = 0;
-        out->type = (dsc_type_t *)type;
-        out->size = size;
-        out->addr = addr;
+    out->addr = addr;
+    out->type = (dsc_type_t *)type;
+    out->size = size;
+    out->needs_deref = deref;
+
+    /* 裸指针变量（没有 [N] 索引）→ 自动 deref 到 pointee[0] */
+    if (!deref) {
+        const dsc_type_t *final = unwrap_modifiers(type);
+        if (final && final->kind == DSC_TYPE_POINTER
+            && final->u.pointer.pointee) {
+            out->needs_deref = 1;
+            out->type = (dsc_type_t *)unwrap_modifiers(
+                final->u.pointer.pointee);
+            out->size = out->type ? out->type->byte_size : 0;
+        }
     }
 
     DSC_LOG_DEBUG("resolve: '%s' → addr=0x%llx size=%u deref=%d",

@@ -71,6 +71,40 @@ static void init_array_type(void)
     s_array_type.u.array.dim_count = 1;
 }
 
+/* Pointer type: uint32* */
+static dsc_type_t s_ptr_type;
+
+static void init_ptr_type(void)
+{
+    memset(&s_ptr_type, 0, sizeof(s_ptr_type));
+    s_ptr_type.kind = DSC_TYPE_POINTER;
+    s_ptr_type.byte_size = 8;
+    s_ptr_type.u.pointer.pointee = &s_uint32_type;
+}
+
+/* Typedef: typedef uint32 counter_t */
+static dsc_type_t s_typedef_type;
+
+static void init_typedef_type(void)
+{
+    memset(&s_typedef_type, 0, sizeof(s_typedef_type));
+    s_typedef_type.kind = DSC_TYPE_TYPEDEF;
+    s_typedef_type.name = "counter_t";
+    s_typedef_type.byte_size = 4;
+    s_typedef_type.u.modifier.target = &s_uint32_type;
+}
+
+/* Const: const uint32 */
+static dsc_type_t s_const_type;
+
+static void init_const_type(void)
+{
+    memset(&s_const_type, 0, sizeof(s_const_type));
+    s_const_type.kind = DSC_TYPE_CONST;
+    s_const_type.byte_size = 4;
+    s_const_type.u.modifier.target = &s_uint32_type;
+}
+
 /* Shared symtab setup */
 static dsc_symtab_t s_symtab;
 
@@ -79,6 +113,9 @@ static void setup_symtab(void)
     init_uint32_type();
     init_struct_type();
     init_array_type();
+    init_ptr_type();
+    init_typedef_type();
+    init_const_type();
 
     dsc_symtab_init(&s_symtab);
     dsc_symtab_add(&s_symtab, "simple_var", 0x1000, 4,
@@ -87,6 +124,12 @@ static void setup_symtab(void)
                    &s_struct_type, 1);
     dsc_symtab_add(&s_symtab, "arr", 0x3000, 16,
                    &s_array_type, 1);
+    dsc_symtab_add(&s_symtab, "g_ptr", 0x4000, 8,
+                   &s_ptr_type, 1);
+    dsc_symtab_add(&s_symtab, "g_counter", 0x5000, 4,
+                   &s_typedef_type, 1);
+    dsc_symtab_add(&s_symtab, "g_magic", 0x6000, 4,
+                   &s_const_type, 1);
 }
 
 static void teardown_symtab(void)
@@ -201,6 +244,83 @@ void resolve_field_on_non_struct_fails(void)
 }
 
 /* ================================================================== */
+/* Pointer tests                                                      */
+/* ================================================================== */
+
+void resolve_pointer_auto_deref(void)
+{
+    /* g_ptr is uint32* at 0x4000 — should auto-deref to pointee type */
+    setup_symtab();
+    DscArch *arch = mock_arch_identity();
+    DscResolved out;
+
+    int rc = DscResolve(&s_symtab, arch, "g_ptr", &out);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x4000, out.addr);
+    TEST_ASSERT_EQUAL(1, out.needs_deref);
+    /* Type should be pointee (uint32), not the pointer itself */
+    TEST_ASSERT_EQUAL(DSC_TYPE_BASE, out.type->kind);
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
+
+    teardown_symtab();
+}
+
+void resolve_pointer_index(void)
+{
+    /* g_ptr[3] — pointer + index*sizeof(pointee) */
+    setup_symtab();
+    DscArch *arch = mock_arch_identity();
+    DscResolved out;
+
+    int rc = DscResolve(&s_symtab, arch, "g_ptr[3]", &out);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    /* addr = 0x4000 (pointer var addr) + 3*4 = 0x400C */
+    TEST_ASSERT_EQUAL_UINT64(0x400C, out.addr);
+    TEST_ASSERT_EQUAL(1, out.needs_deref);
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
+
+    teardown_symtab();
+}
+
+/* ================================================================== */
+/* Typedef / const unwrap tests                                       */
+/* ================================================================== */
+
+void resolve_typedef_unwraps(void)
+{
+    /* g_counter is typedef counter_t → uint32 */
+    setup_symtab();
+    DscArch *arch = mock_arch_identity();
+    DscResolved out;
+
+    int rc = DscResolve(&s_symtab, arch, "g_counter", &out);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x5000, out.addr);
+    /* Type should be unwrapped to base uint32 */
+    TEST_ASSERT_EQUAL(DSC_TYPE_BASE, out.type->kind);
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
+    TEST_ASSERT_EQUAL(0, out.needs_deref);
+
+    teardown_symtab();
+}
+
+void resolve_const_unwraps(void)
+{
+    /* g_magic is const uint32 */
+    setup_symtab();
+    DscArch *arch = mock_arch_identity();
+    DscResolved out;
+
+    int rc = DscResolve(&s_symtab, arch, "g_magic", &out);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x6000, out.addr);
+    TEST_ASSERT_EQUAL(DSC_TYPE_BASE, out.type->kind);
+    TEST_ASSERT_EQUAL(0, out.needs_deref);
+
+    teardown_symtab();
+}
+
+/* ================================================================== */
 /* Runner                                                             */
 /* ================================================================== */
 
@@ -208,9 +328,20 @@ int test_resolve_main(void)
 {
     UNITY_BEGIN();
 
+    /* basic */
     RUN_TEST(resolve_simple_variable);
     RUN_TEST(resolve_struct_field);
     RUN_TEST(resolve_array_index);
+
+    /* pointer */
+    RUN_TEST(resolve_pointer_auto_deref);
+    RUN_TEST(resolve_pointer_index);
+
+    /* typedef / const */
+    RUN_TEST(resolve_typedef_unwraps);
+    RUN_TEST(resolve_const_unwraps);
+
+    /* error cases */
     RUN_TEST(resolve_nonexistent_returns_not_found);
     RUN_TEST(resolve_empty_path_returns_error);
     RUN_TEST(resolve_null_args_return_error);
