@@ -31,14 +31,15 @@ dsc_close(ctx);
 ## 构建
 
 ```bash
-make          # 构建静态库 build/libdsc.a
-make test     # 构建并运行测试
-make demo     # 构建演示程序 build/dsc_demo
-make check    # 编译 + -Werror 严格检查
-make clean    # 清理
+cmake -B build                    # 配置
+cmake --build build               # 编译
+ctest --test-dir build            # 运行测试
 
-# 如果系统有 libdwarf:
-DSC_USE_LIBDWARF=1 make
+# Debug 模式 + compile_commands.json（给 clangd / VSCode）
+cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+# 启用 libdwarf（需系统安装）
+cmake -B build -DDSC_USE_LIBDWARF=ON
 ```
 
 ## 架构

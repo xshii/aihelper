@@ -4,27 +4,27 @@
     {
       "label": "CI 全量检查",
       "type": "shell",
-      "command": "make clean && make check && make test",
+      "command": "./ci.sh all",
       "group": { "kind": "build", "isDefault": true },
       "problemMatcher": ["$gcc"],
-      "detail": "clean → 编译(-Werror) → 运行测试",
+      "detail": "clean → configure → build → test",
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
       "label": "运行测试",
       "type": "shell",
-      "command": "make test",
+      "command": "./ci.sh test",
       "group": { "kind": "test", "isDefault": true },
       "problemMatcher": ["$gcc"],
-      "detail": "编译并运行全部单元测试 + 集成测试",
+      "detail": "运行全部 ut + it 测试",
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
-      "label": "Debug 编译测试",
+      "label": "Debug 配置",
       "type": "shell",
-      "command": "make -C tests clean && make -C tests CFLAGS='-g -O0 -Wall -Wextra -std=c11'",
+      "command": "cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
       "problemMatcher": ["$gcc"],
-      "detail": "以 -g -O0 编译，用于 lldb 断点调试",
+      "detail": "生成 Debug 构建 + compile_commands.json",
       "options": { "cwd": "${workspaceFolder}" }
     }
   ]

@@ -6,5 +6,5 @@ tags: [dwarf, debugger, embedded, dsp, elf, transport, telnet, softprobe]
 status: active
 difficulty: advanced
 created: 2026-04-10
-run: make && ./build/dsc_demo
-test: make test
+run: cmake -B build && cmake --build build && ./build/dsc_demo
+test: cmake -B build && cmake --build build && ctest --test-dir build --output-on-failure
