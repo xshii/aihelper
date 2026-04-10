@@ -14,7 +14,7 @@
 /* Line entry: one address ↔ source location mapping                  */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    uint64_t addr;       /* instruction address */
+    UINT64 addr;       /* instruction address */
     char    *file;       /* source file path (owned) */
     int      line;       /* 1-based line number */
     int      column;     /* 0 if unknown */
@@ -25,8 +25,8 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 typedef struct {
     dsc_line_entry_t *entries;
-    size_t            count;
-    size_t            cap;
+    UINT32            count;
+    UINT32            cap;
 } dsc_lines_t;
 
 /* ------------------------------------------------------------------ */
@@ -54,10 +54,10 @@ int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw);
 
 /* Lookup the source location for an address.
  * Returns 0 and fills `out` on success, DSC_ERR_NOT_FOUND if no match. */
-int dsc_lines_lookup(const dsc_lines_t *lines, uint64_t addr,
+int dsc_lines_lookup(const dsc_lines_t *lines, UINT64 addr,
                      dsc_line_info_t *out);
 
 /* Number of line entries */
-size_t dsc_lines_count(const dsc_lines_t *lines);
+UINT32 dsc_lines_count(const dsc_lines_t *lines);
 
 #endif /* DSC_DWARF_LINES_H */

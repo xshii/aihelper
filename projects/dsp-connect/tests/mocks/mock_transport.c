@@ -7,7 +7,7 @@
 /* --- Private data structure --- */
 typedef struct {
     dsc_transport_t       base;    /* MUST be first member */
-    uint8_t               mem[MOCK_MEM_SIZE];
+    UINT8               mem[MOCK_MEM_SIZE];
     mock_transport_record_t record;
 } mock_transport_impl_t;
 
@@ -27,8 +27,8 @@ static void mock_close(dsc_transport_t *self)
 }
 
 /* --- vtable: mem_read --- */
-static int mock_mem_read(dsc_transport_t *self, uint64_t addr,
-                         void *buf, size_t len)
+static int mock_mem_read(dsc_transport_t *self, UINT64 addr,
+                         void *buf, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
     m->record.call_count++;
@@ -43,8 +43,8 @@ static int mock_mem_read(dsc_transport_t *self, uint64_t addr,
 }
 
 /* --- vtable: mem_write --- */
-static int mock_mem_write(dsc_transport_t *self, uint64_t addr,
-                          const void *buf, size_t len)
+static int mock_mem_write(dsc_transport_t *self, UINT64 addr,
+                          const void *buf, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
     m->record.call_count++;
@@ -60,7 +60,7 @@ static int mock_mem_write(dsc_transport_t *self, uint64_t addr,
 
 /* --- vtable: exec_cmd --- */
 static int mock_exec_cmd(dsc_transport_t *self, const char *cmd,
-                         char *resp, size_t resp_len)
+                         char *resp, UINT32 resp_len)
 {
     (void)self; (void)cmd;
     if (resp && resp_len > 0) {
@@ -102,7 +102,7 @@ void mock_transport_destroy(dsc_transport_t *t)
     free(t);
 }
 
-uint8_t *mock_transport_get_memory(dsc_transport_t *t)
+UINT8 *mock_transport_get_memory(dsc_transport_t *t)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
     return m->mem;
@@ -115,7 +115,7 @@ const mock_transport_record_t *mock_transport_get_record(dsc_transport_t *t)
 }
 
 void mock_transport_set_memory(dsc_transport_t *t,
-                               uint64_t addr, const void *data, size_t len)
+                               UINT64 addr, const void *data, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
     if (addr + len <= MOCK_MEM_SIZE) {

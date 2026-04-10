@@ -20,12 +20,12 @@
 
 /* ---------- IO 回调：socket send/recv ---------- */
 
-static ssize_t sock_send(int fd, const void *buf, size_t len)
+static INT32 sock_send(int fd, const void *buf, UINT32 len)
 {
     return send(fd, buf, len, 0);
 }
 
-static ssize_t sock_recv(int fd, char *ch)
+static INT32 sock_recv(int fd, char *ch)
 {
     return recv(fd, ch, 1, 0);
 }
@@ -102,20 +102,20 @@ static void telnet_close(dsc_transport_t *self)
 
 /* ---------- vtable: 协议操作全部委托给 cmdline ---------- */
 
-static int telnet_mem_read(dsc_transport_t *self, uint64_t addr,
-                           void *buf, size_t len)
+static int telnet_mem_read(dsc_transport_t *self, UINT64 addr,
+                           void *buf, UINT32 len)
 {
     return dsc_cmdline_mem_read(&to_telnet(self)->cmd, addr, buf, len);
 }
 
-static int telnet_mem_write(dsc_transport_t *self, uint64_t addr,
-                            const void *buf, size_t len)
+static int telnet_mem_write(dsc_transport_t *self, UINT64 addr,
+                            const void *buf, UINT32 len)
 {
     return dsc_cmdline_mem_write(&to_telnet(self)->cmd, addr, buf, len);
 }
 
 static int telnet_exec_cmd(dsc_transport_t *self, const char *cmd,
-                           char *resp, size_t resp_len)
+                           char *resp, UINT32 resp_len)
 {
     return dsc_cmdline_exec(&to_telnet(self)->cmd, cmd, resp, resp_len);
 }

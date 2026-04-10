@@ -28,7 +28,7 @@ typedef struct {
     const char *device;           /* serial: device path                 */
     int         baudrate;         /* serial: baud rate                   */
     const char *shm_path;         /* shm: file path                     */
-    size_t      shm_size;         /* shm: region size                   */
+    UINT32      shm_size;         /* shm: region size                   */
     int         timeout_ms;       /* I/O timeout (0 = backend default)   */
 } dsc_open_params_t;
 
@@ -48,7 +48,7 @@ void dsc_close(dsc_context_t *ctx);
  * Path examples: "g_counter", "g_config.mode", "g_buf[3].x"
  * Returns DSC_OK on success, negative dsc_error_t on failure. */
 int dsc_read_var(dsc_context_t *ctx, const char *var_path,
-                 char *out, size_t out_len);
+                 char *out, UINT32 out_len);
 
 /* ------------------------------------------------------------------ */
 /* Layer 1: Read with format options                                  */
@@ -61,19 +61,19 @@ typedef struct dsc_format_opts_t dsc_format_opts_t;
  * Pass NULL for opts to get default formatting. */
 int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
                     const dsc_format_opts_t *opts,
-                    char *out, size_t out_len);
+                    char *out, UINT32 out_len);
 
 /* ------------------------------------------------------------------ */
 /* Layer 1: Raw memory access                                         */
 /* ------------------------------------------------------------------ */
 
 /* Read raw bytes from logical address. */
-int dsc_read_mem(dsc_context_t *ctx, uint64_t addr,
-                 void *buf, size_t len);
+int dsc_read_mem(dsc_context_t *ctx, UINT64 addr,
+                 void *buf, UINT32 len);
 
 /* Write raw bytes to logical address. */
-int dsc_write_mem(dsc_context_t *ctx, uint64_t addr,
-                  const void *buf, size_t len);
+int dsc_write_mem(dsc_context_t *ctx, UINT64 addr,
+                  const void *buf, UINT32 len);
 
 /* ------------------------------------------------------------------ */
 /* Error context                                                      */

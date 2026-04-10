@@ -13,7 +13,7 @@
 void identity_logical_equals_physical(void)
 {
     dsc_arch_t *a = mock_arch_identity();
-    uint64_t phys = 0;
+    UINT64 phys = 0;
 
     int rc = dsc_arch_logical_to_physical(a, 0x1000, &phys);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
@@ -23,7 +23,7 @@ void identity_logical_equals_physical(void)
 void identity_physical_equals_logical(void)
 {
     dsc_arch_t *a = mock_arch_identity();
-    uint64_t logical = 0;
+    UINT64 logical = 0;
 
     int rc = dsc_arch_physical_to_logical(a, 0x2000, &logical);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
@@ -33,7 +33,7 @@ void identity_physical_equals_logical(void)
 void identity_no_endian_swap(void)
 {
     dsc_arch_t *a = mock_arch_identity();
-    uint8_t buf[] = {0x01, 0x02, 0x03, 0x04};
+    UINT8 buf[] = {0x01, 0x02, 0x03, 0x04};
 
     dsc_arch_swap_endian(a, buf, 4);
     /* Identity: no swap, bytes unchanged */
@@ -62,7 +62,7 @@ void identity_word_size_is_one(void)
 void word16_logical_to_physical_divides_by_two(void)
 {
     dsc_arch_t *a = mock_arch_word16();
-    uint64_t phys = 0;
+    UINT64 phys = 0;
 
     int rc = dsc_arch_logical_to_physical(a, 0x100, &phys);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
@@ -72,7 +72,7 @@ void word16_logical_to_physical_divides_by_two(void)
 void word16_physical_to_logical_multiplies_by_two(void)
 {
     dsc_arch_t *a = mock_arch_word16();
-    uint64_t logical = 0;
+    UINT64 logical = 0;
 
     int rc = dsc_arch_physical_to_logical(a, 0x80, &logical);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
@@ -82,7 +82,7 @@ void word16_physical_to_logical_multiplies_by_two(void)
 void word16_unaligned_returns_error(void)
 {
     dsc_arch_t *a = mock_arch_word16();
-    uint64_t phys = 0;
+    UINT64 phys = 0;
 
     int rc = dsc_arch_logical_to_physical(a, 0x101, &phys);
     TEST_ASSERT_EQUAL(DSC_ERR_MEM_ALIGN, rc);
@@ -91,7 +91,7 @@ void word16_unaligned_returns_error(void)
 void word16_zero_address(void)
 {
     dsc_arch_t *a = mock_arch_word16();
-    uint64_t phys = 0;
+    UINT64 phys = 0;
 
     int rc = dsc_arch_logical_to_physical(a, 0, &phys);
     TEST_ASSERT_EQUAL(DSC_OK, rc);

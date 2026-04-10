@@ -32,7 +32,7 @@ void dsc_symtab_free(dsc_symtab_t *tab)
     }
 
     /* Free each symbol's owned name */
-    for (size_t i = 0; i < tab->count; i++) {
+    for (UINT32 i = 0; i < tab->count; i++) {
         free(tab->symbols[i].name);
         /* type is borrowed, do NOT free */
     }
@@ -60,7 +60,7 @@ static int ensure_capacity(dsc_symtab_t *tab)
         return DSC_OK;
     }
 
-    size_t new_cap = (tab->cap == 0) ? INITIAL_CAP : tab->cap * 2;
+    UINT32 new_cap = (tab->cap == 0) ? INITIAL_CAP : tab->cap * 2;
     dsc_symbol_t *new_buf = realloc(tab->symbols, new_cap * sizeof(dsc_symbol_t));
     if (!new_buf) {
         return DSC_ERR_NOMEM;
@@ -86,7 +86,7 @@ static int ensure_index(dsc_symtab_t *tab)
     dsc_hashmap_init(map, tab->cap > 0 ? tab->cap : INITIAL_CAP);
 
     /* Index all existing symbols */
-    for (size_t i = 0; i < tab->count; i++) {
+    for (UINT32 i = 0; i < tab->count; i++) {
         DSC_TRY(dsc_hashmap_put(map, tab->symbols[i].name, &tab->symbols[i]));
     }
 
@@ -100,8 +100,8 @@ static int ensure_index(dsc_symtab_t *tab)
 
 int dsc_symtab_add(dsc_symtab_t *tab,
                    const char *name,
-                   uint64_t address,
-                   size_t size,
+                   UINT64 address,
+                   UINT32 size,
                    dsc_type_t *type,
                    bool is_global)
 {
@@ -155,7 +155,7 @@ const dsc_symbol_t *dsc_symtab_lookup(const dsc_symtab_t *tab,
     dsc_symtab_t *mut_tab = (dsc_symtab_t *)tab;
     if (ensure_index(mut_tab) < 0) {
         /* Fallback: linear scan if index allocation fails */
-        for (size_t i = 0; i < tab->count; i++) {
+        for (UINT32 i = 0; i < tab->count; i++) {
             if (strcmp(tab->symbols[i].name, name) == 0) {
                 return &tab->symbols[i];
             }
@@ -171,7 +171,7 @@ const dsc_symbol_t *dsc_symtab_lookup(const dsc_symtab_t *tab,
 /* Iteration                                                          */
 /* ------------------------------------------------------------------ */
 
-const dsc_symbol_t *dsc_symtab_at(const dsc_symtab_t *tab, size_t i)
+const dsc_symbol_t *dsc_symtab_at(const dsc_symtab_t *tab, UINT32 i)
 {
     if (!tab || i >= tab->count) {
         return NULL;
@@ -179,7 +179,7 @@ const dsc_symbol_t *dsc_symtab_at(const dsc_symtab_t *tab, size_t i)
     return &tab->symbols[i];
 }
 
-size_t dsc_symtab_count(const dsc_symtab_t *tab)
+UINT32 dsc_symtab_count(const dsc_symtab_t *tab)
 {
     return tab ? tab->count : 0;
 }

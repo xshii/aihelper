@@ -16,9 +16,9 @@
 #define DSC_MAX_REGS 32
 
 typedef struct {
-    uint64_t regs[DSC_MAX_REGS];
-    uint64_t cfa;   /* canonical frame address */
-    uint64_t pc;    /* program counter / return address */
+    UINT64 regs[DSC_MAX_REGS];
+    UINT64 cfa;   /* canonical frame address */
+    UINT64 pc;    /* program counter / return address */
 } dsc_regset_t;
 
 /* ------------------------------------------------------------------ */
@@ -40,11 +40,11 @@ typedef enum {
 /* Frame description entry (FDE)                                      */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    uint64_t            pc_start;     /* start of address range */
-    uint64_t            pc_end;       /* end of address range (exclusive) */
+    UINT64            pc_start;     /* start of address range */
+    UINT64            pc_end;       /* end of address range (exclusive) */
     dsc_cfa_rule_kind_t cfa_rule;
     int                 cfa_reg;      /* base register for CFA */
-    int64_t             cfa_offset;   /* offset from base register */
+    INT64             cfa_offset;   /* offset from base register */
 } dsc_frame_entry_t;
 
 /* ------------------------------------------------------------------ */
@@ -52,8 +52,8 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 typedef struct {
     dsc_frame_entry_t *entries;
-    size_t             count;
-    size_t             cap;
+    UINT32             count;
+    UINT32             cap;
 } dsc_frames_t;
 
 /* ------------------------------------------------------------------ */
@@ -73,13 +73,13 @@ int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw);
 /* Unwind one frame: given registers at `addr`, compute the caller's registers.
  * `regs` is updated in-place.
  * Returns 0 on success, DSC_ERR_NOT_FOUND if no FDE covers `addr`. */
-int dsc_frames_unwind(const dsc_frames_t *frames, uint64_t addr,
+int dsc_frames_unwind(const dsc_frames_t *frames, UINT64 addr,
                       dsc_regset_t *regs);
 
 /* Returns the CFA rule name string (from X-macro) */
 const char *dsc_cfa_rule_name(dsc_cfa_rule_kind_t kind);
 
 /* Number of frame entries */
-size_t dsc_frames_count(const dsc_frames_t *frames);
+UINT32 dsc_frames_count(const dsc_frames_t *frames);
 
 #endif /* DSC_DWARF_FRAMES_H */

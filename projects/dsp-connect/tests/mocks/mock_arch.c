@@ -9,7 +9,7 @@
 /* ================================================================== */
 
 static int id_logical_to_physical(const dsc_arch_t *self,
-                                  uint64_t logical, uint64_t *physical)
+                                  UINT64 logical, UINT64 *physical)
 {
     (void)self;
     *physical = logical;
@@ -17,26 +17,26 @@ static int id_logical_to_physical(const dsc_arch_t *self,
 }
 
 static int id_physical_to_logical(const dsc_arch_t *self,
-                                  uint64_t physical, uint64_t *logical)
+                                  UINT64 physical, UINT64 *logical)
 {
     (void)self;
     *logical = physical;
     return DSC_OK;
 }
 
-static void id_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
+static void id_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
 {
     (void)self; (void)buf; (void)size;
     /* No swap — identity arch assumes host == target endianness */
 }
 
-static size_t id_min_access(const dsc_arch_t *self)
+static UINT32 id_min_access(const dsc_arch_t *self)
 {
     (void)self;
     return 1;
 }
 
-static size_t id_word_size(const dsc_arch_t *self)
+static UINT32 id_word_size(const dsc_arch_t *self)
 {
     (void)self;
     return 1;
@@ -68,7 +68,7 @@ dsc_arch_t *mock_arch_identity(void)
 /* ================================================================== */
 
 static int w16_logical_to_physical(const dsc_arch_t *self,
-                                   uint64_t logical, uint64_t *physical)
+                                   UINT64 logical, UINT64 *physical)
 {
     (void)self;
     if (logical % 2 != 0) {
@@ -79,26 +79,26 @@ static int w16_logical_to_physical(const dsc_arch_t *self,
 }
 
 static int w16_physical_to_logical(const dsc_arch_t *self,
-                                   uint64_t physical, uint64_t *logical)
+                                   UINT64 physical, UINT64 *logical)
 {
     (void)self;
     *logical = physical << 1;
     return DSC_OK;
 }
 
-static void w16_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
+static void w16_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
 {
     (void)self; (void)buf; (void)size;
     /* No swap — mock assumes host matches target */
 }
 
-static size_t w16_min_access(const dsc_arch_t *self)
+static UINT32 w16_min_access(const dsc_arch_t *self)
 {
     (void)self;
     return 2;
 }
 
-static size_t w16_word_size(const dsc_arch_t *self)
+static UINT32 w16_word_size(const dsc_arch_t *self)
 {
     (void)self;
     return 2;

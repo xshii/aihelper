@@ -15,7 +15,7 @@ static const struct { int code; const char *msg; } error_table[] = {
 
 const char *dsc_strerror(int err)
 {
-    for (size_t i = 0; i < ARRAY_LEN(error_table); i++) {
+    for (UINT32 i = 0; i < ARRAY_LEN(error_table); i++) {
         if (error_table[i].code == err) {
             return error_table[i].msg;
         }

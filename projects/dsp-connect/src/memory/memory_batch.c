@@ -22,19 +22,19 @@
 /* Internal: a merged span covering one or more original regions      */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    uint64_t start;     /* lowest physical address in the span        */
-    uint64_t end;       /* one past highest byte in the span          */
-    size_t  *indices;   /* indices into the original regions array    */
-    size_t   index_count;
-    size_t   index_cap;
+    UINT64 start;     /* lowest physical address in the span        */
+    UINT64 end;       /* one past highest byte in the span          */
+    UINT32  *indices;   /* indices into the original regions array    */
+    UINT32   index_count;
+    UINT32   index_cap;
 } merged_span_t;
 
 /* ------------------------------------------------------------------ */
 /* Internal: comparison for qsort — sort by address ascending         */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    uint64_t addr;
-    size_t   original_index;
+    UINT64 addr;
+    UINT32   original_index;
 } sort_entry_t;
 
 static int cmp_sort_entry(const void *a, const void *b)
@@ -53,11 +53,11 @@ static int cmp_sort_entry(const void *a, const void *b)
 /* ------------------------------------------------------------------ */
 /* Internal: add an index to a merged span                            */
 /* ------------------------------------------------------------------ */
-static int span_add_index(merged_span_t *span, size_t idx)
+static int span_add_index(merged_span_t *span, UINT32 idx)
 {
     if (span->index_count >= span->index_cap) {
-        size_t new_cap = (span->index_cap == 0) ? 4 : span->index_cap * 2;
-        size_t *new_arr = realloc(span->indices, new_cap * sizeof(size_t));
+        UINT32 new_cap = (span->index_cap == 0) ? 4 : span->index_cap * 2;
+        UINT32 *new_arr = realloc(span->indices, new_cap * sizeof(UINT32));
         if (new_arr == NULL) {
             return DSC_ERR_NOMEM;
         }
@@ -71,9 +71,9 @@ static int span_add_index(merged_span_t *span, size_t idx)
 /* ------------------------------------------------------------------ */
 /* Internal: free an array of merged spans                            */
 /* ------------------------------------------------------------------ */
-static void free_spans(merged_span_t *spans, size_t count)
+static void free_spans(merged_span_t *spans, UINT32 count)
 {
-    for (size_t i = 0; i < count; i++) {
+    for (UINT32 i = 0; i < count; i++) {
         free(spans[i].indices);
     }
     free(spans);
@@ -83,7 +83,7 @@ static void free_spans(merged_span_t *spans, size_t count)
 /* Public API                                                         */
 /* ------------------------------------------------------------------ */
 int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
-                       dsc_mem_region_t *regions, size_t count)
+                       dsc_mem_region_t *regions, UINT32 count)
 {
     /* Three-phase batch read:
      *   Phase 1: Sort region indices by start address
@@ -99,7 +99,7 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     }
 
     /* Initialize all statuses to OK */
-    for (size_t i = 0; i < count; i++) {
+    for (UINT32 i = 0; i < count; i++) {
         regions[i].status = DSC_OK;
     }
 
@@ -110,7 +110,7 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     if (sorted == NULL) {
         return DSC_ERR_NOMEM;
     }
-    for (size_t i = 0; i < count; i++) {
+    for (UINT32 i = 0; i < count; i++) {
         sorted[i].addr = regions[i].addr;
         sorted[i].original_index = i;
     }
@@ -125,12 +125,12 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
         free(sorted);
         return DSC_ERR_NOMEM;
     }
-    size_t span_count = 0;
+    UINT32 span_count = 0;
 
-    for (size_t i = 0; i < count; i++) {
-        size_t ri = sorted[i].original_index;
-        uint64_t r_start = regions[ri].addr;
-        uint64_t r_end   = regions[ri].addr + regions[ri].len;
+    for (UINT32 i = 0; i < count; i++) {
+        UINT32 ri = sorted[i].original_index;
+        UINT64 r_start = regions[ri].addr;
+        UINT64 r_end   = regions[ri].addr + regions[ri].len;
 
         /* Try to extend the current span */
         if (span_count > 0) {
@@ -177,15 +177,15 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     /* ============================================================== */
     int first_error = DSC_OK;
 
-    for (size_t s = 0; s < span_count; s++) {
+    for (UINT32 s = 0; s < span_count; s++) {
         merged_span_t *span = &spans[s];
-        size_t span_len = (size_t)(span->end - span->start);
+        UINT32 span_len = (UINT32)(span->end - span->start);
 
         /* Allocate a temporary buffer for the merged read */
-        uint8_t *tmp = malloc(span_len);
+        UINT8 *tmp = malloc(span_len);
         if (tmp == NULL) {
             /* Mark all regions in this span as failed */
-            for (size_t j = 0; j < span->index_count; j++) {
+            for (UINT32 j = 0; j < span->index_count; j++) {
                 regions[span->indices[j]].status = DSC_ERR_NOMEM;
             }
             if (first_error == DSC_OK) {
@@ -203,7 +203,7 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
         if (rc < 0) {
             DSC_LOG_ERROR("mem_batch_read: span read failed at 0x%llx len=%zu",
                           (unsigned long long)span->start, span_len);
-            for (size_t j = 0; j < span->index_count; j++) {
+            for (UINT32 j = 0; j < span->index_count; j++) {
                 regions[span->indices[j]].status = DSC_ERR_MEM_READ;
             }
             if (first_error == DSC_OK) {
@@ -214,9 +214,9 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
         }
 
         /* Scatter: copy each region's portion from the merged buffer */
-        for (size_t j = 0; j < span->index_count; j++) {
-            size_t ri = span->indices[j];
-            uint64_t offset = regions[ri].addr - span->start;
+        for (UINT32 j = 0; j < span->index_count; j++) {
+            UINT32 ri = span->indices[j];
+            UINT64 offset = regions[ri].addr - span->start;
             if (regions[ri].buf != NULL && regions[ri].len > 0) {
                 memcpy(regions[ri].buf, tmp + offset, regions[ri].len);
                 regions[ri].status = DSC_OK;

@@ -21,7 +21,7 @@
 /* Public API: read                                                   */
 /* ------------------------------------------------------------------ */
 int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
-                 uint64_t logical_addr, void *buf, size_t len)
+                 UINT64 logical_addr, void *buf, UINT32 len)
 {
     if (tp == NULL || buf == NULL) {
         return DSC_ERR_INVALID_ARG;
@@ -31,7 +31,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     }
 
     /* Step 1: translate logical → physical address */
-    uint64_t phys_addr = logical_addr;
+    UINT64 phys_addr = logical_addr;
     if (arch != NULL) {
         DSC_TRY(dsc_arch_logical_to_physical(arch, logical_addr, &phys_addr));
     }
@@ -42,12 +42,12 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
                   len);
 
     /* Step 2: chunked read */
-    uint8_t *dst = (uint8_t *)buf;
-    size_t remaining = len;
-    uint64_t addr = phys_addr;
+    UINT8 *dst = (UINT8 *)buf;
+    UINT32 remaining = len;
+    UINT64 addr = phys_addr;
 
     while (remaining > 0) {
-        size_t chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
+        UINT32 chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
 
         int rc = dsc_transport_mem_read(tp, addr, dst, chunk);
         if (rc < 0) {
@@ -76,7 +76,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
 /* Public API: write                                                  */
 /* ------------------------------------------------------------------ */
 int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
-                  uint64_t logical_addr, const void *buf, size_t len)
+                  UINT64 logical_addr, const void *buf, UINT32 len)
 {
     if (tp == NULL || buf == NULL) {
         return DSC_ERR_INVALID_ARG;
@@ -86,7 +86,7 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
     }
 
     /* Step 1: translate logical → physical address */
-    uint64_t phys_addr = logical_addr;
+    UINT64 phys_addr = logical_addr;
     if (arch != NULL) {
         DSC_TRY(dsc_arch_logical_to_physical(arch, logical_addr, &phys_addr));
     }
@@ -98,8 +98,8 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
 
     /* Step 2: endian swap for scalar writes.
      * We work on a local copy to avoid mutating the caller's buffer. */
-    uint8_t swap_buf[8];
-    const uint8_t *src = (const uint8_t *)buf;
+    UINT8 swap_buf[8];
+    const UINT8 *src = (const UINT8 *)buf;
 
     if (arch != NULL && len <= 8 && (len & (len - 1)) == 0) {
         memcpy(swap_buf, buf, len);
@@ -108,11 +108,11 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
     }
 
     /* Step 3: chunked write */
-    size_t remaining = len;
-    uint64_t addr = phys_addr;
+    UINT32 remaining = len;
+    UINT64 addr = phys_addr;
 
     while (remaining > 0) {
-        size_t chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
+        UINT32 chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
 
         int rc = dsc_transport_mem_write(tp, addr, src, chunk);
         if (rc < 0) {

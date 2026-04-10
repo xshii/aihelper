@@ -16,8 +16,8 @@
 /* Resolved symbol result                                             */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    uint64_t    addr;   /* resolved absolute address                  */
-    size_t      size;   /* byte size of the resolved element          */
+    UINT64    addr;   /* resolved absolute address                  */
+    UINT32      size;   /* byte size of the resolved element          */
     dsc_type_t *type;   /* type info (borrowed, owned by dwarf layer) */
 } dsc_resolved_t;
 

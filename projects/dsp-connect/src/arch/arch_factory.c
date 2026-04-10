@@ -37,7 +37,7 @@ int dsc_arch_register(const char *name, dsc_arch_creator_fn creator)
         }
     }
 
-    size_t len = strlen(name);
+    UINT32 len = strlen(name);
     if (len >= sizeof(registry[0].name)) {
         return DSC_ERR_INVALID_ARG;
     }

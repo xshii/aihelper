@@ -19,8 +19,8 @@ typedef struct {
 
 /* --- vtable implementations --- */
 
-static int byte_logical_to_physical(const dsc_arch_t *self, uint64_t logical,
-                                    uint64_t *physical)
+static int byte_logical_to_physical(const dsc_arch_t *self, UINT64 logical,
+                                    UINT64 *physical)
 {
     (void)self;
     /* Byte-addressed: logical == physical, no translation needed */
@@ -28,8 +28,8 @@ static int byte_logical_to_physical(const dsc_arch_t *self, uint64_t logical,
     return DSC_OK;
 }
 
-static int byte_physical_to_logical(const dsc_arch_t *self, uint64_t physical,
-                                    uint64_t *logical)
+static int byte_physical_to_logical(const dsc_arch_t *self, UINT64 physical,
+                                    UINT64 *logical)
 {
     (void)self;
     /* Byte-addressed: physical == logical, no translation needed */
@@ -37,7 +37,7 @@ static int byte_physical_to_logical(const dsc_arch_t *self, uint64_t physical,
     return DSC_OK;
 }
 
-static void byte_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
+static void byte_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
 {
     const arch_byte_t *a = (const arch_byte_t *)self;
 
@@ -50,13 +50,13 @@ static void byte_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
     dsc_byte_swap(buf, size);
 }
 
-static size_t byte_min_access_size(const dsc_arch_t *self)
+static UINT32 byte_min_access_size(const dsc_arch_t *self)
 {
     (void)self;
     return 1;  /* byte-addressed: 1 byte */
 }
 
-static size_t byte_word_size(const dsc_arch_t *self)
+static UINT32 byte_word_size(const dsc_arch_t *self)
 {
     (void)self;
     return 1;  /* byte-addressed: addressable unit = 1 byte */

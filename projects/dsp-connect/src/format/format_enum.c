@@ -15,9 +15,9 @@
 /* Returns the name if found, NULL otherwise.                          */
 /* ------------------------------------------------------------------ */
 static const char *find_exact_match(const dsc_enum_value_t *values,
-                                    size_t count, int64_t raw)
+                                    UINT32 count, INT64 raw)
 {
-    for (size_t i = 0; i < count; i++) {
+    for (UINT32 i = 0; i < count; i++) {
         if (values[i].value == raw) {
             return values[i].name;
         }
@@ -29,12 +29,12 @@ static const char *find_exact_match(const dsc_enum_value_t *values,
 /* Helpers: detect if this enum looks like a bitmask (flags-style)     */
 /* Heuristic: all non-zero enumerator values are powers of two.        */
 /* ------------------------------------------------------------------ */
-static int is_flags_enum(const dsc_enum_value_t *values, size_t count)
+static int is_flags_enum(const dsc_enum_value_t *values, UINT32 count)
 {
     int has_nonzero = 0;
 
-    for (size_t i = 0; i < count; i++) {
-        int64_t v = values[i].value;
+    for (UINT32 i = 0; i < count; i++) {
+        INT64 v = values[i].value;
 
         /* Skip zero (often "NONE" flag) */
         if (v == 0) {
@@ -49,7 +49,7 @@ static int is_flags_enum(const dsc_enum_value_t *values, size_t count)
         }
 
         /* Check if power of two: v & (v-1) == 0 */
-        uint64_t uv = (uint64_t)v;
+        UINT64 uv = (UINT64)v;
         if ((uv & (uv - 1)) != 0) {
             return 0;
         }
@@ -62,15 +62,15 @@ static int is_flags_enum(const dsc_enum_value_t *values, size_t count)
 /* Helpers: format flags-style enum (OR'd bitmask)                     */
 /* Decomposes the value into contributing flags.                        */
 /* ------------------------------------------------------------------ */
-static void format_flags(const dsc_enum_value_t *values, size_t count,
-                         int64_t raw, dsc_strbuf_t *out)
+static void format_flags(const dsc_enum_value_t *values, UINT32 count,
+                         INT64 raw, dsc_strbuf_t *out)
 {
-    uint64_t remaining = (uint64_t)raw;
+    UINT64 remaining = (UINT64)raw;
     int first = 1;
 
     /* Emit each matching flag */
-    for (size_t i = 0; i < count; i++) {
-        uint64_t flag = (uint64_t)values[i].value;
+    for (UINT32 i = 0; i < count; i++) {
+        UINT64 flag = (UINT64)values[i].value;
 
         /* Skip zero-value enumerator unless raw is exactly zero */
         if (flag == 0) {
@@ -108,13 +108,13 @@ static void format_flags(const dsc_enum_value_t *values, size_t count,
     }
 
     /* Append numeric value in parens */
-    dsc_strbuf_appendf(out, " (0x%02llX)", (unsigned long long)(uint64_t)raw);
+    dsc_strbuf_appendf(out, " (0x%02llX)", (unsigned long long)(UINT64)raw);
 }
 
 /* ------------------------------------------------------------------ */
 /* Public: format an enum value                                        */
 /* ------------------------------------------------------------------ */
-int dsc_format_enum(const void *data, size_t data_len,
+int dsc_format_enum(const void *data, UINT32 data_len,
                     const dsc_type_t *type, const dsc_format_opts_t *opts,
                     dsc_strbuf_t *out)
 {
@@ -125,7 +125,7 @@ int dsc_format_enum(const void *data, size_t data_len,
     }
 
     /* Determine byte size: prefer type->byte_size, fall back to underlying */
-    size_t byte_size = type->byte_size;
+    UINT32 byte_size = type->byte_size;
     if (byte_size == 0 && type->u.enumeration.underlying) {
         byte_size = type->u.enumeration.underlying->byte_size;
     }
@@ -134,10 +134,10 @@ int dsc_format_enum(const void *data, size_t data_len,
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
-    int64_t raw = dsc_read_signed(data, byte_size);
+    INT64 raw = dsc_read_signed(data, byte_size);
 
     const dsc_enum_value_t *values = type->u.enumeration.values;
-    size_t value_count = type->u.enumeration.value_count;
+    UINT32 value_count = type->u.enumeration.value_count;
 
     /* No enumerators defined — just show the number */
     if (!values || value_count == 0) {

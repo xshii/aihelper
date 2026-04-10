@@ -5,23 +5,24 @@
 #ifndef DSC_ENDIAN_H
 #define DSC_ENDIAN_H
 
+#include "types.h"
 #include <stddef.h>
 #include <stdint.h>
 
 /* 检测当前主机是否为大端序（返回 1 = 大端，0 = 小端） */
 static inline int dsc_host_is_big_endian(void)
 {
-    uint16_t val = 0x0102;
-    uint8_t *bytes = (uint8_t *)&val;
+    UINT16 val = 0x0102;
+    UINT8 *bytes = (UINT8 *)&val;
     return bytes[0] == 0x01;
 }
 
 /* 就地反转 buf 的字节序 */
-static inline void dsc_byte_swap(void *buf, size_t size)
+static inline void dsc_byte_swap(void *buf, UINT32 size)
 {
-    uint8_t *p = (uint8_t *)buf;
-    for (size_t i = 0; i < size / 2; i++) {
-        uint8_t tmp = p[i];
+    UINT8 *p = (UINT8 *)buf;
+    for (UINT32 i = 0; i < size / 2; i++) {
+        UINT8 tmp = p[i];
         p[i] = p[size - 1 - i];
         p[size - 1 - i] = tmp;
     }

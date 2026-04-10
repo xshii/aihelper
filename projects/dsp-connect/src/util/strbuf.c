@@ -8,14 +8,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-static void ensure_cap(dsc_strbuf_t *sb, size_t extra)
+static void ensure_cap(dsc_strbuf_t *sb, UINT32 extra)
 {
-    size_t need = sb->len + extra + 1; /* +1 for '\0' */
+    UINT32 need = sb->len + extra + 1; /* +1 for '\0' */
     if (need <= sb->cap) {
         return;
     }
 
-    size_t newcap = sb->cap * 2;
+    UINT32 newcap = sb->cap * 2;
     if (newcap < need) {
         newcap = need;
     }
@@ -27,7 +27,7 @@ static void ensure_cap(dsc_strbuf_t *sb, size_t extra)
     sb->cap = newcap;
 }
 
-void dsc_strbuf_init(dsc_strbuf_t *sb, size_t initial_cap)
+void dsc_strbuf_init(dsc_strbuf_t *sb, UINT32 initial_cap)
 {
     if (initial_cap < 64) {
         initial_cap = 64;
@@ -48,13 +48,13 @@ void dsc_strbuf_free(dsc_strbuf_t *sb)
 
 void dsc_strbuf_append(dsc_strbuf_t *sb, const char *str)
 {
-    size_t slen = strlen(str);
+    UINT32 slen = strlen(str);
     ensure_cap(sb, slen);
     memcpy(sb->buf + sb->len, str, slen + 1);
     sb->len += slen;
 }
 
-void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, size_t n)
+void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, UINT32 n)
 {
     ensure_cap(sb, n);
     memcpy(sb->buf + sb->len, str, n);
@@ -75,20 +75,20 @@ void dsc_strbuf_appendf(dsc_strbuf_t *sb, const char *fmt, ...)
         return;
     }
 
-    ensure_cap(sb, (size_t)needed);
+    ensure_cap(sb, (UINT32)needed);
 
     /* Second pass: write */
     va_start(ap, fmt);
-    vsnprintf(sb->buf + sb->len, (size_t)needed + 1, fmt, ap);
+    vsnprintf(sb->buf + sb->len, (UINT32)needed + 1, fmt, ap);
     va_end(ap);
 
-    sb->len += (size_t)needed;
+    sb->len += (UINT32)needed;
 }
 
 void dsc_strbuf_indent(dsc_strbuf_t *sb, int depth)
 {
     int spaces = depth * 2;
-    ensure_cap(sb, (size_t)spaces);
+    ensure_cap(sb, (UINT32)spaces);
     for (int i = 0; i < spaces; i++) {
         sb->buf[sb->len++] = ' ';
     }

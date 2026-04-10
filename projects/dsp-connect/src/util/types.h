@@ -5,10 +5,9 @@
 #ifndef DSC_TYPES_H
 #define DSC_TYPES_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include <sys/types.h>  /* ssize_t */
 
 /* 无符号整型 */
 typedef uint8_t   UINT8;
@@ -26,26 +25,10 @@ typedef int64_t   INT64;
 typedef float     FLOAT32;
 typedef double    FLOAT64;
 
-/* 布尔 */
-typedef bool      BOOL;
-
 /* 字节 */
 typedef uint8_t   BYTE;
 
-/* 大小/地址 */
-typedef size_t    SIZE;
-typedef ssize_t   SSIZE;
-
-/* 常用常量 */
-#ifndef TRUE
-#define TRUE  1
-#endif
-#ifndef FALSE
-#define FALSE 0
-#endif
-
-#ifndef NULL
-#define NULL ((void *)0)
-#endif
+/* 错误码（语义标记：函数返回值是错误码时用此类型） */
+typedef int       ErrNo;
 
 #endif /* DSC_TYPES_H */

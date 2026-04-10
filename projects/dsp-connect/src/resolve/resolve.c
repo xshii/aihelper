@@ -25,7 +25,7 @@ typedef struct {
     seg_kind_t kind;
     union {
         char   name[256]; /* SEG_FIELD: field / symbol name           */
-        size_t index;     /* SEG_INDEX: array index                   */
+        UINT32 index;     /* SEG_INDEX: array index                   */
     } u;
 } segment_t;
 
@@ -49,7 +49,7 @@ static int parse_array_index(const char *p, const char **cursor,
         return DSC_ERR_RESOLVE_PATH;
     }
     seg->kind = SEG_INDEX;
-    seg->u.index = (size_t)idx;
+    seg->u.index = (UINT32)idx;
     *cursor = end + 1; /* skip ']' */
     return 1;
 }
@@ -89,7 +89,7 @@ static int parse_next_segment(const char **cursor, segment_t *seg)
         p++;
     }
 
-    size_t len = (size_t)(p - start);
+    UINT32 len = (UINT32)(p - start);
     if (len >= sizeof(seg->u.name)) {
         DSC_LOG_ERROR("resolve: field name too long (%zu chars)", len);
         return DSC_ERR_RESOLVE_PATH;
@@ -126,7 +126,7 @@ static const dsc_type_t *unwrap_modifiers(const dsc_type_t *type)
 static const dsc_struct_field_t *find_field(const dsc_type_t *composite,
                                             const char *name)
 {
-    for (size_t i = 0; i < composite->u.composite.field_count; i++) {
+    for (UINT32 i = 0; i < composite->u.composite.field_count; i++) {
         const dsc_struct_field_t *f = &composite->u.composite.fields[i];
         if (f->name != NULL && strcmp(f->name, name) == 0) {
             return f;
@@ -171,9 +171,9 @@ int dsc_resolve(const dsc_symtab_t *symtab, const dsc_arch_t *arch,
         return DSC_ERR_NOT_FOUND;
     }
 
-    uint64_t addr = sym->address;
+    UINT64 addr = sym->address;
     const dsc_type_t *type = unwrap_modifiers(sym->type);
-    size_t size = (type != NULL) ? type->byte_size : sym->size;
+    UINT32 size = (type != NULL) ? type->byte_size : sym->size;
 
     /* -------------------------------------------------------------- */
     /* Step 2: consume remaining segments, accumulating offset        */

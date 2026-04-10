@@ -5,6 +5,7 @@
 #ifndef DSC_RESOLVE_CACHE_H
 #define DSC_RESOLVE_CACHE_H
 
+#include "../util/types.h"
 #include <stddef.h>
 
 #include "resolve.h"
@@ -20,7 +21,7 @@ typedef struct dsc_resolve_cache_t dsc_resolve_cache_t;
 
 /* Create a cache with the given maximum capacity.
  * Returns NULL on allocation failure. */
-dsc_resolve_cache_t *dsc_resolve_cache_create(size_t capacity);
+dsc_resolve_cache_t *dsc_resolve_cache_create(UINT32 capacity);
 
 /* Destroy the cache and free all internal storage. Safe to call with NULL. */
 void dsc_resolve_cache_destroy(dsc_resolve_cache_t *cache);

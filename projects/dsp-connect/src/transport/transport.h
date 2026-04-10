@@ -5,6 +5,7 @@
 #ifndef DSC_TRANSPORT_H
 #define DSC_TRANSPORT_H
 
+#include "../util/types.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -24,9 +25,9 @@ typedef struct dsc_transport_ops  dsc_transport_ops;
 struct dsc_transport_ops {
     int  (*open)(dsc_transport_t *self);
     void (*close)(dsc_transport_t *self);
-    int  (*mem_read)(dsc_transport_t *self, uint64_t addr, void *buf, size_t len);
-    int  (*mem_write)(dsc_transport_t *self, uint64_t addr, const void *buf, size_t len);
-    int  (*exec_cmd)(dsc_transport_t *self, const char *cmd, char *resp, size_t resp_len);
+    int  (*mem_read)(dsc_transport_t *self, UINT64 addr, void *buf, UINT32 len);
+    int  (*mem_write)(dsc_transport_t *self, UINT64 addr, const void *buf, UINT32 len);
+    int  (*exec_cmd)(dsc_transport_t *self, const char *cmd, char *resp, UINT32 resp_len);
     void (*destroy)(dsc_transport_t *self);
 };
 
@@ -53,7 +54,7 @@ typedef struct {
     const char *device;     /* serial: device path e.g. /dev/ttyS0 */
     int         baudrate;   /* serial: baud rate (default 115200) */
     const char *shm_path;   /* shm: shared memory file path       */
-    size_t      shm_size;   /* shm: region size in bytes          */
+    UINT32      shm_size;   /* shm: region size in bytes          */
     int         timeout_ms; /* I/O timeout, 0 = use backend default */
 } dsc_transport_config_t;
 
@@ -72,19 +73,19 @@ static inline void dsc_transport_close(dsc_transport_t *t)
 }
 
 static inline int dsc_transport_mem_read(dsc_transport_t *t,
-                                         uint64_t addr, void *buf, size_t len)
+                                         UINT64 addr, void *buf, UINT32 len)
 {
     return t->ops->mem_read(t, addr, buf, len);
 }
 
 static inline int dsc_transport_mem_write(dsc_transport_t *t,
-                                          uint64_t addr, const void *buf, size_t len)
+                                          UINT64 addr, const void *buf, UINT32 len)
 {
     return t->ops->mem_write(t, addr, buf, len);
 }
 
 static inline int dsc_transport_exec_cmd(dsc_transport_t *t,
-                                         const char *cmd, char *resp, size_t resp_len)
+                                         const char *cmd, char *resp, UINT32 resp_len)
 {
     return t->ops->exec_cmd(t, cmd, resp, resp_len);
 }

@@ -16,8 +16,8 @@
 /* ------------------------------------------------------------------ */
 typedef struct {
     char       *name;       /* symbol name (owned, heap-allocated) */
-    uint64_t    address;    /* virtual address in target memory    */
-    size_t      size;       /* size in bytes (0 if unknown)        */
+    UINT64    address;    /* virtual address in target memory    */
+    UINT32      size;       /* size in bytes (0 if unknown)        */
     dsc_type_t *type;       /* borrowed — owned by dsc_dwarf_t     */
     bool        is_global;  /* true = external linkage             */
 } dsc_symbol_t;
@@ -27,8 +27,8 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 typedef struct {
     dsc_symbol_t *symbols;  /* owned dynamic array */
-    size_t        count;
-    size_t        cap;
+    UINT32        count;
+    UINT32        cap;
     /* Internal: hashmap for O(1) name lookup.
      * Declared as opaque void* to avoid leaking hashmap.h into this header.
      * Actual type is dsc_hashmap_t*, allocated on first use. */
@@ -49,8 +49,8 @@ void dsc_symtab_free(dsc_symtab_t *tab);
  * Returns 0 on success, negative dsc_error_t on failure. */
 int dsc_symtab_add(dsc_symtab_t *tab,
                    const char *name,
-                   uint64_t address,
-                   size_t size,
+                   UINT64 address,
+                   UINT32 size,
                    dsc_type_t *type,
                    bool is_global);
 
@@ -59,9 +59,9 @@ const dsc_symbol_t *dsc_symtab_lookup(const dsc_symtab_t *tab,
                                       const char *name);
 
 /* Iteration: returns symbol at index `i`, or NULL if out of range */
-const dsc_symbol_t *dsc_symtab_at(const dsc_symtab_t *tab, size_t i);
+const dsc_symbol_t *dsc_symtab_at(const dsc_symtab_t *tab, UINT32 i);
 
 /* Number of symbols */
-size_t dsc_symtab_count(const dsc_symtab_t *tab);
+UINT32 dsc_symtab_count(const dsc_symtab_t *tab);
 
 #endif /* DSC_DWARF_SYMBOLS_H */

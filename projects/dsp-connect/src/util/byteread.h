@@ -5,32 +5,33 @@
 #ifndef DSC_BYTEREAD_H
 #define DSC_BYTEREAD_H
 
+#include "types.h"
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
 
-/* 从 data 读取 byte_size 字节的有符号整数，符号扩展到 int64_t */
-static inline int64_t dsc_read_signed(const void *data, size_t byte_size)
+/* 从 data 读取 byte_size 字节的有符号整数，符号扩展到 INT64 */
+static inline INT64 dsc_read_signed(const void *data, UINT32 byte_size)
 {
-    const uint8_t *p = (const uint8_t *)data;
+    const UINT8 *p = (const UINT8 *)data;
     switch (byte_size) {
-    case 1: { int8_t  v; memcpy(&v, p, 1); return (int64_t)v; }
-    case 2: { int16_t v; memcpy(&v, p, 2); return (int64_t)v; }
-    case 4: { int32_t v; memcpy(&v, p, 4); return (int64_t)v; }
-    case 8: { int64_t v; memcpy(&v, p, 8); return v; }
+    case 1: { INT8  v; memcpy(&v, p, 1); return (INT64)v; }
+    case 2: { INT16 v; memcpy(&v, p, 2); return (INT64)v; }
+    case 4: { INT32 v; memcpy(&v, p, 4); return (INT64)v; }
+    case 8: { INT64 v; memcpy(&v, p, 8); return v; }
     default: return 0;
     }
 }
 
-/* 从 data 读取 byte_size 字节的无符号整数，零扩展到 uint64_t */
-static inline uint64_t dsc_read_unsigned(const void *data, size_t byte_size)
+/* 从 data 读取 byte_size 字节的无符号整数，零扩展到 UINT64 */
+static inline UINT64 dsc_read_unsigned(const void *data, UINT32 byte_size)
 {
-    const uint8_t *p = (const uint8_t *)data;
+    const UINT8 *p = (const UINT8 *)data;
     switch (byte_size) {
-    case 1: { uint8_t  v; memcpy(&v, p, 1); return (uint64_t)v; }
-    case 2: { uint16_t v; memcpy(&v, p, 2); return (uint64_t)v; }
-    case 4: { uint32_t v; memcpy(&v, p, 4); return (uint64_t)v; }
-    case 8: { uint64_t v; memcpy(&v, p, 8); return v; }
+    case 1: { UINT8  v; memcpy(&v, p, 1); return (UINT64)v; }
+    case 2: { UINT16 v; memcpy(&v, p, 2); return (UINT64)v; }
+    case 4: { UINT32 v; memcpy(&v, p, 4); return (UINT64)v; }
+    case 8: { UINT64 v; memcpy(&v, p, 8); return v; }
     default: return 0;
     }
 }

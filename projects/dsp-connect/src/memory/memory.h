@@ -6,6 +6,7 @@
 #ifndef DSC_MEMORY_H
 #define DSC_MEMORY_H
 
+#include "../util/types.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -23,12 +24,12 @@
  *   - Endianness swap via arch
  * Returns DSC_OK on success, negative dsc_error_t on failure. */
 int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
-                 uint64_t logical_addr, void *buf, size_t len);
+                 UINT64 logical_addr, void *buf, UINT32 len);
 
 /* Write `len` bytes from `buf` to logical address.
  * Handles the same translations as dsc_mem_read.
  * Returns DSC_OK on success, negative dsc_error_t on failure. */
 int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
-                  uint64_t logical_addr, const void *buf, size_t len);
+                  UINT64 logical_addr, const void *buf, UINT32 len);
 
 #endif /* DSC_MEMORY_H */

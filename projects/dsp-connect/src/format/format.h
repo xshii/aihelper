@@ -38,20 +38,20 @@ dsc_format_opts_t dsc_format_opts_default(void);
 /*                                                                     */
 /* Returns DSC_OK on success, negative error code on failure.          */
 /* ------------------------------------------------------------------ */
-int dsc_format(const void *data, size_t data_len,
+int dsc_format(const void *data, UINT32 data_len,
                const dsc_type_t *type, const dsc_format_opts_t *opts,
                dsc_strbuf_t *out);
 
 /* Convenience: format and return a newly allocated string.
  * Caller must free() the returned pointer. Returns NULL on error. */
-char *dsc_format_str(const void *data, size_t data_len,
+char *dsc_format_str(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts);
 
 /* ------------------------------------------------------------------ */
 /* Internal: format with recursion depth tracking (used by sub-fmts)   */
 /* Sub-formatters call this instead of dsc_format() for nested values.  */
 /* ------------------------------------------------------------------ */
-int dsc_format_value(const void *data, size_t data_len,
+int dsc_format_value(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts,
                      int depth, dsc_strbuf_t *out);
 

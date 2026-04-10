@@ -15,13 +15,13 @@
 /* ------------------------------------------------------------------ */
 struct dsc_resolve_cache_t {
     dsc_hashmap_t map;       /* path string → dsc_resolved_t*       */
-    size_t        capacity;  /* maximum number of cached entries     */
+    UINT32        capacity;  /* maximum number of cached entries     */
 };
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
-dsc_resolve_cache_t *dsc_resolve_cache_create(size_t capacity)
+dsc_resolve_cache_t *dsc_resolve_cache_create(UINT32 capacity)
 {
     if (capacity == 0) {
         capacity = 64;

@@ -5,8 +5,7 @@
 #ifndef DSC_DWARF_TYPES_H
 #define DSC_DWARF_TYPES_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "../util/types.h"
 
 /* ------------------------------------------------------------------ */
 /* X-macro: base encoding kinds (maps to DW_ATE_*)                    */
@@ -59,9 +58,9 @@ typedef struct dsc_type dsc_type_t;
 /* ------------------------------------------------------------------ */
 typedef struct {
     char       *name;         /* field name (owned, heap-allocated) */
-    size_t      byte_offset;  /* offset within parent struct/union  */
-    uint8_t     bit_offset;   /* additional bit offset (0 for non-bitfield) */
-    uint8_t     bit_size;     /* bit width (0 for non-bitfield)     */
+    UINT32      byte_offset;  /* offset within parent struct/union  */
+    UINT8     bit_offset;   /* additional bit offset (0 for non-bitfield) */
+    UINT8     bit_size;     /* bit width (0 for non-bitfield)     */
     dsc_type_t *type;         /* borrowed — owned by dsc_dwarf_t    */
 } dsc_struct_field_t;
 
@@ -70,15 +69,15 @@ typedef struct {
 /* ------------------------------------------------------------------ */
 typedef struct {
     char    *name;   /* enumerator name (owned) */
-    int64_t  value;
+    INT64  value;
 } dsc_enum_value_t;
 
 /* ------------------------------------------------------------------ */
 /* Array dimension                                                    */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    int64_t lower_bound;  /* usually 0 for C */
-    size_t  count;        /* element count; 0 = flexible array */
+    INT64 lower_bound;  /* usually 0 for C */
+    UINT32  count;        /* element count; 0 = flexible array */
 } dsc_array_dim_t;
 
 /* ------------------------------------------------------------------ */
@@ -87,8 +86,8 @@ typedef struct {
 struct dsc_type {
     dsc_type_kind_t kind;
     char           *name;       /* type name, may be NULL (e.g. anon struct) */
-    size_t          byte_size;  /* sizeof, 0 if unknown / void              */
-    uint64_t        die_offset; /* DWARF DIE offset — used as unique ID     */
+    UINT32          byte_size;  /* sizeof, 0 if unknown / void              */
+    UINT64        die_offset; /* DWARF DIE offset — used as unique ID     */
 
     /* Variant data — ownership rules:
      *   composite.fields[]  — OWNED: freed by dsc_type_free()
@@ -106,13 +105,13 @@ struct dsc_type {
         /* DSC_TYPE_STRUCT, DSC_TYPE_UNION */
         struct {
             dsc_struct_field_t *fields;      /* owned array */
-            size_t              field_count;
+            UINT32              field_count;
         } composite;
 
         /* DSC_TYPE_ENUM */
         struct {
             dsc_enum_value_t *values;        /* owned array */
-            size_t            value_count;
+            UINT32            value_count;
             dsc_type_t       *underlying;    /* borrowed — the integer base type */
         } enumeration;
 
@@ -120,7 +119,7 @@ struct dsc_type {
         struct {
             dsc_type_t    *element_type;     /* borrowed */
             dsc_array_dim_t *dims;           /* owned array */
-            size_t           dim_count;
+            UINT32           dim_count;
         } array;
 
         /* DSC_TYPE_POINTER */
@@ -137,14 +136,14 @@ struct dsc_type {
         struct {
             dsc_type_t  *return_type;        /* borrowed */
             dsc_type_t **param_types;        /* owned array of borrowed ptrs */
-            size_t       param_count;
+            UINT32       param_count;
         } func;
 
         /* DSC_TYPE_BITFIELD */
         struct {
             dsc_type_t *base_type;           /* borrowed — underlying integer */
-            uint8_t     bit_offset;
-            uint8_t     bit_size;
+            UINT8     bit_offset;
+            UINT8     bit_size;
         } bitfield;
 
         /* DSC_TYPE_VOID — no extra data */
@@ -162,7 +161,7 @@ const char *dsc_type_kind_name(dsc_type_kind_t kind);
 const char *dsc_base_encoding_name(dsc_base_encoding_t enc);
 
 /* Byte size of the type (reads byte_size field, follows typedefs) */
-size_t dsc_type_size(const dsc_type_t *type);
+UINT32 dsc_type_size(const dsc_type_t *type);
 
 /* Unwrap typedef / const / volatile chain to get the real type */
 const dsc_type_t *dsc_type_resolve_typedef(const dsc_type_t *type);

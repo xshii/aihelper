@@ -5,8 +5,7 @@
 #ifndef DSC_HASHMAP_H
 #define DSC_HASHMAP_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include "types.h"
 #include "uthash.h"
 
 /* uthash 要求 hash handle 嵌入结构体，
@@ -23,7 +22,7 @@ typedef struct {
 } dsc_hashmap_t;
 
 /* Create / destroy */
-void  dsc_hashmap_init(dsc_hashmap_t *map, size_t initial_cap);
+void  dsc_hashmap_init(dsc_hashmap_t *map, UINT32 initial_cap);
 void  dsc_hashmap_free(dsc_hashmap_t *map);
 
 /* Returns 0 on success, -1 on alloc failure */
@@ -39,6 +38,6 @@ int   dsc_hashmap_del(dsc_hashmap_t *map, const char *key);
 void  dsc_hashmap_clear(dsc_hashmap_t *map);
 
 /* Entry count */
-size_t dsc_hashmap_count(const dsc_hashmap_t *map);
+UINT32 dsc_hashmap_count(const dsc_hashmap_t *map);
 
 #endif /* DSC_HASHMAP_H */

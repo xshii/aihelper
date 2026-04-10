@@ -14,7 +14,7 @@
  * Respects opts->array_max_elems for truncation.
  * Falls back to hex dump for char/uint8 arrays.
  * Returns DSC_OK on success, negative error code on failure. */
-int dsc_format_array(const void *data, size_t data_len,
+int dsc_format_array(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts,
                      int depth, dsc_strbuf_t *out);
 

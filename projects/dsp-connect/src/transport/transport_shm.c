@@ -21,8 +21,8 @@
 /* Optional doorbell mechanism for synchronization.
  * The first page of the shared memory region is reserved for control:
  *
- *   offset 0x00: cmd_doorbell  (uint32_t) — host writes 1 to signal command ready
- *   offset 0x04: rsp_doorbell  (uint32_t) — target writes 1 to signal response ready
+ *   offset 0x00: cmd_doorbell  (UINT32) — host writes 1 to signal command ready
+ *   offset 0x04: rsp_doorbell  (UINT32) — target writes 1 to signal response ready
  *   offset 0x08: cmd_buf       (char[504]) — command string from host
  *   offset 0x200: rsp_buf      (char[512]) — response string from target
  *
@@ -44,10 +44,10 @@
 typedef struct {
     dsc_transport_t base;       /* MUST be first member */
     char            shm_path[256];
-    size_t          shm_size;   /* total mmap size (ctrl + data) */
+    UINT32          shm_size;   /* total mmap size (ctrl + data) */
     int             timeout_ms;
     int             fd;         /* file descriptor for the shm file */
-    uint8_t        *map;        /* mmap base pointer, NULL when not mapped */
+    UINT8        *map;        /* mmap base pointer, NULL when not mapped */
 } shm_transport_t;
 
 static inline shm_transport_t *to_shm(dsc_transport_t *t)
@@ -58,16 +58,16 @@ static inline shm_transport_t *to_shm(dsc_transport_t *t)
 /* ---------- Internal helpers ---------- */
 
 /* Read a volatile uint32 from the mapped region. */
-static inline uint32_t shm_read32(const uint8_t *base, size_t offset)
+static inline UINT32 shm_read32(const UINT8 *base, UINT32 offset)
 {
-    volatile const uint32_t *p = (volatile const uint32_t *)(base + offset);
+    volatile const UINT32 *p = (volatile const UINT32 *)(base + offset);
     return *p;
 }
 
 /* Write a volatile uint32 to the mapped region. */
-static inline void shm_write32(uint8_t *base, size_t offset, uint32_t val)
+static inline void shm_write32(UINT8 *base, UINT32 offset, UINT32 val)
 {
-    volatile uint32_t *p = (volatile uint32_t *)(base + offset);
+    volatile UINT32 *p = (volatile UINT32 *)(base + offset);
     *p = val;
 }
 
@@ -152,15 +152,15 @@ static void shm_tp_close(dsc_transport_t *self)
 
 /* mem_read: direct memcpy from the shared memory data region.
  * addr is treated as an offset into the data region. */
-static int shm_mem_read(dsc_transport_t *self, uint64_t addr,
-                        void *buf, size_t len)
+static int shm_mem_read(dsc_transport_t *self, UINT64 addr,
+                        void *buf, UINT32 len)
 {
     shm_transport_t *st = to_shm(self);
     if (!st->map) {
         return DSC_ERR_TRANSPORT_IO;
     }
 
-    size_t data_size = st->shm_size - SHM_DATA_OFFSET;
+    UINT32 data_size = st->shm_size - SHM_DATA_OFFSET;
     if (addr + len > data_size) {
         DSC_LOG_ERROR("shm read out of bounds: offset 0x%llx + %zu > %zu",
                       (unsigned long long)addr, len, data_size);
@@ -172,15 +172,15 @@ static int shm_mem_read(dsc_transport_t *self, uint64_t addr,
 }
 
 /* mem_write: direct memcpy into the shared memory data region. */
-static int shm_mem_write(dsc_transport_t *self, uint64_t addr,
-                         const void *buf, size_t len)
+static int shm_mem_write(dsc_transport_t *self, UINT64 addr,
+                         const void *buf, UINT32 len)
 {
     shm_transport_t *st = to_shm(self);
     if (!st->map) {
         return DSC_ERR_TRANSPORT_IO;
     }
 
-    size_t data_size = st->shm_size - SHM_DATA_OFFSET;
+    UINT32 data_size = st->shm_size - SHM_DATA_OFFSET;
     if (addr + len > data_size) {
         DSC_LOG_ERROR("shm write out of bounds: offset 0x%llx + %zu > %zu",
                       (unsigned long long)addr, len, data_size);
@@ -193,7 +193,7 @@ static int shm_mem_write(dsc_transport_t *self, uint64_t addr,
 
 /* exec_cmd: write command to shared buffer, ring doorbell, wait for response. */
 static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
-                        char *resp, size_t resp_len)
+                        char *resp, UINT32 resp_len)
 {
     shm_transport_t *st = to_shm(self);
     if (!st->map) {
@@ -201,7 +201,7 @@ static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
     }
 
     /* Write command string into the command buffer */
-    size_t cmd_len = strlen(cmd);
+    UINT32 cmd_len = strlen(cmd);
     if (cmd_len >= SHM_CMD_BUF_SIZE) {
         DSC_LOG_ERROR("command too long for shm buffer: %zu >= %d",
                       cmd_len, SHM_CMD_BUF_SIZE);
@@ -217,7 +217,7 @@ static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
 
     /* Copy response */
     const char *rsp_src = (const char *)(st->map + SHM_OFF_RSP_BUF);
-    size_t copy_len = strlen(rsp_src);
+    UINT32 copy_len = strlen(rsp_src);
     if (copy_len >= resp_len) {
         copy_len = resp_len - 1;
     }

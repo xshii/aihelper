@@ -38,13 +38,13 @@ int dsc_cmdline_wait_readable(int fd, int timeout_ms)
 /* ------------------------------------------------------------------ */
 /* send_all: 通过 io_send 回调重试发送直到全部写出                       */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, size_t len)
+int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, UINT32 len)
 {
     const char *p = (const char *)buf;
-    size_t remaining = len;
+    UINT32 remaining = len;
 
     while (remaining > 0) {
-        ssize_t n = ctx->io_send(ctx->fd, p, remaining);
+        INT32 n = ctx->io_send(ctx->fd, p, remaining);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -53,7 +53,7 @@ int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, size_t len)
             return DSC_ERR_TRANSPORT_IO;
         }
         p += n;
-        remaining -= (size_t)n;
+        remaining -= (UINT32)n;
     }
     return DSC_OK;
 }
@@ -61,9 +61,9 @@ int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, size_t len)
 /* ------------------------------------------------------------------ */
 /* recv_line: 逐字节读取直到 \n，去除 \r\n                              */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, size_t buf_len)
+int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, UINT32 buf_len)
 {
-    size_t pos = 0;
+    UINT32 pos = 0;
 
     while (pos < buf_len - 1) {
         int ready = dsc_cmdline_wait_readable(ctx->fd, ctx->timeout_ms);
@@ -75,7 +75,7 @@ int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, size_t buf_len)
         }
 
         char ch;
-        ssize_t n = ctx->io_recv(ctx->fd, &ch);
+        INT32 n = ctx->io_recv(ctx->fd, &ch);
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -102,14 +102,14 @@ int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, size_t buf_len)
 /* exec: 发命令(\r\n) + 收一行响应                                     */
 /* ------------------------------------------------------------------ */
 int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
-                     char *resp, size_t resp_len)
+                     char *resp, UINT32 resp_len)
 {
     char line[1024];
     int n = snprintf(line, sizeof(line), "%s\r\n", cmd);
-    if (n < 0 || (size_t)n >= sizeof(line)) {
+    if (n < 0 || (UINT32)n >= sizeof(line)) {
         return DSC_ERR_INVALID_ARG;
     }
-    DSC_TRY(dsc_cmdline_send_all(ctx, line, (size_t)n));
+    DSC_TRY(dsc_cmdline_send_all(ctx, line, (UINT32)n));
 
     int rc = dsc_cmdline_recv_line(ctx, resp, resp_len);
     if (rc < 0) {
@@ -121,7 +121,7 @@ int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
 /* ------------------------------------------------------------------ */
 /* 内部: 解析 "ADDR: HHHHHHHH HHHHHHHH ..." 格式的 hex 响应            */
 /* ------------------------------------------------------------------ */
-static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
+static int parse_hex_response(const char *resp, UINT8 *out, UINT32 len)
 {
     const char *data_start = strchr(resp, ':');
     if (!data_start) {
@@ -130,7 +130,7 @@ static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
     }
     data_start++;
 
-    size_t written = 0;
+    UINT32 written = 0;
     const char *p = data_start;
 
     while (*p && written < len) {
@@ -150,7 +150,7 @@ static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
 
         /* 按大端顺序存储（打印顺序 = MSB first） */
         for (int i = 3; i >= 0 && written < len; i--) {
-            out[written++] = (uint8_t)(word >> (i * 8));
+            out[written++] = (UINT8)(word >> (i * 8));
         }
     }
     return DSC_OK;
@@ -159,8 +159,8 @@ static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
 /* ------------------------------------------------------------------ */
 /* mem_read: 发 "md <addr> <len>"，解析 hex 响应                       */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, uint64_t addr,
-                         void *buf, size_t len)
+int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+                         void *buf, UINT32 len)
 {
     if (ctx->fd < 0) {
         return DSC_ERR_TRANSPORT_IO;
@@ -172,17 +172,17 @@ int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, uint64_t addr,
 
     char resp[4096];
     DSC_TRY(dsc_cmdline_exec(ctx, cmd, resp, sizeof(resp)));
-    return parse_hex_response(resp, (uint8_t *)buf, len);
+    return parse_hex_response(resp, (UINT8 *)buf, len);
 }
 
 /* ------------------------------------------------------------------ */
 /* 内部: 把字节打包为 32-bit 大端 word                                  */
 /* ------------------------------------------------------------------ */
-static uint32_t pack_word_be(const uint8_t *src, size_t chunk)
+static UINT32 pack_word_be(const UINT8 *src, UINT32 chunk)
 {
-    uint32_t word = 0;
-    for (size_t i = 0; i < chunk; i++) {
-        word |= (uint32_t)src[i] << ((3 - i) * 8);
+    UINT32 word = 0;
+    for (UINT32 i = 0; i < chunk; i++) {
+        word |= (UINT32)src[i] << ((3 - i) * 8);
     }
     return word;
 }
@@ -190,19 +190,19 @@ static uint32_t pack_word_be(const uint8_t *src, size_t chunk)
 /* ------------------------------------------------------------------ */
 /* mem_write: 逐 word 发 "mw <addr> <value>"                          */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, uint64_t addr,
-                          const void *buf, size_t len)
+int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+                          const void *buf, UINT32 len)
 {
     if (ctx->fd < 0) {
         return DSC_ERR_TRANSPORT_IO;
     }
 
-    const uint8_t *src = (const uint8_t *)buf;
-    size_t offset = 0;
+    const UINT8 *src = (const UINT8 *)buf;
+    UINT32 offset = 0;
 
     while (offset < len) {
-        size_t chunk = (len - offset < 4) ? (len - offset) : 4;
-        uint32_t word = pack_word_be(src + offset, chunk);
+        UINT32 chunk = (len - offset < 4) ? (len - offset) : 4;
+        UINT32 word = pack_word_be(src + offset, chunk);
 
         char cmd[128];
         snprintf(cmd, sizeof(cmd), "mw 0x%llx 0x%08x",

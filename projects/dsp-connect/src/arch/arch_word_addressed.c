@@ -46,13 +46,13 @@ static int default_shift_for_word_bytes(int word_bytes)
 
 /* --- vtable implementations --- */
 
-static int word_logical_to_physical(const dsc_arch_t *self, uint64_t logical,
-                                    uint64_t *physical)
+static int word_logical_to_physical(const dsc_arch_t *self, UINT64 logical,
+                                    UINT64 *physical)
 {
     const arch_word_t *a = (const arch_word_t *)self;
 
     /* Check alignment: logical address must be on a word boundary */
-    if (logical % (uint64_t)a->word_bytes != 0) {
+    if (logical % (UINT64)a->word_bytes != 0) {
         return DSC_ERR_MEM_ALIGN;
     }
 
@@ -61,25 +61,25 @@ static int word_logical_to_physical(const dsc_arch_t *self, uint64_t logical,
         *physical = logical >> a->addr_shift;
     } else {
         /* Slow path: non-power-of-2 (e.g. 24-bit), use division */
-        *physical = logical / (uint64_t)a->word_bytes;
+        *physical = logical / (UINT64)a->word_bytes;
     }
     return DSC_OK;
 }
 
-static int word_physical_to_logical(const dsc_arch_t *self, uint64_t physical,
-                                    uint64_t *logical)
+static int word_physical_to_logical(const dsc_arch_t *self, UINT64 physical,
+                                    UINT64 *logical)
 {
     const arch_word_t *a = (const arch_word_t *)self;
 
     if (a->addr_shift > 0) {
         *logical = physical << a->addr_shift;
     } else {
-        *logical = physical * (uint64_t)a->word_bytes;
+        *logical = physical * (UINT64)a->word_bytes;
     }
     return DSC_OK;
 }
 
-static void word_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
+static void word_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
 {
     const arch_word_t *a = (const arch_word_t *)self;
 
@@ -90,10 +90,10 @@ static void word_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
 
     /* Swap each word-sized chunk independently.
      * For a 4-byte buffer on a 16-bit word DSP, swap two 2-byte words. */
-    size_t ws = (size_t)a->word_bytes;
-    uint8_t *p = (uint8_t *)buf;
+    UINT32 ws = (UINT32)a->word_bytes;
+    UINT8 *p = (UINT8 *)buf;
 
-    size_t offset = 0;
+    UINT32 offset = 0;
     while (offset + ws <= size) {
         dsc_byte_swap(p + offset, ws);
         offset += ws;
@@ -101,18 +101,18 @@ static void word_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
     /* Remaining bytes (partial word) are left as-is */
 }
 
-static size_t word_min_access_size(const dsc_arch_t *self)
+static UINT32 word_min_access_size(const dsc_arch_t *self)
 {
     const arch_word_t *a = (const arch_word_t *)self;
     /* Minimum access = one full word, because sub-word byte access
      * is not directly supported on word-addressed architectures */
-    return (size_t)a->word_bytes;
+    return (UINT32)a->word_bytes;
 }
 
-static size_t word_word_size(const dsc_arch_t *self)
+static UINT32 word_word_size(const dsc_arch_t *self)
 {
     const arch_word_t *a = (const arch_word_t *)self;
-    return (size_t)a->word_bytes;
+    return (UINT32)a->word_bytes;
 }
 
 static void word_destroy(dsc_arch_t *self)
@@ -151,7 +151,7 @@ static dsc_arch_t *word_create_with(int word_bytes, int is_big_endian,
         a->addr_shift = default_shift_for_word_bytes(word_bytes);
     }
 
-    size_t len = strlen(name);
+    UINT32 len = strlen(name);
     if (len >= sizeof(a->base.name)) {
         len = sizeof(a->base.name) - 1;
     }

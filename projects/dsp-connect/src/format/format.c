@@ -35,7 +35,7 @@ dsc_format_opts_t dsc_format_opts_default(void)
 /* Internal: format with depth tracking                                */
 /* Every sub-formatter that recurses calls this, not dsc_format().     */
 /* ------------------------------------------------------------------ */
-int dsc_format_value(const void *data, size_t data_len,
+int dsc_format_value(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts,
                      int depth, dsc_strbuf_t *out)
 {
@@ -107,7 +107,7 @@ int dsc_format_value(const void *data, size_t data_len,
 /* ------------------------------------------------------------------ */
 /* Public: main entry point                                            */
 /* ------------------------------------------------------------------ */
-int dsc_format(const void *data, size_t data_len,
+int dsc_format(const void *data, UINT32 data_len,
                const dsc_type_t *type, const dsc_format_opts_t *opts,
                dsc_strbuf_t *out)
 {
@@ -124,7 +124,7 @@ int dsc_format(const void *data, size_t data_len,
 /* ------------------------------------------------------------------ */
 /* Public: convenience — format to newly allocated string              */
 /* ------------------------------------------------------------------ */
-char *dsc_format_str(const void *data, size_t data_len,
+char *dsc_format_str(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts)
 {
     dsc_strbuf_t sb;
@@ -140,7 +140,7 @@ char *dsc_format_str(const void *data, size_t data_len,
     const char *cstr = dsc_strbuf_cstr(&sb);
     char *result = NULL;
     if (cstr) {
-        size_t len = sb.len;
+        UINT32 len = sb.len;
         result = malloc(len + 1);
         if (result) {
             memcpy(result, cstr, len + 1);

@@ -12,21 +12,21 @@
 /* Format a base (primitive) type value.
  * type->kind must be DSC_TYPE_BASE.
  * Returns DSC_OK on success, negative error code on failure. */
-int dsc_format_primitive(const void *data, size_t data_len,
+int dsc_format_primitive(const void *data, UINT32 data_len,
                          const dsc_type_t *type, const dsc_format_opts_t *opts,
                          dsc_strbuf_t *out);
 
 /* Format a pointer value.
  * type->kind must be DSC_TYPE_POINTER.
  * Returns DSC_OK on success, negative error code on failure. */
-int dsc_format_pointer(const void *data, size_t data_len,
+int dsc_format_pointer(const void *data, UINT32 data_len,
                        const dsc_type_t *type, const dsc_format_opts_t *opts,
                        dsc_strbuf_t *out);
 
 /* Format a bitfield value.
  * type->kind must be DSC_TYPE_BITFIELD.
  * Returns DSC_OK on success, negative error code on failure. */
-int dsc_format_bitfield(const void *data, size_t data_len,
+int dsc_format_bitfield(const void *data, UINT32 data_len,
                         const dsc_type_t *type, const dsc_format_opts_t *opts,
                         dsc_strbuf_t *out);
 

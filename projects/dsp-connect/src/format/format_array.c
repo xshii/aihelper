@@ -42,17 +42,17 @@ static int is_byte_type(const dsc_type_t *elem_type)
 /* Helpers: hex dump for byte arrays                                   */
 /* Format: "48 65 6C 6C 6F 00"  |Hello.|                              */
 /* ------------------------------------------------------------------ */
-static void format_hex_dump(const uint8_t *bytes, size_t count,
-                            size_t max_elems, dsc_strbuf_t *out)
+static void format_hex_dump(const UINT8 *bytes, UINT32 count,
+                            UINT32 max_elems, dsc_strbuf_t *out)
 {
-    size_t show = count;
+    UINT32 show = count;
     if (max_elems > 0 && show > max_elems) {
         show = max_elems;
     }
 
     /* Hex bytes */
     dsc_strbuf_append(out, "\"");
-    for (size_t i = 0; i < show; i++) {
+    for (UINT32 i = 0; i < show; i++) {
         if (i > 0) {
             dsc_strbuf_append(out, " ");
         }
@@ -62,7 +62,7 @@ static void format_hex_dump(const uint8_t *bytes, size_t count,
 
     /* ASCII sidebar */
     dsc_strbuf_append(out, "  |");
-    for (size_t i = 0; i < show; i++) {
+    for (UINT32 i = 0; i < show; i++) {
         char c = (char)bytes[i];
         if (c >= 0x20 && c < 0x7F) {
             dsc_strbuf_appendf(out, "%c", c);
@@ -82,15 +82,15 @@ static void format_hex_dump(const uint8_t *bytes, size_t count,
 /* Helpers: compute total element count from dimensions                 */
 /* Multidimensional arrays: total = dim[0].count * dim[1].count * ...  */
 /* ------------------------------------------------------------------ */
-static size_t compute_total_elements(const dsc_array_dim_t *dims,
-                                     size_t dim_count)
+static UINT32 compute_total_elements(const dsc_array_dim_t *dims,
+                                     UINT32 dim_count)
 {
     if (!dims || dim_count == 0) {
         return 0;
     }
 
-    size_t total = 1;
-    for (size_t i = 0; i < dim_count; i++) {
+    UINT32 total = 1;
+    for (UINT32 i = 0; i < dim_count; i++) {
         if (dims[i].count == 0) {
             return 0; /* flexible array */
         }
@@ -102,7 +102,7 @@ static size_t compute_total_elements(const dsc_array_dim_t *dims,
 /* ------------------------------------------------------------------ */
 /* Public: format an array value                                       */
 /* ------------------------------------------------------------------ */
-int dsc_format_array(const void *data, size_t data_len,
+int dsc_format_array(const void *data, UINT32 data_len,
                      const dsc_type_t *type, const dsc_format_opts_t *opts,
                      int depth, dsc_strbuf_t *out)
 {
@@ -117,36 +117,36 @@ int dsc_format_array(const void *data, size_t data_len,
     }
 
     /* Compute element count and size */
-    size_t total_elems = compute_total_elements(type->u.array.dims,
+    UINT32 total_elems = compute_total_elements(type->u.array.dims,
                                                 type->u.array.dim_count);
     if (total_elems == 0) {
         dsc_strbuf_append(out, "[]");
         return DSC_OK;
     }
 
-    size_t elem_size = dsc_type_size(elem_type);
+    UINT32 elem_size = dsc_type_size(elem_type);
     if (elem_size == 0) {
         dsc_strbuf_append(out, "<array of zero-size elements>");
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
     /* Clamp to available data */
-    size_t avail_elems = data_len / elem_size;
+    UINT32 avail_elems = data_len / elem_size;
     if (avail_elems < total_elems) {
         total_elems = avail_elems;
     }
 
     /* --- Special case: byte arrays get hex dump --- */
     if (is_byte_type(elem_type)) {
-        format_hex_dump((const uint8_t *)data, total_elems,
-                        (size_t)opts->array_max_elems, out);
+        format_hex_dump((const UINT8 *)data, total_elems,
+                        (UINT32)opts->array_max_elems, out);
         return DSC_OK;
     }
 
     /* --- General case: element-by-element display --- */
-    size_t show_elems = total_elems;
-    if (opts->array_max_elems > 0 && show_elems > (size_t)opts->array_max_elems) {
-        show_elems = (size_t)opts->array_max_elems;
+    UINT32 show_elems = total_elems;
+    if (opts->array_max_elems > 0 && show_elems > (UINT32)opts->array_max_elems) {
+        show_elems = (UINT32)opts->array_max_elems;
     }
 
     int indent_w = opts->indent_width > 0 ? opts->indent_width : 2;
@@ -160,13 +160,13 @@ int dsc_format_array(const void *data, size_t data_len,
         /* Single-line: [0] = 1, [1] = 2, [2] = 3 */
         dsc_strbuf_append(out, "{ ");
 
-        for (size_t i = 0; i < show_elems; i++) {
+        for (UINT32 i = 0; i < show_elems; i++) {
             if (i > 0) {
                 dsc_strbuf_append(out, ", ");
             }
 
-            const uint8_t *elem_data = (const uint8_t *)data + (i * elem_size);
-            size_t elem_data_len = data_len - (i * elem_size);
+            const UINT8 *elem_data = (const UINT8 *)data + (i * elem_size);
+            UINT32 elem_data_len = data_len - (i * elem_size);
 
             dsc_strbuf_appendf(out, "[%zu] = ", i);
 
@@ -187,9 +187,9 @@ int dsc_format_array(const void *data, size_t data_len,
         /* Multi-line display */
         dsc_strbuf_append(out, "{\n");
 
-        for (size_t i = 0; i < show_elems; i++) {
-            const uint8_t *elem_data = (const uint8_t *)data + (i * elem_size);
-            size_t elem_data_len = data_len - (i * elem_size);
+        for (UINT32 i = 0; i < show_elems; i++) {
+            const UINT8 *elem_data = (const UINT8 *)data + (i * elem_size);
+            UINT32 elem_data_len = data_len - (i * elem_size);
 
             dsc_strbuf_indent(out, inner_depth * indent_w / 2);
             dsc_strbuf_appendf(out, "[%zu] = ", i);

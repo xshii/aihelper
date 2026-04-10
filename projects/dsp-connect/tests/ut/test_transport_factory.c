@@ -23,22 +23,22 @@ static int dummy_open(dsc_transport_t *self)
 
 static void dummy_close(dsc_transport_t *self) { (void)self; }
 
-static int dummy_mem_read(dsc_transport_t *self, uint64_t addr,
-                          void *buf, size_t len)
+static int dummy_mem_read(dsc_transport_t *self, UINT64 addr,
+                          void *buf, UINT32 len)
 {
     (void)self; (void)addr; (void)buf; (void)len;
     return DSC_OK;
 }
 
-static int dummy_mem_write(dsc_transport_t *self, uint64_t addr,
-                           const void *buf, size_t len)
+static int dummy_mem_write(dsc_transport_t *self, UINT64 addr,
+                           const void *buf, UINT32 len)
 {
     (void)self; (void)addr; (void)buf; (void)len;
     return DSC_OK;
 }
 
 static int dummy_exec_cmd(dsc_transport_t *self, const char *cmd,
-                          char *resp, size_t resp_len)
+                          char *resp, UINT32 resp_len)
 {
     (void)self; (void)cmd; (void)resp; (void)resp_len;
     return DSC_OK;

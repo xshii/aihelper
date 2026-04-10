@@ -165,7 +165,7 @@ void strbuf_reset_keeps_capacity(void)
     dsc_strbuf_init(&sb, 64);
 
     dsc_strbuf_append(&sb, "some data");
-    size_t cap_before = sb.cap;
+    UINT32 cap_before = sb.cap;
 
     dsc_strbuf_reset(&sb);
     TEST_ASSERT_EQUAL_size_t(0, sb.len);

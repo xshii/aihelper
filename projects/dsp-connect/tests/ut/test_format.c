@@ -111,7 +111,7 @@ static dsc_type_t *make_uint32_array_type(void)
 void format_uint32_decimal(void)
 {
     dsc_type_t *type = make_uint32_type();
-    uint32_t val = 42;
+    UINT32 val = 42;
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -127,7 +127,7 @@ void format_uint32_decimal(void)
 void format_uint32_hex(void)
 {
     dsc_type_t *type = make_uint32_type();
-    uint32_t val = 42;
+    UINT32 val = 42;
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -144,7 +144,7 @@ void format_uint32_hex(void)
 void format_int16_negative(void)
 {
     dsc_type_t *type = make_int16_type();
-    int16_t val = -100;
+    INT16 val = -100;
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -164,7 +164,7 @@ void format_int16_negative(void)
 void format_enum_known_value(void)
 {
     dsc_type_t *type = make_state_enum_type();
-    int32_t val = 0;  /* STATE_IDLE */
+    INT32 val = 0;  /* STATE_IDLE */
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -180,7 +180,7 @@ void format_enum_known_value(void)
 void format_enum_second_value(void)
 {
     dsc_type_t *type = make_state_enum_type();
-    int32_t val = 1;  /* STATE_RUN */
+    INT32 val = 1;  /* STATE_RUN */
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -202,8 +202,8 @@ void format_struct_multiline(void)
     dsc_type_t *type = make_struct_type();
 
     /* data: a=10, b=20 */
-    uint8_t data[8];
-    uint32_t a_val = 10, b_val = 20;
+    UINT8 data[8];
+    UINT32 a_val = 10, b_val = 20;
     memcpy(data + 0, &a_val, 4);
     memcpy(data + 4, &b_val, 4);
 
@@ -233,7 +233,7 @@ void format_array_elements(void)
 {
     dsc_type_t *type = make_uint32_array_type();
 
-    uint32_t data[3] = {100, 200, 300};
+    UINT32 data[3] = {100, 200, 300};
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 256);
 
@@ -258,7 +258,7 @@ void format_array_elements(void)
 void format_null_opts_uses_defaults(void)
 {
     dsc_type_t *type = make_uint32_type();
-    uint32_t val = 7;
+    UINT32 val = 7;
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
@@ -277,7 +277,7 @@ void format_null_opts_uses_defaults(void)
 void format_str_returns_allocated_string(void)
 {
     dsc_type_t *type = make_uint32_type();
-    uint32_t val = 99;
+    UINT32 val = 99;
 
     char *result = dsc_format_str(&val, sizeof(val), type, NULL);
     TEST_ASSERT_NOT_NULL(result);

@@ -1,5 +1,5 @@
 /* PURPOSE: Mock transport that reads/writes from a local memory buffer
- * PATTERN: vtable implementation backed by uint8_t array, records all calls
+ * PATTERN: vtable implementation backed by UINT8 array, records all calls
  * FOR: Unit tests that need transport without real hardware */
 
 #ifndef MOCK_TRANSPORT_H
@@ -15,8 +15,8 @@
 /* Call record for verifying transport interactions */
 typedef struct {
     int      call_count;
-    uint64_t last_addr;
-    size_t   last_len;
+    UINT64 last_addr;
+    UINT32   last_len;
     int      open_count;
     int      close_count;
 } mock_transport_record_t;
@@ -29,14 +29,14 @@ dsc_transport_t *mock_transport_create(void);
 void mock_transport_destroy(dsc_transport_t *t);
 
 /* Get pointer to the internal memory buffer for setup/verification. */
-uint8_t *mock_transport_get_memory(dsc_transport_t *t);
+UINT8 *mock_transport_get_memory(dsc_transport_t *t);
 
 /* Get the call record for verification after test. */
 const mock_transport_record_t *mock_transport_get_record(dsc_transport_t *t);
 
 /* Pre-fill memory at a given offset with data. */
 void mock_transport_set_memory(dsc_transport_t *t,
-                               uint64_t addr, const void *data, size_t len);
+                               UINT64 addr, const void *data, UINT32 len);
 
 /* Reset call records and optionally clear memory. */
 void mock_transport_reset(dsc_transport_t *t, int clear_memory);

@@ -7,7 +7,7 @@
 
 #include "hashmap.h"
 
-void dsc_hashmap_init(dsc_hashmap_t *map, size_t initial_cap)
+void dsc_hashmap_init(dsc_hashmap_t *map, UINT32 initial_cap)
 {
     (void)initial_cap; /* uthash 自动管理容量 */
     map->head = NULL;
@@ -84,7 +84,7 @@ void dsc_hashmap_clear(dsc_hashmap_t *map)
     map->head = NULL;
 }
 
-size_t dsc_hashmap_count(const dsc_hashmap_t *map)
+UINT32 dsc_hashmap_count(const dsc_hashmap_t *map)
 {
-    return (size_t)HASH_COUNT(((dsc_hashmap_t *)map)->head);
+    return (UINT32)HASH_COUNT(((dsc_hashmap_t *)map)->head);
 }

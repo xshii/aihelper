@@ -42,7 +42,7 @@ int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab);
 
 /* Lookup a type by its DIE offset. Returns NULL if not found.
  * The returned pointer is owned by `dw` — do NOT free it. */
-const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, uint64_t die_offset);
+const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, UINT64 die_offset);
 
 /* ------------------------------------------------------------------ */
 /* ELF path accessor                                                  */

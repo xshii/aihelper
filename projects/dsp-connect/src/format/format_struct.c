@@ -4,7 +4,7 @@
  *
  * Output format example:
  *   {
- *     .field1 = 42,          // +0x00 uint32_t
+ *     .field1 = 42,          // +0x00 UINT32
  *     .field2 = "hello",     // +0x04 char[8]
  *     .nested = {            // +0x0C config_t
  *       .x = 1,
@@ -54,7 +54,7 @@ static void emit_field_annotation(dsc_strbuf_t *out,
 /* ------------------------------------------------------------------ */
 /* Public: format a struct or union                                    */
 /* ------------------------------------------------------------------ */
-int dsc_format_struct(const void *data, size_t data_len,
+int dsc_format_struct(const void *data, UINT32 data_len,
                       const dsc_type_t *type, const dsc_format_opts_t *opts,
                       int depth, dsc_strbuf_t *out)
 {
@@ -63,7 +63,7 @@ int dsc_format_struct(const void *data, size_t data_len,
     }
 
     const dsc_struct_field_t *fields = type->u.composite.fields;
-    size_t field_count = type->u.composite.field_count;
+    UINT32 field_count = type->u.composite.field_count;
 
     /* Handle empty struct/union */
     if (field_count == 0 || !fields) {
@@ -78,7 +78,7 @@ int dsc_format_struct(const void *data, size_t data_len,
     int inner_depth = depth + 1;
     int rc = DSC_OK;
 
-    for (size_t i = 0; i < field_count; i++) {
+    for (UINT32 i = 0; i < field_count; i++) {
         const dsc_struct_field_t *field = &fields[i];
 
         /* Indent */
@@ -92,8 +92,8 @@ int dsc_format_struct(const void *data, size_t data_len,
         }
 
         /* Compute data pointer and remaining length for this field */
-        const uint8_t *field_data = (const uint8_t *)data + field->byte_offset;
-        size_t field_data_len = 0;
+        const UINT8 *field_data = (const UINT8 *)data + field->byte_offset;
+        UINT32 field_data_len = 0;
 
         if (field->byte_offset < data_len) {
             field_data_len = data_len - field->byte_offset;

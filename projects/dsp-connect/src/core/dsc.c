@@ -283,7 +283,7 @@ static int resolve_var(dsc_context_t *ctx, const char *var_path,
 /* Internal: read raw bytes for a resolved variable                   */
 /* ------------------------------------------------------------------ */
 static int read_var_bytes(dsc_context_t *ctx, const dsc_resolved_t *resolved,
-                          void *buf, size_t buf_len)
+                          void *buf, UINT32 buf_len)
 {
     if (resolved->size > buf_len) {
         set_error(ctx, "variable too large: %zu bytes", resolved->size);
@@ -302,17 +302,17 @@ static int read_var_bytes(dsc_context_t *ctx, const dsc_resolved_t *resolved,
 /* Internal: format resolved variable into output buffer              */
 /* ------------------------------------------------------------------ */
 static int format_var(dsc_context_t *ctx,
-                      const void *data, size_t data_len,
+                      const void *data, UINT32 data_len,
                       const dsc_type_t *type,
                       const dsc_format_opts_t *opts,
-                      char *out, size_t out_len)
+                      char *out, UINT32 out_len)
 {
     char *formatted = dsc_format_str(data, data_len, type, opts);
     if (!formatted) {
         set_error(ctx, "format failed");
         return DSC_ERR_NOMEM;
     }
-    size_t needed = strlen(formatted);
+    UINT32 needed = strlen(formatted);
     if (needed >= out_len) {
         set_error(ctx, "output buffer too small: need %zu, have %zu",
                   needed + 1, out_len);
@@ -332,13 +332,13 @@ static int format_var(dsc_context_t *ctx,
 /* ------------------------------------------------------------------ */
 static int read_var_core(dsc_context_t *ctx, const char *var_path,
                          const dsc_format_opts_t *opts,
-                         char *out, size_t out_len)
+                         char *out, UINT32 out_len)
 {
     dsc_resolved_t resolved;
     DSC_TRY(resolve_var(ctx, var_path, &resolved));
 
     /* Use stack buffer for small vars, heap for large */
-    uint8_t stack_buf[DSC_VAR_STACK_BUF];
+    UINT8 stack_buf[DSC_VAR_STACK_BUF];
     void *data = stack_buf;
     if (resolved.size > DSC_VAR_STACK_BUF) {
         data = malloc(resolved.size);
@@ -364,7 +364,7 @@ static int read_var_core(dsc_context_t *ctx, const char *var_path,
 /* Public: dsc_read_var (Layer 0 — zero config)                       */
 /* ------------------------------------------------------------------ */
 int dsc_read_var(dsc_context_t *ctx, const char *var_path,
-                 char *out, size_t out_len)
+                 char *out, UINT32 out_len)
 {
     if (!ctx || !var_path || !out || out_len == 0) {
         return DSC_ERR_INVALID_ARG;
@@ -377,7 +377,7 @@ int dsc_read_var(dsc_context_t *ctx, const char *var_path,
 /* ------------------------------------------------------------------ */
 int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
                     const dsc_format_opts_t *opts,
-                    char *out, size_t out_len)
+                    char *out, UINT32 out_len)
 {
     if (!ctx || !var_path || !out || out_len == 0) {
         return DSC_ERR_INVALID_ARG;
@@ -388,8 +388,8 @@ int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
 /* ------------------------------------------------------------------ */
 /* Public: dsc_read_mem                                               */
 /* ------------------------------------------------------------------ */
-int dsc_read_mem(dsc_context_t *ctx, uint64_t addr,
-                 void *buf, size_t len)
+int dsc_read_mem(dsc_context_t *ctx, UINT64 addr,
+                 void *buf, UINT32 len)
 {
     if (!ctx || !buf || len == 0) {
         return DSC_ERR_INVALID_ARG;
@@ -405,8 +405,8 @@ int dsc_read_mem(dsc_context_t *ctx, uint64_t addr,
 /* ------------------------------------------------------------------ */
 /* Public: dsc_write_mem                                              */
 /* ------------------------------------------------------------------ */
-int dsc_write_mem(dsc_context_t *ctx, uint64_t addr,
-                  const void *buf, size_t len)
+int dsc_write_mem(dsc_context_t *ctx, UINT64 addr,
+                  const void *buf, UINT32 len)
 {
     if (!ctx || !buf || len == 0) {
         return DSC_ERR_INVALID_ARG;

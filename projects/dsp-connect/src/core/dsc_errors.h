@@ -5,6 +5,8 @@
 #ifndef DSC_ERRORS_H
 #define DSC_ERRORS_H
 
+#include "../util/types.h"
+
 /* X-macro: 每行 = X(枚举名, 错误码, 描述字符串)
  * 添加新错误只需加一行，枚举和字符串表自动同步 */
 #define DSC_ERROR_TABLE(X) \

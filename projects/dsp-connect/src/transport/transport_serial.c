@@ -18,12 +18,12 @@
 
 /* ---------- IO 回调：POSIX read/write ---------- */
 
-static ssize_t fd_send(int fd, const void *buf, size_t len)
+static INT32 fd_send(int fd, const void *buf, UINT32 len)
 {
     return write(fd, buf, len);
 }
 
-static ssize_t fd_recv(int fd, char *ch)
+static INT32 fd_recv(int fd, char *ch)
 {
     return read(fd, ch, 1);
 }
@@ -149,20 +149,20 @@ static void serial_close(dsc_transport_t *self)
 
 /* ---------- vtable: 协议操作委托给 cmdline ---------- */
 
-static int serial_mem_read(dsc_transport_t *self, uint64_t addr,
-                           void *buf, size_t len)
+static int serial_mem_read(dsc_transport_t *self, UINT64 addr,
+                           void *buf, UINT32 len)
 {
     return dsc_cmdline_mem_read(&to_serial(self)->cmd, addr, buf, len);
 }
 
-static int serial_mem_write(dsc_transport_t *self, uint64_t addr,
-                            const void *buf, size_t len)
+static int serial_mem_write(dsc_transport_t *self, UINT64 addr,
+                            const void *buf, UINT32 len)
 {
     return dsc_cmdline_mem_write(&to_serial(self)->cmd, addr, buf, len);
 }
 
 static int serial_exec_cmd(dsc_transport_t *self, const char *cmd,
-                           char *resp, size_t resp_len)
+                           char *resp, UINT32 resp_len)
 {
     return dsc_cmdline_exec(&to_serial(self)->cmd, cmd, resp, resp_len);
 }

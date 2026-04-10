@@ -66,7 +66,7 @@ const dsc_type_t *dsc_type_resolve_typedef(const dsc_type_t *type)
 /* dsc_type_size — byte size, resolving through typedefs               */
 /* ------------------------------------------------------------------ */
 
-size_t dsc_type_size(const dsc_type_t *type)
+UINT32 dsc_type_size(const dsc_type_t *type)
 {
     const dsc_type_t *resolved = dsc_type_resolve_typedef(type);
     if (!resolved) {
@@ -99,14 +99,14 @@ void dsc_type_free(dsc_type_t *type)
     switch (type->kind) {
     case DSC_TYPE_STRUCT:
     case DSC_TYPE_UNION:
-        for (size_t i = 0; i < type->u.composite.field_count; i++) {
+        for (UINT32 i = 0; i < type->u.composite.field_count; i++) {
             free_field(&type->u.composite.fields[i]);
         }
         free(type->u.composite.fields);
         break;
 
     case DSC_TYPE_ENUM:
-        for (size_t i = 0; i < type->u.enumeration.value_count; i++) {
+        for (UINT32 i = 0; i < type->u.enumeration.value_count; i++) {
             free(type->u.enumeration.values[i].name);
         }
         free(type->u.enumeration.values);

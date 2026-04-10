@@ -64,11 +64,11 @@ void dsc_frames_free(dsc_frames_t *frames)
 /* ------------------------------------------------------------------ */
 /* Internal: add one FDE                                              */
 /* ------------------------------------------------------------------ */
-static int add_fde(dsc_frames_t *frames, uint64_t pc_start, uint64_t pc_end,
-                   dsc_cfa_rule_kind_t rule, int reg, int64_t offset)
+static int add_fde(dsc_frames_t *frames, UINT64 pc_start, UINT64 pc_end,
+                   dsc_cfa_rule_kind_t rule, int reg, INT64 offset)
 {
     if (frames->count >= frames->cap) {
-        size_t new_cap = (frames->cap == 0) ? INITIAL_CAP : frames->cap * 2;
+        UINT32 new_cap = (frames->cap == 0) ? INITIAL_CAP : frames->cap * 2;
         dsc_frame_entry_t *new_buf = realloc(frames->entries,
                                              new_cap * sizeof(dsc_frame_entry_t));
         if (!new_buf) {
@@ -125,8 +125,8 @@ static int process_one_fde(dsc_frames_t *frames, Dwarf_Fde fde,
 
     /* Default to reg+offset rule — a full implementation would
      * evaluate the CFA instructions per row. */
-    return add_fde(frames, (uint64_t)low_pc,
-                   (uint64_t)(low_pc + func_length),
+    return add_fde(frames, (UINT64)low_pc,
+                   (UINT64)(low_pc + func_length),
                    DSC_CFA_REG_OFFSET, 0, 0);
 }
 
@@ -205,18 +205,18 @@ int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw)
 
 /* Internal: find the FDE that covers `addr` using binary search */
 static const dsc_frame_entry_t *find_fde(const dsc_frames_t *frames,
-                                         uint64_t addr)
+                                         UINT64 addr)
 {
     if (!frames || frames->count == 0) {
         return NULL;
     }
 
     /* Binary search: find the last entry with pc_start <= addr */
-    size_t lo = 0;
-    size_t hi = frames->count;
+    UINT32 lo = 0;
+    UINT32 hi = frames->count;
 
     while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
+        UINT32 mid = lo + (hi - lo) / 2;
         if (frames->entries[mid].pc_start <= addr) {
             lo = mid + 1;
         } else {
@@ -238,7 +238,7 @@ static const dsc_frame_entry_t *find_fde(const dsc_frames_t *frames,
     return fde;
 }
 
-int dsc_frames_unwind(const dsc_frames_t *frames, uint64_t addr,
+int dsc_frames_unwind(const dsc_frames_t *frames, UINT64 addr,
                       dsc_regset_t *regs)
 {
     if (!frames || !regs) {
@@ -256,7 +256,7 @@ int dsc_frames_unwind(const dsc_frames_t *frames, uint64_t addr,
          * This is the most common rule for standard call frames.
          * The return address is at CFA - pointer_size (simplified). */
         if (fde->cfa_reg >= 0 && fde->cfa_reg < DSC_MAX_REGS) {
-            regs->cfa = regs->regs[fde->cfa_reg] + (uint64_t)fde->cfa_offset;
+            regs->cfa = regs->regs[fde->cfa_reg] + (UINT64)fde->cfa_offset;
         }
         /* In a real implementation, we would read the return address from
          * memory at (CFA - ptr_size) and set regs->pc accordingly.
@@ -280,7 +280,7 @@ int dsc_frames_unwind(const dsc_frames_t *frames, uint64_t addr,
     return DSC_OK;
 }
 
-size_t dsc_frames_count(const dsc_frames_t *frames)
+UINT32 dsc_frames_count(const dsc_frames_t *frames)
 {
     return frames ? frames->count : 0;
 }

@@ -14,8 +14,8 @@
 /* 子类实现这两个函数，注入到 cmdline 层：
  *   io_send: 发送 len 字节到 fd，返回实际发送字节数（<0 = 错误）
  *   io_recv: 从 fd 接收 1 字节到 *out_char，返回 1 成功、0 EOF、<0 错误 */
-typedef ssize_t (*dsc_cmdline_send_fn)(int fd, const void *buf, size_t len);
-typedef ssize_t (*dsc_cmdline_recv_fn)(int fd, char *out_char);
+typedef INT32 (*dsc_cmdline_send_fn)(int fd, const void *buf, UINT32 len);
+typedef INT32 (*dsc_cmdline_recv_fn)(int fd, char *out_char);
 
 /* ---------- 命令行传输基类 ---------- */
 
@@ -34,21 +34,21 @@ typedef struct {
 int dsc_cmdline_wait_readable(int fd, int timeout_ms);
 
 /* 重试发送直到全部写出 */
-int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, size_t len);
+int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, UINT32 len);
 
 /* 读一行（到 \n 为止），去除 \r\n */
-int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, size_t buf_len);
+int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, UINT32 buf_len);
 
 /* 发命令 + 收一行响应 */
 int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
-                     char *resp, size_t resp_len);
+                     char *resp, UINT32 resp_len);
 
 /* 标准 "md" 协议读内存 */
-int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, uint64_t addr,
-                         void *buf, size_t len);
+int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+                         void *buf, UINT32 len);
 
 /* 标准 "mw" 协议写内存 */
-int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, uint64_t addr,
-                          const void *buf, size_t len);
+int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+                          const void *buf, UINT32 len);
 
 #endif /* DSC_TRANSPORT_CMDLINE_H */

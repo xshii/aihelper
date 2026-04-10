@@ -23,8 +23,8 @@ struct dsc_dwarf {
 
     /* Type pool: all parsed types owned here */
     dsc_type_t    **types;       /* array of pointers to heap-allocated types */
-    size_t          type_count;
-    size_t          type_cap;
+    UINT32          type_count;
+    UINT32          type_cap;
 
     /* DIE offset → dsc_type_t* index for O(1) lookup */
     dsc_hashmap_t   type_index;
@@ -53,7 +53,7 @@ struct dsc_dwarf {
 static int pool_add_type(dsc_dwarf_t *dw, dsc_type_t *type)
 {
     if (dw->type_count >= dw->type_cap) {
-        size_t new_cap = dw->type_cap * 2;
+        UINT32 new_cap = dw->type_cap * 2;
         dsc_type_t **new_buf = realloc(dw->types, new_cap * sizeof(dsc_type_t *));
         if (!new_buf) {
             return DSC_ERR_NOMEM;
@@ -74,7 +74,7 @@ static int index_type(dsc_dwarf_t *dw, dsc_type_t *type)
 }
 
 /* Allocate and zero-initialize a new type node */
-static dsc_type_t *alloc_type(dsc_type_kind_t kind, uint64_t die_offset)
+static dsc_type_t *alloc_type(dsc_type_kind_t kind, UINT64 die_offset)
 {
     dsc_type_t *t = calloc(1, sizeof(dsc_type_t));
     if (!t) {
@@ -122,7 +122,7 @@ static char *die_get_name(Dwarf_Debug dbg, Dwarf_Die die)
 }
 
 /* Get an unsigned attribute value, or 0 */
-static uint64_t die_get_uint(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half attr)
+static UINT64 die_get_uint(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half attr)
 {
     Dwarf_Attribute at = NULL;
     Dwarf_Unsigned val = 0;
@@ -133,11 +133,11 @@ static uint64_t die_get_uint(Dwarf_Debug dbg, Dwarf_Die die, Dwarf_Half attr)
     }
     dwarf_formudata(at, &val, &err);
     dwarf_dealloc(dbg, at, DW_DLA_ATTR);
-    return (uint64_t)val;
+    return (UINT64)val;
 }
 
 /* Get the DIE offset of a DW_AT_type reference, or 0 */
-static uint64_t die_get_type_ref(Dwarf_Debug dbg, Dwarf_Die die)
+static UINT64 die_get_type_ref(Dwarf_Debug dbg, Dwarf_Die die)
 {
     Dwarf_Attribute at = NULL;
     Dwarf_Off off = 0;
@@ -150,17 +150,17 @@ static uint64_t die_get_type_ref(Dwarf_Debug dbg, Dwarf_Die die)
         off = 0;
     }
     dwarf_dealloc(dbg, at, DW_DLA_ATTR);
-    return (uint64_t)off;
+    return (UINT64)off;
 }
 
 /* Forward declaration for recursive parsing */
 static dsc_type_t *parse_type_die(dsc_dwarf_t *dw, Dwarf_Debug dbg, Dwarf_Die die);
 
 /* Count DW_TAG_member children by iterating siblings */
-static size_t count_member_dies(Dwarf_Debug dbg, Dwarf_Die first_child)
+static UINT32 count_member_dies(Dwarf_Debug dbg, Dwarf_Die first_child)
 {
     Dwarf_Error err = NULL;
-    size_t count = 0;
+    UINT32 count = 0;
     Dwarf_Die cur = first_child;
 
     for (;;) {
@@ -185,11 +185,11 @@ static size_t count_member_dies(Dwarf_Debug dbg, Dwarf_Die first_child)
 static void populate_field(Dwarf_Debug dbg, Dwarf_Die die, dsc_struct_field_t *f)
 {
     f->name        = die_get_name(dbg, die);
-    f->byte_offset = (size_t)die_get_uint(dbg, die, DW_AT_data_member_location);
-    f->bit_offset  = (uint8_t)die_get_uint(dbg, die, DW_AT_bit_offset);
-    f->bit_size    = (uint8_t)die_get_uint(dbg, die, DW_AT_bit_size);
+    f->byte_offset = (UINT32)die_get_uint(dbg, die, DW_AT_data_member_location);
+    f->bit_offset  = (UINT8)die_get_uint(dbg, die, DW_AT_bit_offset);
+    f->bit_size    = (UINT8)die_get_uint(dbg, die, DW_AT_bit_size);
 
-    uint64_t type_off = die_get_type_ref(dbg, die);
+    UINT64 type_off = die_get_type_ref(dbg, die);
     if (type_off) {
         /* Resolve lazily — type may not be parsed yet.
          * Store offset, resolve in a fixup pass. */
@@ -213,7 +213,7 @@ static int parse_struct_fields(dsc_dwarf_t *dw, Dwarf_Debug dbg,
         return DSC_OK; /* no children — empty struct */
     }
 
-    size_t count = count_member_dies(dbg, child);
+    UINT32 count = count_member_dies(dbg, child);
     dwarf_dealloc(dbg, child, DW_DLA_DIE);
     if (count == 0) {
         return DSC_OK;
@@ -230,7 +230,7 @@ static int parse_struct_fields(dsc_dwarf_t *dw, Dwarf_Debug dbg,
         return DSC_OK;
     }
 
-    size_t fi = 0;
+    UINT32 fi = 0;
     Dwarf_Die cur = child;
     for (;;) {
         Dwarf_Half tag;
@@ -275,7 +275,7 @@ static int finalize_type(dsc_dwarf_t *dw, Dwarf_Debug dbg,
                          Dwarf_Die die, dsc_type_t *type)
 {
     type->name      = die_get_name(dbg, die);
-    type->byte_size = (size_t)die_get_uint(dbg, die, DW_AT_byte_size);
+    type->byte_size = (UINT32)die_get_uint(dbg, die, DW_AT_byte_size);
 
     if (pool_add_type(dw, type) < 0 || index_type(dw, type) < 0) {
         dsc_type_free(type);
@@ -340,7 +340,7 @@ static void collect_variable(Dwarf_Debug dbg, Dwarf_Die die, dsc_symtab_t *tab)
         return;
     }
 
-    uint64_t addr = die_get_uint(dbg, die, DW_AT_location);
+    UINT64 addr = die_get_uint(dbg, die, DW_AT_location);
     int ext = (int)die_get_uint(dbg, die, DW_AT_external);
     dsc_symtab_add(tab, name, addr, 0, NULL, ext != 0);
     free(name);
@@ -449,7 +449,7 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
     }
 
     /* Free all owned types */
-    for (size_t i = 0; i < dw->type_count; i++) {
+    for (UINT32 i = 0; i < dw->type_count; i++) {
         dsc_type_free(dw->types[i]);
     }
     free(dw->types);
@@ -487,7 +487,7 @@ int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab)
     return DSC_OK;
 }
 
-const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, uint64_t die_offset)
+const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, UINT64 die_offset)
 {
     if (!dw) {
         return NULL;
@@ -539,7 +539,7 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
         return;
     }
 
-    for (size_t i = 0; i < dw->type_count; i++) {
+    for (UINT32 i = 0; i < dw->type_count; i++) {
         dsc_type_free(dw->types[i]);
     }
     free(dw->types);
@@ -558,7 +558,7 @@ int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab)
     return DSC_OK;
 }
 
-const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, uint64_t die_offset)
+const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, UINT64 die_offset)
 {
     if (!dw) {
         return NULL;

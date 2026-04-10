@@ -29,7 +29,7 @@ void dsc_lines_free(dsc_lines_t *lines)
         return;
     }
 
-    for (size_t i = 0; i < lines->count; i++) {
+    for (UINT32 i = 0; i < lines->count; i++) {
         free(lines->entries[i].file);
     }
     free(lines->entries);
@@ -51,11 +51,11 @@ void dsc_lines_free(dsc_lines_t *lines)
 /* ------------------------------------------------------------------ */
 /* Internal: add one entry                                            */
 /* ------------------------------------------------------------------ */
-static int add_entry(dsc_lines_t *lines, uint64_t addr,
+static int add_entry(dsc_lines_t *lines, UINT64 addr,
                      const char *file, int line, int column)
 {
     if (lines->count >= lines->cap) {
-        size_t new_cap = (lines->cap == 0) ? INITIAL_CAP : lines->cap * 2;
+        UINT32 new_cap = (lines->cap == 0) ? INITIAL_CAP : lines->cap * 2;
         dsc_line_entry_t *new_buf = realloc(lines->entries,
                                             new_cap * sizeof(dsc_line_entry_t));
         if (!new_buf) {
@@ -110,7 +110,7 @@ static int process_line_entry(dsc_lines_t *lines, Dwarf_Debug dbg,
     dwarf_lineoff_b(line_ctx, &colno, err);
     dwarf_linesrc(line_ctx, &src, err);
 
-    int rc = add_entry(lines, (uint64_t)addr, src,
+    int rc = add_entry(lines, (UINT64)addr, src,
                        (int)lineno, (int)colno);
 
     if (src) {
@@ -196,7 +196,7 @@ int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw)
 /* Lookup — binary search for the largest addr <= target              */
 /* ------------------------------------------------------------------ */
 
-int dsc_lines_lookup(const dsc_lines_t *lines, uint64_t addr,
+int dsc_lines_lookup(const dsc_lines_t *lines, UINT64 addr,
                      dsc_line_info_t *out)
 {
     if (!lines || !out || lines->count == 0) {
@@ -204,11 +204,11 @@ int dsc_lines_lookup(const dsc_lines_t *lines, uint64_t addr,
     }
 
     /* Binary search: find the last entry with entry->addr <= addr */
-    size_t lo = 0;
-    size_t hi = lines->count;
+    UINT32 lo = 0;
+    UINT32 hi = lines->count;
 
     while (lo < hi) {
-        size_t mid = lo + (hi - lo) / 2;
+        UINT32 mid = lo + (hi - lo) / 2;
         if (lines->entries[mid].addr <= addr) {
             lo = mid + 1;
         } else {
@@ -229,7 +229,7 @@ int dsc_lines_lookup(const dsc_lines_t *lines, uint64_t addr,
     return DSC_OK;
 }
 
-size_t dsc_lines_count(const dsc_lines_t *lines)
+UINT32 dsc_lines_count(const dsc_lines_t *lines)
 {
     return lines ? lines->count : 0;
 }

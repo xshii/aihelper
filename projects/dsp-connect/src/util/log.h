@@ -5,6 +5,7 @@
 #ifndef DSC_LOG_H
 #define DSC_LOG_H
 
+#include "types.h"
 #include <stdio.h>
 
 /* --- Log levels --- */

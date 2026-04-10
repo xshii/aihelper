@@ -15,7 +15,7 @@
 /* ------------------------------------------------------------------ */
 /* Helpers: format signed integer                                      */
 /* ------------------------------------------------------------------ */
-static void format_signed_int(int64_t val, size_t byte_size,
+static void format_signed_int(INT64 val, UINT32 byte_size,
                               int hex, dsc_strbuf_t *out)
 {
     if (hex) {
@@ -36,7 +36,7 @@ static void format_signed_int(int64_t val, size_t byte_size,
 /* ------------------------------------------------------------------ */
 /* Helpers: format unsigned integer                                    */
 /* ------------------------------------------------------------------ */
-static void format_unsigned_int(uint64_t val, size_t byte_size,
+static void format_unsigned_int(UINT64 val, UINT32 byte_size,
                                 int hex, dsc_strbuf_t *out)
 {
     if (hex) {
@@ -90,7 +90,7 @@ static int detect_qformat(const char *name, int *out_int_bits, int *out_frac_bit
     return 0;
 }
 
-static void format_qformat(int64_t raw, int int_bits, int frac_bits,
+static void format_qformat(INT64 raw, int int_bits, int frac_bits,
                             dsc_strbuf_t *out)
 {
     (void)int_bits; /* int_bits included for completeness */
@@ -104,7 +104,7 @@ static void format_qformat(int64_t raw, int int_bits, int frac_bits,
 /* ------------------------------------------------------------------ */
 /* Helpers: format float                                               */
 /* ------------------------------------------------------------------ */
-static void format_float(const void *data, size_t byte_size, dsc_strbuf_t *out)
+static void format_float(const void *data, UINT32 byte_size, dsc_strbuf_t *out)
 {
     if (byte_size == 4) {
         float f;
@@ -134,9 +134,9 @@ static void format_float(const void *data, size_t byte_size, dsc_strbuf_t *out)
 /* ------------------------------------------------------------------ */
 /* Helpers: format bool                                                */
 /* ------------------------------------------------------------------ */
-static void format_bool(const void *data, size_t byte_size, dsc_strbuf_t *out)
+static void format_bool(const void *data, UINT32 byte_size, dsc_strbuf_t *out)
 {
-    uint64_t val = dsc_read_unsigned(data, byte_size);
+    UINT64 val = dsc_read_unsigned(data, byte_size);
     dsc_strbuf_append(out, val ? "true" : "false");
 }
 
@@ -145,7 +145,7 @@ static void format_bool(const void *data, size_t byte_size, dsc_strbuf_t *out)
 /* ------------------------------------------------------------------ */
 static void format_char(const void *data, dsc_strbuf_t *out)
 {
-    uint8_t c;
+    UINT8 c;
     memcpy(&c, data, 1);
 
     if (c >= 0x20 && c < 0x7F) {
@@ -160,7 +160,7 @@ static void format_char(const void *data, dsc_strbuf_t *out)
 /* ------------------------------------------------------------------ */
 /* Public: format a base (primitive) type                              */
 /* ------------------------------------------------------------------ */
-int dsc_format_primitive(const void *data, size_t data_len,
+int dsc_format_primitive(const void *data, UINT32 data_len,
                          const dsc_type_t *type, const dsc_format_opts_t *opts,
                          dsc_strbuf_t *out)
 {
@@ -168,7 +168,7 @@ int dsc_format_primitive(const void *data, size_t data_len,
         return DSC_ERR_INVALID_ARG;
     }
 
-    size_t byte_size = type->byte_size;
+    UINT32 byte_size = type->byte_size;
     if (byte_size == 0 || data_len < byte_size) {
         dsc_strbuf_append(out, "<incomplete>");
         return DSC_ERR_TYPE_INCOMPLETE;
@@ -179,7 +179,7 @@ int dsc_format_primitive(const void *data, size_t data_len,
     int q_frac_bits = 0;
     if (type->u.base.encoding == DSC_ENC_SIGNED &&
         detect_qformat(type->name, &q_int_bits, &q_frac_bits)) {
-        int64_t raw = dsc_read_signed(data, byte_size);
+        INT64 raw = dsc_read_signed(data, byte_size);
         format_qformat(raw, q_int_bits, q_frac_bits, out);
         return DSC_OK;
     }
@@ -188,13 +188,13 @@ int dsc_format_primitive(const void *data, size_t data_len,
     switch (type->u.base.encoding) {
 
     case DSC_ENC_SIGNED: {
-        int64_t val = dsc_read_signed(data, byte_size);
+        INT64 val = dsc_read_signed(data, byte_size);
         format_signed_int(val, byte_size, opts->hex_integers, out);
         return DSC_OK;
     }
 
     case DSC_ENC_UNSIGNED: {
-        uint64_t val = dsc_read_unsigned(data, byte_size);
+        UINT64 val = dsc_read_unsigned(data, byte_size);
         format_unsigned_int(val, byte_size, opts->hex_integers, out);
         return DSC_OK;
     }
@@ -221,7 +221,7 @@ int dsc_format_primitive(const void *data, size_t data_len,
 /* ------------------------------------------------------------------ */
 /* Public: format a pointer value                                      */
 /* ------------------------------------------------------------------ */
-int dsc_format_pointer(const void *data, size_t data_len,
+int dsc_format_pointer(const void *data, UINT32 data_len,
                        const dsc_type_t *type, const dsc_format_opts_t *opts,
                        dsc_strbuf_t *out)
 {
@@ -231,13 +231,13 @@ int dsc_format_pointer(const void *data, size_t data_len,
         return DSC_ERR_INVALID_ARG;
     }
 
-    size_t byte_size = type->byte_size;
+    UINT32 byte_size = type->byte_size;
     if (byte_size == 0 || data_len < byte_size) {
         dsc_strbuf_append(out, "<incomplete ptr>");
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
-    uint64_t addr = dsc_read_unsigned(data, byte_size);
+    UINT64 addr = dsc_read_unsigned(data, byte_size);
 
     if (addr == 0) {
         dsc_strbuf_append(out, "NULL");
@@ -263,7 +263,7 @@ int dsc_format_pointer(const void *data, size_t data_len,
 /* ------------------------------------------------------------------ */
 /* Public: format a bitfield value                                     */
 /* ------------------------------------------------------------------ */
-int dsc_format_bitfield(const void *data, size_t data_len,
+int dsc_format_bitfield(const void *data, UINT32 data_len,
                         const dsc_type_t *type, const dsc_format_opts_t *opts,
                         dsc_strbuf_t *out)
 {
@@ -272,7 +272,7 @@ int dsc_format_bitfield(const void *data, size_t data_len,
     }
 
     /* Read the containing storage unit */
-    size_t byte_size = type->byte_size;
+    UINT32 byte_size = type->byte_size;
     if (byte_size == 0) {
         /* Fallback: use base_type size */
         if (type->u.bitfield.base_type) {
@@ -284,15 +284,15 @@ int dsc_format_bitfield(const void *data, size_t data_len,
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
-    uint64_t raw = dsc_read_unsigned(data, byte_size);
+    UINT64 raw = dsc_read_unsigned(data, byte_size);
 
     /* Extract the bitfield: shift right by bit_offset, mask to bit_size */
-    uint8_t bit_off  = type->u.bitfield.bit_offset;
-    uint8_t bit_size = type->u.bitfield.bit_size;
+    UINT8 bit_off  = type->u.bitfield.bit_offset;
+    UINT8 bit_size = type->u.bitfield.bit_size;
 
-    uint64_t mask = (bit_size >= 64) ? ~(uint64_t)0
-                                     : ((uint64_t)1 << bit_size) - 1;
-    uint64_t val = (raw >> bit_off) & mask;
+    UINT64 mask = (bit_size >= 64) ? ~(UINT64)0
+                                     : ((UINT64)1 << bit_size) - 1;
+    UINT64 val = (raw >> bit_off) & mask;
 
     if (opts->hex_integers) {
         dsc_strbuf_appendf(out, "0x%llX", (unsigned long long)val);

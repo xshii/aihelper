@@ -78,8 +78,8 @@ void pipeline_resolve_read_format_field(void)
     dsc_transport_t *tp = mock_transport_create();
 
     /* Plant data: at address 0x100, struct {x=42, y=99} */
-    uint32_t x_val = 42;
-    uint32_t y_val = 99;
+    UINT32 x_val = 42;
+    UINT32 y_val = 99;
     mock_transport_set_memory(tp, 0x100, &x_val, 4);
     mock_transport_set_memory(tp, 0x104, &y_val, 4);
 
@@ -91,7 +91,7 @@ void pipeline_resolve_read_format_field(void)
     TEST_ASSERT_EQUAL_size_t(4, resolved.size);
 
     /* Step 2: read memory */
-    uint8_t read_buf[4];
+    UINT8 read_buf[4];
     rc = dsc_mem_read(tp, arch, resolved.addr, read_buf, resolved.size);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
 
@@ -118,8 +118,8 @@ void pipeline_full_struct_format(void)
     dsc_arch_t *arch = mock_arch_identity();
     dsc_transport_t *tp = mock_transport_create();
 
-    uint32_t x_val = 10;
-    uint32_t y_val = 20;
+    UINT32 x_val = 10;
+    UINT32 y_val = 20;
     mock_transport_set_memory(tp, 0x100, &x_val, 4);
     mock_transport_set_memory(tp, 0x104, &y_val, 4);
 
@@ -130,7 +130,7 @@ void pipeline_full_struct_format(void)
     TEST_ASSERT_EQUAL_size_t(8, resolved.size);
 
     /* Read full struct */
-    uint8_t buf[8];
+    UINT8 buf[8];
     rc = dsc_mem_read(tp, arch, resolved.addr, buf, resolved.size);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
 
@@ -160,10 +160,10 @@ void pipeline_transport_records_calls(void)
     dsc_arch_t *arch = mock_arch_identity();
     dsc_transport_t *tp = mock_transport_create();
 
-    uint32_t val = 0;
+    UINT32 val = 0;
     mock_transport_set_memory(tp, 0x100, &val, 4);
 
-    uint8_t buf[4];
+    UINT8 buf[4];
     dsc_mem_read(tp, arch, 0x100, buf, 4);
 
     const mock_transport_record_t *rec = mock_transport_get_record(tp);

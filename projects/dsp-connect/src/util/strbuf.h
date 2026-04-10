@@ -5,21 +5,22 @@
 #ifndef DSC_STRBUF_H
 #define DSC_STRBUF_H
 
+#include "types.h"
 #include <stddef.h>
 
 typedef struct {
     char   *buf;
-    size_t  len;      /* current string length (excluding '\0') */
-    size_t  cap;      /* allocated capacity */
+    UINT32  len;      /* current string length (excluding '\0') */
+    UINT32  cap;      /* allocated capacity */
 } dsc_strbuf_t;
 
 /* Create / destroy */
-void dsc_strbuf_init(dsc_strbuf_t *sb, size_t initial_cap);
+void dsc_strbuf_init(dsc_strbuf_t *sb, UINT32 initial_cap);
 void dsc_strbuf_free(dsc_strbuf_t *sb);
 
 /* Append operations */
 void dsc_strbuf_append(dsc_strbuf_t *sb, const char *str);
-void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, size_t n);
+void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, UINT32 n);
 void dsc_strbuf_appendf(dsc_strbuf_t *sb, const char *fmt, ...);
 
 /* Indent helper: append N spaces */
