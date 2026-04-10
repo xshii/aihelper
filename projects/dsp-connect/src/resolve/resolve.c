@@ -210,31 +210,51 @@ int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
             size = (type != NULL) ? type->byte_size : 0;
 
         } else {
-            /* ---- Array index access ---- */
+            /* ---- Array / pointer index access ---- */
             const dsc_type_t *real = unwrap_modifiers(type);
-            if (real == NULL || real->kind != DSC_TYPE_ARRAY) {
-                DSC_LOG_ERROR("resolve: cannot index non-array type");
+            if (real == NULL) {
+                DSC_LOG_ERROR("resolve: cannot index NULL type");
                 return DSC_ERR_RESOLVE_PATH;
             }
 
-            /* Bounds check (only if element count is known and non-zero) */
-            if (real->u.array.dim_count > 0 &&
-                real->u.array.dims[0].count > 0 &&
-                seg.u.index >= real->u.array.dims[0].count) {
-                DSC_LOG_ERROR("resolve: index %zu out of bounds (count=%zu)",
-                              seg.u.index, real->u.array.dims[0].count);
-                return DSC_ERR_RESOLVE_INDEX;
-            }
+            if (real->kind == DSC_TYPE_ARRAY) {
+                /* Array: bounds check + element offset */
+                if (real->u.array.dim_count > 0 &&
+                    real->u.array.dims[0].count > 0 &&
+                    seg.u.index >= real->u.array.dims[0].count) {
+                    DSC_LOG_ERROR("resolve: index %u out of bounds",
+                                  seg.u.index);
+                    return DSC_ERR_RESOLVE_INDEX;
+                }
+                const dsc_type_t *elem = unwrap_modifiers(
+                    real->u.array.element_type);
+                if (!elem) {
+                    return DSC_ERR_TYPE_INCOMPLETE;
+                }
+                addr += seg.u.index * elem->byte_size;
+                type = elem;
+                size = elem->byte_size;
 
-            const dsc_type_t *elem = unwrap_modifiers(real->u.array.element_type);
-            if (elem == NULL) {
-                DSC_LOG_ERROR("resolve: array has no element type");
-                return DSC_ERR_TYPE_INCOMPLETE;
-            }
+            } else if (real->kind == DSC_TYPE_POINTER) {
+                /* Pointer: dereference + index offset
+                 * addr 当前指向指针变量本身，
+                 * 需要读取指针值作为新的 base addr */
+                const dsc_type_t *pointee = unwrap_modifiers(
+                    real->u.pointer.pointee);
+                if (!pointee) {
+                    return DSC_ERR_TYPE_INCOMPLETE;
+                }
+                /* 标记需要 dereference（存在 transport 依赖，
+                 * 这里只计算偏移，实际读取在上层） */
+                out->needs_deref = 1;
+                addr += seg.u.index * pointee->byte_size;
+                type = pointee;
+                size = pointee->byte_size;
 
-            addr += seg.u.index * elem->byte_size;
-            type = elem;
-            size = elem->byte_size;
+            } else {
+                DSC_LOG_ERROR("resolve: cannot index non-array/pointer");
+                return DSC_ERR_RESOLVE_PATH;
+            }
         }
     }
 
@@ -244,13 +264,23 @@ int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
     }
 
     /* -------------------------------------------------------------- */
-    /* Step 3: fill output                                            */
+    /* Step 3: 如果最终类型是指针且没有显式 [N]，自动 deref [0]          */
     /* -------------------------------------------------------------- */
-    out->addr = addr;
-    out->size = size;
-    out->type = (dsc_type_t *)type; /* borrowed pointer, safe cast */
+    const dsc_type_t *final = unwrap_modifiers(type);
+    if (final && final->kind == DSC_TYPE_POINTER && final->u.pointer.pointee) {
+        out->needs_deref = 1;
+        out->type = (dsc_type_t *)unwrap_modifiers(final->u.pointer.pointee);
+        out->size = out->type ? out->type->byte_size : 0;
+        out->addr = addr; /* addr 指向指针变量本身，core 层读取后 deref */
+    } else {
+        out->needs_deref = 0;
+        out->type = (dsc_type_t *)type;
+        out->size = size;
+        out->addr = addr;
+    }
 
-    DSC_LOG_DEBUG("resolve: '%s' → addr=0x%llx size=%zu",
-                  path, (unsigned long long)addr, size);
+    DSC_LOG_DEBUG("resolve: '%s' → addr=0x%llx size=%u deref=%d",
+                  path, (unsigned long long)out->addr, out->size,
+                  out->needs_deref);
     return DSC_OK;
 }

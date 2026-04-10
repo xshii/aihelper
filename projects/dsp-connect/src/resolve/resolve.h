@@ -16,9 +16,10 @@
 /* Resolved symbol result                                             */
 /* ------------------------------------------------------------------ */
 typedef struct {
-    UINT64    addr;   /* resolved absolute address                  */
-    UINT32      size;   /* byte size of the resolved element          */
-    dsc_type_t *type;   /* type info (borrowed, owned by dwarf layer) */
+    UINT64    addr;        /* resolved absolute address                  */
+    UINT32    size;        /* byte size of the resolved element          */
+    dsc_type_t *type;      /* type info (borrowed, owned by dwarf layer) */
+    int       needs_deref; /* 1 = addr is a pointer value, needs read to get real addr */
 } DscResolved;
 
 /* ------------------------------------------------------------------ */

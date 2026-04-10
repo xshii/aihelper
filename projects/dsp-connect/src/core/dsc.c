@@ -333,6 +333,22 @@ static int format_var(DscContext *ctx,
 /* ------------------------------------------------------------------ */
 /* Internal: read + format core (shared by read_var and read_var_ex)  */
 /* ------------------------------------------------------------------ */
+/* 指针 dereference：读取指针变量的值，用它作为新地址 */
+static int deref_pointer(DscContext *ctx, DscResolved *resolved)
+{
+    UINT64 ptr_val = 0;
+    UINT32 ptr_size = (resolved->addr <= 0xFFFFFFFF) ? 4 : 8;
+    int rc = DscMemRead(ctx->transport, ctx->arch,
+                        resolved->addr, &ptr_val, ptr_size);
+    if (rc < 0) {
+        set_error(ctx, "deref @0x%llX: %s",
+                  (unsigned long long)resolved->addr, DscStrerror(rc));
+        return rc;
+    }
+    resolved->addr = ptr_val;
+    return DSC_OK;
+}
+
 static int read_var_core(DscContext *ctx, const char *var_path,
                          const DscFormatOpts *opts,
                          char *out, UINT32 out_len)
@@ -340,13 +356,18 @@ static int read_var_core(DscContext *ctx, const char *var_path,
     DscResolved resolved;
     DSC_TRY(resolve_var(ctx, var_path, &resolved));
 
+    /* 指针类型自动 dereference：读指针值作为新地址 */
+    if (resolved.needs_deref) {
+        DSC_TRY(deref_pointer(ctx, &resolved));
+    }
+
     /* Use stack buffer for small vars, heap for large */
     UINT8 stack_buf[DSC_VAR_STACK_BUF];
     void *data = stack_buf;
     if (resolved.size > DSC_VAR_STACK_BUF) {
         data = malloc(resolved.size);
         if (!data) {
-            set_error(ctx, "alloc %zu bytes for var read", resolved.size);
+            set_error(ctx, "alloc %u bytes for var read", resolved.size);
             return DSC_ERR_NOMEM;
         }
     }
