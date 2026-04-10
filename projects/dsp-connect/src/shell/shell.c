@@ -69,8 +69,8 @@ static DscShellResult cmd_help(char *out, UINT32 out_len)
     snprintf(out, out_len,
         "Commands:\n"
         "  <varname>              Read variable (e.g. g_config.mode)\n"
-        "  d <addr> <len>         Display memory at address\n"
-        "  w <addr> <value>       Write 32-bit value to address\n"
+        "  d 0x<addr> <len>       Display memory at address\n"
+        "  w 0x<addr> 0x<value>   Write 32-bit value to address\n"
         "  call <func> <p1>,<p2>  Call function on target\n"
         "  reload                 Reload ELF symbols\n"
         "  help                   Show this help\n"
@@ -109,7 +109,7 @@ static DscShellResult cmd_display(DscShell *sh, const char *args,
     DscStrbuf sb;
     DscStrbufInit(&sb, 512);
     for (UINT32 i = 0; i < len; i += 16) {
-        DscStrbufAppendf(&sb, "%08llx: ", (unsigned long long)(addr + i));
+        DscStrbufAppendf(&sb, "0x%08llx: ", (unsigned long long)(addr + i));
         for (UINT32 j = 0; j < 16 && (i + j) < len; j++) {
             DscStrbufAppendf(&sb, "%02x ", buf[i + j]);
         }
@@ -141,7 +141,7 @@ static DscShellResult cmd_write(DscShell *sh, const char *args,
         snprintf(out, out_len, "Error: %s", DscLastError(sh->ctx));
         return DSC_SHELL_ERROR;
     }
-    snprintf(out, out_len, "OK: wrote 0x%08x to 0x%llx",
+    snprintf(out, out_len, "OK: wrote 0x%08X to 0x%08llX",
              value, (unsigned long long)addr);
     return DSC_SHELL_OK;
 }
