@@ -23,6 +23,17 @@ list(FILTER LIB_SRCS EXCLUDE REGEX "demo_main\\.c$")
 add_library(dsc STATIC ${LIB_SRCS})
 target_include_directories(dsc PUBLIC src)
 
+# Linux 需要显式链接 math 和 POSIX 库
+include(CheckLibraryExists)
+check_library_exists(m sin "" HAVE_LIBM)
+if(HAVE_LIBM)
+    target_link_libraries(dsc PUBLIC m)
+endif()
+find_package(Threads)
+if(Threads_FOUND)
+    target_link_libraries(dsc PUBLIC Threads::Threads)
+endif()
+
 if(DSC_USE_LIBDWARF)
     target_compile_definitions(dsc PUBLIC DSC_USE_LIBDWARF)
     target_link_libraries(dsc PUBLIC dwarf elf)
