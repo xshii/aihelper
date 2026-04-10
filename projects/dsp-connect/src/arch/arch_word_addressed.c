@@ -17,6 +17,7 @@
 #include "arch_word_addressed.h"
 #include "arch_factory.h"
 #include "../core/dsc_errors.h"
+#include "../util/endian.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -29,14 +30,6 @@ typedef struct {
     int host_is_big_endian;     /* detected at creation time */
     int addr_shift;             /* bits to shift: log2(word_bytes) or custom */
 } arch_word_t;
-
-/* --- Detect host endianness at runtime --- */
-static int detect_host_big_endian(void)
-{
-    uint16_t val = 0x0102;
-    uint8_t *bytes = (uint8_t *)&val;
-    return bytes[0] == 0x01;
-}
 
 /* --- Compute default addr_shift from word_bytes --- */
 static int default_shift_for_word_bytes(int word_bytes)
@@ -102,12 +95,7 @@ static void word_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
 
     size_t offset = 0;
     while (offset + ws <= size) {
-        /* Reverse bytes within this word */
-        for (size_t i = 0; i < ws / 2; i++) {
-            uint8_t tmp = p[offset + i];
-            p[offset + i] = p[offset + ws - 1 - i];
-            p[offset + ws - 1 - i] = tmp;
-        }
+        dsc_byte_swap(p + offset, ws);
         offset += ws;
     }
     /* Remaining bytes (partial word) are left as-is */
@@ -154,7 +142,7 @@ static dsc_arch_t *word_create_with(int word_bytes, int is_big_endian,
     a->base.ops = &word_ops;
     a->word_bytes = word_bytes;
     a->is_big_endian = is_big_endian;
-    a->host_is_big_endian = detect_host_big_endian();
+    a->host_is_big_endian = dsc_host_is_big_endian();
 
     /* Use caller-specified shift, or compute default */
     if (addr_shift > 0) {

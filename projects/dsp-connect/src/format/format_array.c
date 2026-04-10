@@ -69,17 +69,6 @@ static void format_hex_dump(const uint8_t *bytes, size_t count,
 }
 
 /* ------------------------------------------------------------------ */
-/* Helpers: emit indent                                                */
-/* ------------------------------------------------------------------ */
-static void emit_indent(dsc_strbuf_t *out, int depth, int indent_width)
-{
-    int spaces = depth * indent_width;
-    for (int i = 0; i < spaces; i++) {
-        dsc_strbuf_append(out, " ");
-    }
-}
-
-/* ------------------------------------------------------------------ */
 /* Helpers: compute total element count from dimensions                 */
 /* Multidimensional arrays: total = dim[0].count * dim[1].count * ...  */
 /* ------------------------------------------------------------------ */
@@ -186,7 +175,7 @@ int dsc_format_array(const void *data, size_t data_len,
             const uint8_t *elem_data = (const uint8_t *)data + (i * elem_size);
             size_t elem_data_len = data_len - (i * elem_size);
 
-            emit_indent(out, inner_depth, indent_w);
+            dsc_strbuf_indent(out, inner_depth * indent_w / 2);
             dsc_strbuf_appendf(out, "[%zu] = ", i);
 
             int elem_rc = dsc_format_value(elem_data, elem_data_len,
@@ -200,11 +189,11 @@ int dsc_format_array(const void *data, size_t data_len,
         }
 
         if (show_elems < total_elems) {
-            emit_indent(out, inner_depth, indent_w);
+            dsc_strbuf_indent(out, inner_depth * indent_w / 2);
             dsc_strbuf_appendf(out, "... (%zu more)\n", total_elems - show_elems);
         }
 
-        emit_indent(out, depth, indent_w);
+        dsc_strbuf_indent(out, depth * indent_w / 2);
         dsc_strbuf_append(out, "}");
     }
 

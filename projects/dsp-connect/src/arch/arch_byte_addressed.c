@@ -5,6 +5,7 @@
 #include "arch_byte_addressed.h"
 #include "arch_factory.h"
 #include "../core/dsc_errors.h"
+#include "../util/endian.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,14 +16,6 @@ typedef struct {
     int is_big_endian;        /* target endianness */
     int host_is_big_endian;   /* detected at creation time */
 } arch_byte_t;
-
-/* --- Detect host endianness at runtime --- */
-static int detect_host_big_endian(void)
-{
-    uint16_t val = 0x0102;
-    uint8_t *bytes = (uint8_t *)&val;
-    return bytes[0] == 0x01;  /* big-endian: MSB first */
-}
 
 /* --- vtable implementations --- */
 
@@ -54,12 +47,7 @@ static void byte_swap_endian(const dsc_arch_t *self, void *buf, size_t size)
     }
 
     /* Reverse bytes in place */
-    uint8_t *p = (uint8_t *)buf;
-    for (size_t i = 0; i < size / 2; i++) {
-        uint8_t tmp = p[i];
-        p[i] = p[size - 1 - i];
-        p[size - 1 - i] = tmp;
-    }
+    dsc_byte_swap(buf, size);
 }
 
 static size_t byte_min_access_size(const dsc_arch_t *self)
@@ -99,7 +87,7 @@ static dsc_arch_t *byte_create(const dsc_arch_config_t *cfg)
 
     a->base.ops = &byte_ops;
     a->is_big_endian = cfg ? cfg->is_big_endian : 0;
-    a->host_is_big_endian = detect_host_big_endian();
+    a->host_is_big_endian = dsc_host_is_big_endian();
 
     /* Set name based on endianness */
     if (a->is_big_endian) {

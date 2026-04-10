@@ -19,17 +19,6 @@
 #include <string.h>
 
 /* ------------------------------------------------------------------ */
-/* Helpers: indent by depth * indent_width spaces                      */
-/* ------------------------------------------------------------------ */
-static void emit_indent(dsc_strbuf_t *out, int depth, int indent_width)
-{
-    int spaces = depth * indent_width;
-    for (int i = 0; i < spaces; i++) {
-        dsc_strbuf_append(out, " ");
-    }
-}
-
-/* ------------------------------------------------------------------ */
 /* Helpers: emit offset + type annotation comment                      */
 /* ------------------------------------------------------------------ */
 static void emit_field_annotation(dsc_strbuf_t *out,
@@ -93,7 +82,7 @@ int dsc_format_struct(const void *data, size_t data_len,
         const dsc_struct_field_t *field = &fields[i];
 
         /* Indent */
-        emit_indent(out, inner_depth, indent_w);
+        dsc_strbuf_indent(out, inner_depth * indent_w / 2);
 
         /* Field name */
         if (field->name) {
@@ -141,7 +130,7 @@ int dsc_format_struct(const void *data, size_t data_len,
     }
 
     /* Closing brace at parent depth */
-    emit_indent(out, depth, indent_w);
+    dsc_strbuf_indent(out, depth * indent_w / 2);
     dsc_strbuf_append(out, "}");
 
     return rc;

@@ -5,25 +5,10 @@
 
 #include "format_enum.h"
 #include "../core/dsc_errors.h"
+#include "../util/byteread.h"
 
 #include <string.h>
 #include <stdint.h>
-
-/* ------------------------------------------------------------------ */
-/* Helpers: read the raw enum value as int64                           */
-/* ------------------------------------------------------------------ */
-static int64_t read_enum_value(const void *data, size_t byte_size)
-{
-    const uint8_t *p = (const uint8_t *)data;
-
-    switch (byte_size) {
-    case 1: { int8_t  v; memcpy(&v, p, 1); return (int64_t)v; }
-    case 2: { int16_t v; memcpy(&v, p, 2); return (int64_t)v; }
-    case 4: { int32_t v; memcpy(&v, p, 4); return (int64_t)v; }
-    case 8: { int64_t v; memcpy(&v, p, 8); return v; }
-    default: return 0;
-    }
-}
 
 /* ------------------------------------------------------------------ */
 /* Helpers: try exact match against enumerator list                    */
@@ -141,7 +126,7 @@ int dsc_format_enum(const void *data, size_t data_len,
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
-    int64_t raw = read_enum_value(data, byte_size);
+    int64_t raw = dsc_read_signed(data, byte_size);
 
     const dsc_enum_value_t *values = type->u.enumeration.values;
     size_t value_count = type->u.enumeration.value_count;
