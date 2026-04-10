@@ -16,13 +16,21 @@
 /* ------------------------------------------------------------------ */
 static int is_byte_type(const dsc_type_t *elem_type)
 {
-    if (!elem_type) return 0;
+    if (!elem_type) {
+        return 0;
+    }
 
     const dsc_type_t *resolved = dsc_type_resolve_typedef(elem_type);
-    if (!resolved) return 0;
+    if (!resolved) {
+        return 0;
+    }
 
-    if (resolved->kind != DSC_TYPE_BASE) return 0;
-    if (resolved->byte_size != 1) return 0;
+    if (resolved->kind != DSC_TYPE_BASE) {
+        return 0;
+    }
+    if (resolved->byte_size != 1) {
+        return 0;
+    }
 
     /* char or unsigned char */
     return (resolved->u.base.encoding == DSC_ENC_CHAR ||
@@ -45,7 +53,9 @@ static void format_hex_dump(const uint8_t *bytes, size_t count,
     /* Hex bytes */
     dsc_strbuf_append(out, "\"");
     for (size_t i = 0; i < show; i++) {
-        if (i > 0) dsc_strbuf_append(out, " ");
+        if (i > 0) {
+            dsc_strbuf_append(out, " ");
+        }
         dsc_strbuf_appendf(out, "%02X", bytes[i]);
     }
     dsc_strbuf_append(out, "\"");
@@ -75,11 +85,15 @@ static void format_hex_dump(const uint8_t *bytes, size_t count,
 static size_t compute_total_elements(const dsc_array_dim_t *dims,
                                      size_t dim_count)
 {
-    if (!dims || dim_count == 0) return 0;
+    if (!dims || dim_count == 0) {
+        return 0;
+    }
 
     size_t total = 1;
     for (size_t i = 0; i < dim_count; i++) {
-        if (dims[i].count == 0) return 0; /* flexible array */
+        if (dims[i].count == 0) {
+            return 0; /* flexible array */
+        }
         total *= dims[i].count;
     }
     return total;
@@ -147,7 +161,9 @@ int dsc_format_array(const void *data, size_t data_len,
         dsc_strbuf_append(out, "{ ");
 
         for (size_t i = 0; i < show_elems; i++) {
-            if (i > 0) dsc_strbuf_append(out, ", ");
+            if (i > 0) {
+                dsc_strbuf_append(out, ", ");
+            }
 
             const uint8_t *elem_data = (const uint8_t *)data + (i * elem_size);
             size_t elem_data_len = data_len - (i * elem_size);

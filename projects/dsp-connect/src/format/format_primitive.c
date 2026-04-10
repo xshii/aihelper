@@ -55,7 +55,9 @@ static void format_unsigned_int(uint64_t val, size_t byte_size,
 /* ------------------------------------------------------------------ */
 static int detect_qformat(const char *name, int *out_int_bits, int *out_frac_bits)
 {
-    if (!name) return 0;
+    if (!name) {
+        return 0;
+    }
 
     /* Match "q<N>" or "Q<N>" — implies Q1.<N> (one sign bit, N frac bits) */
     if ((name[0] == 'q' || name[0] == 'Q') && name[1] >= '0' && name[1] <= '9') {

@@ -37,16 +37,22 @@ static int is_flags_enum(const dsc_enum_value_t *values, size_t count)
         int64_t v = values[i].value;
 
         /* Skip zero (often "NONE" flag) */
-        if (v == 0) continue;
+        if (v == 0) {
+            continue;
+        }
 
         has_nonzero = 1;
 
         /* Negative values cannot be power-of-two flags */
-        if (v < 0) return 0;
+        if (v < 0) {
+            return 0;
+        }
 
         /* Check if power of two: v & (v-1) == 0 */
         uint64_t uv = (uint64_t)v;
-        if ((uv & (uv - 1)) != 0) return 0;
+        if ((uv & (uv - 1)) != 0) {
+            return 0;
+        }
     }
 
     return has_nonzero;
@@ -67,7 +73,9 @@ static void format_flags(const dsc_enum_value_t *values, size_t count,
         uint64_t flag = (uint64_t)values[i].value;
 
         /* Skip zero-value enumerator unless raw is exactly zero */
-        if (flag == 0) continue;
+        if (flag == 0) {
+            continue;
+        }
 
         if ((remaining & flag) == flag) {
             if (!first) {

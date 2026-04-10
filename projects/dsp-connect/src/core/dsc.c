@@ -225,10 +225,18 @@ dsc_context_t *dsc_open(const dsc_open_params_t *params)
         return NULL;
     }
 
-    if (open_dwarf(ctx) < 0)                goto fail;
-    if (create_arch(ctx, params->arch) < 0)  goto fail;
-    if (open_transport(ctx, params) < 0)     goto fail;
-    if (create_cache(ctx) < 0)               goto fail;
+    if (open_dwarf(ctx) < 0) {
+        goto fail;
+    }
+    if (create_arch(ctx, params->arch) < 0) {
+        goto fail;
+    }
+    if (open_transport(ctx, params) < 0) {
+        goto fail;
+    }
+    if (create_cache(ctx) < 0) {
+        goto fail;
+    }
 
     DSC_LOG_INFO("dsc session opened: %s", params->elf_path);
     return ctx;

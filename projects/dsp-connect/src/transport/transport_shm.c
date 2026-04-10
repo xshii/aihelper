@@ -156,7 +156,9 @@ static int shm_mem_read(dsc_transport_t *self, uint64_t addr,
                         void *buf, size_t len)
 {
     shm_transport_t *st = to_shm(self);
-    if (!st->map) return DSC_ERR_TRANSPORT_IO;
+    if (!st->map) {
+        return DSC_ERR_TRANSPORT_IO;
+    }
 
     size_t data_size = st->shm_size - SHM_DATA_OFFSET;
     if (addr + len > data_size) {
@@ -174,7 +176,9 @@ static int shm_mem_write(dsc_transport_t *self, uint64_t addr,
                          const void *buf, size_t len)
 {
     shm_transport_t *st = to_shm(self);
-    if (!st->map) return DSC_ERR_TRANSPORT_IO;
+    if (!st->map) {
+        return DSC_ERR_TRANSPORT_IO;
+    }
 
     size_t data_size = st->shm_size - SHM_DATA_OFFSET;
     if (addr + len > data_size) {
@@ -192,7 +196,9 @@ static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
                         char *resp, size_t resp_len)
 {
     shm_transport_t *st = to_shm(self);
-    if (!st->map) return DSC_ERR_TRANSPORT_IO;
+    if (!st->map) {
+        return DSC_ERR_TRANSPORT_IO;
+    }
 
     /* Write command string into the command buffer */
     size_t cmd_len = strlen(cmd);
@@ -246,7 +252,9 @@ static const dsc_transport_ops shm_ops = {
 dsc_transport_t *shm_transport_create(const dsc_transport_config_t *cfg)
 {
     shm_transport_t *st = calloc(1, sizeof(*st));
-    if (!st) return NULL;
+    if (!st) {
+        return NULL;
+    }
 
     st->base.ops = &shm_ops;
     snprintf(st->base.name, sizeof(st->base.name), "shm");

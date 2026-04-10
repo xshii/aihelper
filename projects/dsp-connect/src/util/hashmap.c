@@ -36,7 +36,9 @@ int dsc_hashmap_put(dsc_hashmap_t *map, const char *key, void *value)
 
     /* 新建 entry */
     dsc_hashmap_entry_t *entry = malloc(sizeof(*entry));
-    if (!entry) return -1;
+    if (!entry) {
+        return -1;
+    }
 
     entry->key = strdup(key);
     if (!entry->key) {
@@ -61,7 +63,9 @@ int dsc_hashmap_del(dsc_hashmap_t *map, const char *key)
 {
     dsc_hashmap_entry_t *entry = NULL;
     HASH_FIND_STR(map->head, key, entry);
-    if (!entry) return 0;
+    if (!entry) {
+        return 0;
+    }
 
     HASH_DEL(map->head, entry);
     free(entry->key);

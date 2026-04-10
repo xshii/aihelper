@@ -189,7 +189,9 @@ static const dsc_transport_ops serial_ops = {
 dsc_transport_t *serial_transport_create(const dsc_transport_config_t *cfg)
 {
     serial_transport_t *st = calloc(1, sizeof(*st));
-    if (!st) return NULL;
+    if (!st) {
+        return NULL;
+    }
 
     st->base.ops = &serial_ops;
     snprintf(st->base.name, sizeof(st->base.name), "serial");

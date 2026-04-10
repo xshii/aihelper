@@ -142,7 +142,9 @@ static const dsc_transport_ops telnet_ops = {
 dsc_transport_t *telnet_transport_create(const dsc_transport_config_t *cfg)
 {
     telnet_transport_t *tt = calloc(1, sizeof(*tt));
-    if (!tt) return NULL;
+    if (!tt) {
+        return NULL;
+    }
 
     tt->base.ops = &telnet_ops;
     snprintf(tt->base.name, sizeof(tt->base.name), "telnet");

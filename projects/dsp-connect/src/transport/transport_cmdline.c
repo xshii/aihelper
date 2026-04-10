@@ -46,7 +46,9 @@ int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, size_t len)
     while (remaining > 0) {
         ssize_t n = ctx->io_send(ctx->fd, p, remaining);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                continue;
+            }
             DSC_LOG_ERROR("send failed: %s", strerror(errno));
             return DSC_ERR_TRANSPORT_IO;
         }
@@ -65,21 +67,33 @@ int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, size_t buf_len)
 
     while (pos < buf_len - 1) {
         int ready = dsc_cmdline_wait_readable(ctx->fd, ctx->timeout_ms);
-        if (ready < 0) return DSC_ERR_TRANSPORT_IO;
-        if (ready == 0) return DSC_ERR_TRANSPORT_TIMEOUT;
+        if (ready < 0) {
+            return DSC_ERR_TRANSPORT_IO;
+        }
+        if (ready == 0) {
+            return DSC_ERR_TRANSPORT_TIMEOUT;
+        }
 
         char ch;
         ssize_t n = ctx->io_recv(ctx->fd, &ch);
         if (n < 0) {
-            if (errno == EINTR) continue;
+            if (errno == EINTR) {
+                continue;
+            }
             return DSC_ERR_TRANSPORT_IO;
         }
-        if (n == 0) break; /* EOF / connection closed */
-        if (ch == '\n') break;
+        if (n == 0) {
+            break; /* EOF / connection closed */
+        }
+        if (ch == '\n') {
+            break;
+        }
         buf[pos++] = ch;
     }
 
-    if (pos > 0 && buf[pos - 1] == '\r') pos--;
+    if (pos > 0 && buf[pos - 1] == '\r') {
+        pos--;
+    }
     buf[pos] = '\0';
     return (int)pos;
 }
@@ -98,7 +112,9 @@ int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
     DSC_TRY(dsc_cmdline_send_all(ctx, line, (size_t)n));
 
     int rc = dsc_cmdline_recv_line(ctx, resp, resp_len);
-    if (rc < 0) return rc;
+    if (rc < 0) {
+        return rc;
+    }
     return DSC_OK;
 }
 
@@ -118,12 +134,18 @@ static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
     const char *p = data_start;
 
     while (*p && written < len) {
-        while (*p == ' ') p++;
-        if (*p == '\0') break;
+        while (*p == ' ') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
 
         char *end;
         unsigned long word = strtoul(p, &end, 16);
-        if (end == p) break;
+        if (end == p) {
+            break;
+        }
         p = end;
 
         /* 按大端顺序存储（打印顺序 = MSB first） */
@@ -140,7 +162,9 @@ static int parse_hex_response(const char *resp, uint8_t *out, size_t len)
 int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, uint64_t addr,
                          void *buf, size_t len)
 {
-    if (ctx->fd < 0) return DSC_ERR_TRANSPORT_IO;
+    if (ctx->fd < 0) {
+        return DSC_ERR_TRANSPORT_IO;
+    }
 
     char cmd[128];
     snprintf(cmd, sizeof(cmd), "md 0x%llx %zu",
@@ -169,7 +193,9 @@ static uint32_t pack_word_be(const uint8_t *src, size_t chunk)
 int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, uint64_t addr,
                           const void *buf, size_t len)
 {
-    if (ctx->fd < 0) return DSC_ERR_TRANSPORT_IO;
+    if (ctx->fd < 0) {
+        return DSC_ERR_TRANSPORT_IO;
+    }
 
     const uint8_t *src = (const uint8_t *)buf;
     size_t offset = 0;

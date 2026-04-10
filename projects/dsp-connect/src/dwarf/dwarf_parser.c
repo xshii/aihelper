@@ -173,7 +173,9 @@ static size_t count_member_dies(Dwarf_Debug dbg, Dwarf_Die first_child)
         if (cur != first_child) {
             dwarf_dealloc(dbg, cur, DW_DLA_DIE);
         }
-        if (res != DW_DLV_OK) break;
+        if (res != DW_DLV_OK) {
+            break;
+        }
         cur = sib;
     }
     return count;
@@ -213,14 +215,20 @@ static int parse_struct_fields(dsc_dwarf_t *dw, Dwarf_Debug dbg,
 
     size_t count = count_member_dies(dbg, child);
     dwarf_dealloc(dbg, child, DW_DLA_DIE);
-    if (count == 0) return DSC_OK;
+    if (count == 0) {
+        return DSC_OK;
+    }
 
     stype->u.composite.fields = calloc(count, sizeof(dsc_struct_field_t));
-    if (!stype->u.composite.fields) return DSC_ERR_NOMEM;
+    if (!stype->u.composite.fields) {
+        return DSC_ERR_NOMEM;
+    }
     stype->u.composite.field_count = count;
 
     /* Second pass: populate fields */
-    if (dwarf_child(parent_die, &child, &err) != DW_DLV_OK) return DSC_OK;
+    if (dwarf_child(parent_die, &child, &err) != DW_DLV_OK) {
+        return DSC_OK;
+    }
 
     size_t fi = 0;
     Dwarf_Die cur = child;
@@ -231,8 +239,12 @@ static int parse_struct_fields(dsc_dwarf_t *dw, Dwarf_Debug dbg,
         }
         Dwarf_Die sib = NULL;
         int res = dwarf_siblingof(dbg, cur, &sib, &err);
-        if (cur != child) dwarf_dealloc(dbg, cur, DW_DLA_DIE);
-        if (res != DW_DLV_OK) break;
+        if (cur != child) {
+            dwarf_dealloc(dbg, cur, DW_DLA_DIE);
+        }
+        if (res != DW_DLV_OK) {
+            break;
+        }
         cur = sib;
     }
     dwarf_dealloc(dbg, child, DW_DLA_DIE);
@@ -277,22 +289,32 @@ static dsc_type_t *parse_type_die(dsc_dwarf_t *dw, Dwarf_Debug dbg, Dwarf_Die di
 {
     Dwarf_Error err = NULL;
     Dwarf_Half tag;
-    if (dwarf_tag(die, &tag, &err) != DW_DLV_OK) return NULL;
+    if (dwarf_tag(die, &tag, &err) != DW_DLV_OK) {
+        return NULL;
+    }
 
     Dwarf_Off off;
-    if (dwarf_dieoffset(die, &off, &err) != DW_DLV_OK) return NULL;
+    if (dwarf_dieoffset(die, &off, &err) != DW_DLV_OK) {
+        return NULL;
+    }
 
     /* Check cache first */
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)off);
     dsc_type_t *cached = dsc_hashmap_get(&dw->type_index, key);
-    if (cached) return cached;
+    if (cached) {
+        return cached;
+    }
 
     dsc_type_kind_t kind = tag_to_kind(tag);
-    if (kind == DSC_TYPE_KIND_COUNT) return NULL;
+    if (kind == DSC_TYPE_KIND_COUNT) {
+        return NULL;
+    }
 
     dsc_type_t *type = alloc_type(kind, off);
-    if (!type) return NULL;
+    if (!type) {
+        return NULL;
+    }
 
     /* Special-case logic for tags that need extra work */
     if (tag == DW_TAG_base_type) {
@@ -304,7 +326,9 @@ static dsc_type_t *parse_type_die(dsc_dwarf_t *dw, Dwarf_Debug dbg, Dwarf_Die di
         type->u.pointer.pointee = NULL; /* resolved in fixup pass */
     }
 
-    if (finalize_type(dw, dbg, die, type) < 0) return NULL;
+    if (finalize_type(dw, dbg, die, type) < 0) {
+        return NULL;
+    }
     return type;
 }
 
@@ -312,7 +336,9 @@ static dsc_type_t *parse_type_die(dsc_dwarf_t *dw, Dwarf_Debug dbg, Dwarf_Die di
 static void collect_variable(Dwarf_Debug dbg, Dwarf_Die die, dsc_symtab_t *tab)
 {
     char *name = die_get_name(dbg, die);
-    if (!name) return;
+    if (!name) {
+        return;
+    }
 
     uint64_t addr = die_get_uint(dbg, die, DW_AT_location);
     int ext = (int)die_get_uint(dbg, die, DW_AT_external);
@@ -326,7 +352,9 @@ static int walk_cu_dies(dsc_dwarf_t *dw, Dwarf_Debug dbg,
 {
     Dwarf_Error err = NULL;
     Dwarf_Half tag;
-    if (dwarf_tag(die, &tag, &err) != DW_DLV_OK) return DSC_OK;
+    if (dwarf_tag(die, &tag, &err) != DW_DLV_OK) {
+        return DSC_OK;
+    }
 
     /* Dispatch: type DIEs go to the type parser, variables to the symtab */
     if (tag_to_kind(tag) != DSC_TYPE_KIND_COUNT) {
@@ -416,7 +444,9 @@ dsc_dwarf_t *dsc_dwarf_open(const char *elf_path, int *err_out)
 
 void dsc_dwarf_close(dsc_dwarf_t *dw)
 {
-    if (!dw) return;
+    if (!dw) {
+        return;
+    }
 
     /* Free all owned types */
     for (size_t i = 0; i < dw->type_count; i++) {
@@ -441,8 +471,12 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
 
 int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab)
 {
-    if (!dw || !tab) return DSC_ERR_INVALID_ARG;
-    if (dw->symbols_loaded) return DSC_OK;
+    if (!dw || !tab) {
+        return DSC_ERR_INVALID_ARG;
+    }
+    if (dw->symbols_loaded) {
+        return DSC_OK;
+    }
 
 #ifdef DSC_USE_LIBDWARF
     parse_all_cus(dw, (Dwarf_Debug)dw->dbg, tab);
@@ -455,7 +489,9 @@ int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab)
 
 const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, uint64_t die_offset)
 {
-    if (!dw) return NULL;
+    if (!dw) {
+        return NULL;
+    }
 
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)die_offset);
@@ -499,7 +535,9 @@ dsc_dwarf_t *dsc_dwarf_open(const char *elf_path, int *err_out)
 
 void dsc_dwarf_close(dsc_dwarf_t *dw)
 {
-    if (!dw) return;
+    if (!dw) {
+        return;
+    }
 
     for (size_t i = 0; i < dw->type_count; i++) {
         dsc_type_free(dw->types[i]);
@@ -513,14 +551,18 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
 int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab)
 {
     (void)tab;
-    if (!dw) return DSC_ERR_INVALID_ARG;
+    if (!dw) {
+        return DSC_ERR_INVALID_ARG;
+    }
     DSC_LOG_WARN("stub: no symbols loaded (libdwarf not available)");
     return DSC_OK;
 }
 
 const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, uint64_t die_offset)
 {
-    if (!dw) return NULL;
+    if (!dw) {
+        return NULL;
+    }
 
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)die_offset);

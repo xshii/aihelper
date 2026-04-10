@@ -41,8 +41,12 @@ static int cmp_sort_entry(const void *a, const void *b)
 {
     const sort_entry_t *ea = (const sort_entry_t *)a;
     const sort_entry_t *eb = (const sort_entry_t *)b;
-    if (ea->addr < eb->addr) return -1;
-    if (ea->addr > eb->addr) return  1;
+    if (ea->addr < eb->addr) {
+        return -1;
+    }
+    if (ea->addr > eb->addr) {
+        return 1;
+    }
     return 0;
 }
 

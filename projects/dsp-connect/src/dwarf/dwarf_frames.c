@@ -43,7 +43,9 @@ void dsc_frames_init(dsc_frames_t *frames)
 
 void dsc_frames_free(dsc_frames_t *frames)
 {
-    if (!frames) return;
+    if (!frames) {
+        return;
+    }
     free(frames->entries);
     frames->entries = NULL;
     frames->count   = 0;
@@ -93,8 +95,12 @@ static int cmp_by_pc(const void *a, const void *b)
     const dsc_frame_entry_t *fa = (const dsc_frame_entry_t *)a;
     const dsc_frame_entry_t *fb = (const dsc_frame_entry_t *)b;
 
-    if (fa->pc_start < fb->pc_start) return -1;
-    if (fa->pc_start > fb->pc_start) return  1;
+    if (fa->pc_start < fb->pc_start) {
+        return -1;
+    }
+    if (fa->pc_start > fb->pc_start) {
+        return 1;
+    }
     return 0;
 }
 
@@ -156,12 +162,16 @@ static int load_fde_list(dsc_frames_t *frames, Dwarf_Debug dbg)
 
 int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw)
 {
-    if (!frames || !dw) return DSC_ERR_INVALID_ARG;
+    if (!frames || !dw) {
+        return DSC_ERR_INVALID_ARG;
+    }
 
     /* Access the internal libdwarf handle via accessor */
     extern Dwarf_Debug dsc_dwarf_get_dbg(dsc_dwarf_t *dw);
     Dwarf_Debug dbg = dsc_dwarf_get_dbg(dw);
-    if (!dbg) return DSC_ERR_DWARF_INIT;
+    if (!dbg) {
+        return DSC_ERR_DWARF_INIT;
+    }
 
     DSC_TRY(load_fde_list(frames, dbg));
 
@@ -180,7 +190,9 @@ int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw)
 int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw)
 {
     (void)dw;
-    if (!frames) return DSC_ERR_INVALID_ARG;
+    if (!frames) {
+        return DSC_ERR_INVALID_ARG;
+    }
     DSC_LOG_WARN("stub: no frame info loaded (libdwarf not available)");
     return DSC_OK;
 }

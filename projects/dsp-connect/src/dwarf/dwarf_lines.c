@@ -25,7 +25,9 @@ void dsc_lines_init(dsc_lines_t *lines)
 
 void dsc_lines_free(dsc_lines_t *lines)
 {
-    if (!lines) return;
+    if (!lines) {
+        return;
+    }
 
     for (size_t i = 0; i < lines->count; i++) {
         free(lines->entries[i].file);
@@ -85,8 +87,12 @@ static int cmp_by_addr(const void *a, const void *b)
     const dsc_line_entry_t *ea = (const dsc_line_entry_t *)a;
     const dsc_line_entry_t *eb = (const dsc_line_entry_t *)b;
 
-    if (ea->addr < eb->addr) return -1;
-    if (ea->addr > eb->addr) return  1;
+    if (ea->addr < eb->addr) {
+        return -1;
+    }
+    if (ea->addr > eb->addr) {
+        return 1;
+    }
     return 0;
 }
 
@@ -149,12 +155,16 @@ static int load_cu_lines(dsc_lines_t *lines, Dwarf_Debug dbg)
 
 int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw)
 {
-    if (!lines || !dw) return DSC_ERR_INVALID_ARG;
+    if (!lines || !dw) {
+        return DSC_ERR_INVALID_ARG;
+    }
 
     /* Access the internal libdwarf handle via accessor */
     extern Dwarf_Debug dsc_dwarf_get_dbg(dsc_dwarf_t *dw);
     Dwarf_Debug dbg = dsc_dwarf_get_dbg(dw);
-    if (!dbg) return DSC_ERR_DWARF_INIT;
+    if (!dbg) {
+        return DSC_ERR_DWARF_INIT;
+    }
 
     DSC_TRY(load_cu_lines(lines, dbg));
 
@@ -173,7 +183,9 @@ int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw)
 int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw)
 {
     (void)dw;
-    if (!lines) return DSC_ERR_INVALID_ARG;
+    if (!lines) {
+        return DSC_ERR_INVALID_ARG;
+    }
     DSC_LOG_WARN("stub: no line info loaded (libdwarf not available)");
     return DSC_OK;
 }

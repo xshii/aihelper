@@ -26,7 +26,9 @@ void dsc_log_set_level(dsc_log_level_t level)
 void dsc_log_default(dsc_log_level_t level, const char *file,
                      int line, const char *fmt, ...)
 {
-    if (level < dsc_log_min_level) return;
+    if (level < dsc_log_min_level) {
+        return;
+    }
 
     time_t now = time(NULL);
     struct tm *tm = localtime(&now);

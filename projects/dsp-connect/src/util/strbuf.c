@@ -11,11 +11,17 @@
 static void ensure_cap(dsc_strbuf_t *sb, size_t extra)
 {
     size_t need = sb->len + extra + 1; /* +1 for '\0' */
-    if (need <= sb->cap) return;
+    if (need <= sb->cap) {
+        return;
+    }
 
     size_t newcap = sb->cap * 2;
-    if (newcap < need) newcap = need;
-    if (newcap < 64)   newcap = 64;
+    if (newcap < need) {
+        newcap = need;
+    }
+    if (newcap < 64) {
+        newcap = 64;
+    }
 
     sb->buf = realloc(sb->buf, newcap);
     sb->cap = newcap;
@@ -23,7 +29,9 @@ static void ensure_cap(dsc_strbuf_t *sb, size_t extra)
 
 void dsc_strbuf_init(dsc_strbuf_t *sb, size_t initial_cap)
 {
-    if (initial_cap < 64) initial_cap = 64;
+    if (initial_cap < 64) {
+        initial_cap = 64;
+    }
     sb->buf = malloc(initial_cap);
     sb->buf[0] = '\0';
     sb->len = 0;
@@ -63,7 +71,9 @@ void dsc_strbuf_appendf(dsc_strbuf_t *sb, const char *fmt, ...)
     int needed = vsnprintf(NULL, 0, fmt, ap);
     va_end(ap);
 
-    if (needed <= 0) return;
+    if (needed <= 0) {
+        return;
+    }
 
     ensure_cap(sb, (size_t)needed);
 
@@ -88,7 +98,9 @@ void dsc_strbuf_indent(dsc_strbuf_t *sb, int depth)
 void dsc_strbuf_reset(dsc_strbuf_t *sb)
 {
     sb->len = 0;
-    if (sb->buf) sb->buf[0] = '\0';
+    if (sb->buf) {
+        sb->buf[0] = '\0';
+    }
 }
 
 const char *dsc_strbuf_cstr(const dsc_strbuf_t *sb)
