@@ -68,8 +68,9 @@ static DscShellResult cmd_help(char *out, UINT32 out_len)
 {
     snprintf(out, out_len,
         "Commands:\n"
-        "  <varname>              Read variable (e.g. g_config.mode)\n"
-        "  d 0x<addr> <len>       Display memory at address\n"
+        "  <varname>              Read variable value (e.g. g_config.mode)\n"
+        "  d <varname>            Display variable with struct expansion\n"
+        "  d 0x<addr> [len]       Display memory hex dump at address\n"
         "  w 0x<addr> 0x<value>   Write 32-bit value to address\n"
         "  call <func> <p1>,<p2>  Call function on target\n"
         "  reload                 Reload ELF symbols\n"
@@ -79,25 +80,15 @@ static DscShellResult cmd_help(char *out, UINT32 out_len)
 }
 
 /* ------------------------------------------------------------------ */
-/* 内置命令: d <addr> <len> — 显示内存                                   */
+/* 内部: hex dump 指定地址的内存                                         */
 /* ------------------------------------------------------------------ */
 
-static DscShellResult cmd_display(DscShell *sh, const char *args,
-                                  char *out, UINT32 out_len)
+static DscShellResult hexdump_addr(DscShell *sh, UINT64 addr, UINT32 len,
+                                   char *out, UINT32 out_len)
 {
-    UINT64 addr = 0;
-    UINT32 len = 16; /* 默认 16 字节 */
-
-    /* 解析地址（支持 0x 前缀和 &var 语法） */
-    if (sscanf(args, "%llx %u", (unsigned long long *)&addr, &len) < 1) {
-        snprintf(out, out_len, "Usage: d <addr> [len]");
-        return DSC_SHELL_ERROR;
-    }
-
     if (len > 1024) {
         len = 1024;
     }
-
     UINT8 buf[1024];
     int rc = DscReadMem(sh->ctx, addr, buf, len);
     if (rc < 0) {
@@ -105,19 +96,70 @@ static DscShellResult cmd_display(DscShell *sh, const char *args,
         return DSC_SHELL_ERROR;
     }
 
-    /* hex dump 格式化 */
     DscStrbuf sb;
     DscStrbufInit(&sb, 512);
     for (UINT32 i = 0; i < len; i += 16) {
-        DscStrbufAppendf(&sb, "0x%08llx: ", (unsigned long long)(addr + i));
+        DscStrbufAppendf(&sb, "0x%08llX: ", (unsigned long long)(addr + i));
         for (UINT32 j = 0; j < 16 && (i + j) < len; j++) {
-            DscStrbufAppendf(&sb, "%02x ", buf[i + j]);
+            DscStrbufAppendf(&sb, "%02X ", buf[i + j]);
         }
         DscStrbufAppend(&sb, "\n");
     }
     snprintf(out, out_len, "%s", DscStrbufCstr(&sb));
     DscStrbufFree(&sb);
     return DSC_SHELL_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* 内部: 按类型展开显示变量（读内存 + 格式化）                            */
+/* ------------------------------------------------------------------ */
+
+static DscShellResult display_var(DscShell *sh, const char *varname,
+                                  char *out, UINT32 out_len)
+{
+    char val_buf[4096];
+    int rc = DscReadVar(sh->ctx, varname, val_buf, sizeof(val_buf));
+    if (rc < 0) {
+        snprintf(out, out_len, "Error: %s", DscLastError(sh->ctx));
+        return DSC_SHELL_ERROR;
+    }
+    snprintf(out, out_len, "%s = %s", varname, val_buf);
+    return DSC_SHELL_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* 内置命令: d <addr|varname> [len]                                    */
+/* d 0x20000000 32   → hex dump 32 bytes at address                   */
+/* d g_config        → 按结构体类型展开显示（多级缩进）                  */
+/* d g_config.mode   → 显示嵌套字段的值                                 */
+/* ------------------------------------------------------------------ */
+
+static int is_varname(const char *s)
+{
+    return s[0] == '_' || (s[0] >= 'a' && s[0] <= 'z')
+                       || (s[0] >= 'A' && s[0] <= 'Z');
+}
+
+static DscShellResult cmd_display(DscShell *sh, const char *args,
+                                  char *out, UINT32 out_len)
+{
+    char arg1[256];
+    UINT32 len = 16;
+
+    if (sscanf(args, "%255s %u", arg1, &len) < 1) {
+        snprintf(out, out_len, "Usage: d <0xAddr|varname> [len]");
+        return DSC_SHELL_ERROR;
+    }
+
+    /* 变量名：按类型展开 */
+    if (is_varname(arg1)) {
+        return display_var(sh, arg1, out, out_len);
+    }
+
+    /* 地址：hex dump */
+    UINT64 addr = 0;
+    sscanf(arg1, "%llx", (unsigned long long *)&addr);
+    return hexdump_addr(sh, addr, len, out, out_len);
 }
 
 /* ------------------------------------------------------------------ */

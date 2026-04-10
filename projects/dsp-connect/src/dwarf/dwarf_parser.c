@@ -237,19 +237,22 @@ static void collect_variable(dsc_dwarf_t *dw, dsc_symtab_t *tab,
                              UINT64 cu)
 {
     const char *name = DscDwarfAttrStr(a, ac, DW_AT_name);
-    if (!name) { return; }
+    if (!name) {
+        return;
+    }
 
     UINT64 addr = DscDwarfAttrUint(a, ac, DW_AT_location, 0);
     int ext = (int)DscDwarfAttrUint(a, ac, DW_AT_external, 0);
-    UINT64 ref = DscDwarfAttrTypeRef(a, ac, cu);
 
-    dsc_type_t *tp = NULL;
-    if (ref != 0) {
-        char key[21];
-        snprintf(key, sizeof(key), "%llu", (unsigned long long)ref);
-        tp = DscHashmapGet(&dw->type_index, key);
+    /* 先添加符号（type=NULL），记录索引以便第二遍 resolve */
+    UINT32 sym_idx = tab->count;
+    dsc_symtab_add(tab, name, addr, 0, NULL, ext != 0);
+
+    /* 把类型引用加入 pending，指向刚添加的符号的 type 字段 */
+    UINT64 ref = DscDwarfAttrTypeRef(a, ac, cu);
+    if (ref != 0 && sym_idx < tab->count) {
+        add_pending_ref(dw, &tab->symbols[sym_idx].type, ref);
     }
-    dsc_symtab_add(tab, name, addr, 0, tp, ext != 0);
 }
 
 /* ------------------------------------------------------------------ */
