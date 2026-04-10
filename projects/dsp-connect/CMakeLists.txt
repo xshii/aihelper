@@ -40,6 +40,14 @@ if(DSC_USE_LIBDWARF)
 endif()
 
 # ------------------------------------------------------------------ #
+# 交叉编译时只构建静态库，跳过 demo 和 tests                          #
+# ------------------------------------------------------------------ #
+if(DSC_CROSS_COMPILING)
+    message(STATUS "Cross-compiling: skipping demo and tests")
+    return()
+endif()
+
+# ------------------------------------------------------------------ #
 # Demo executable                                                    #
 # ------------------------------------------------------------------ #
 add_executable(dsc_demo src/demo_main.c)
