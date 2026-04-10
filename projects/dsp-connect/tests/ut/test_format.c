@@ -506,6 +506,114 @@ void format_float32(void)
 }
 
 /* ================================================================== */
+/* Format bitfield test                                               */
+/* ================================================================== */
+
+void format_bitfield_extracts_bits(void)
+{
+    /* Simulate: struct { uint32_t a:4; uint32_t b:12; uint32_t c:16; }
+     * Packed value: a=0xF (bits 0-3), b=0x123 (bits 4-15), c=0xABCD (bits 16-31)
+     * Raw uint32 = 0xABCD123F */
+    dsc_type_t base32 = {0};
+    base32.kind = DSC_TYPE_BASE;
+    base32.byte_size = 4;
+    base32.u.base.encoding = DSC_ENC_UNSIGNED;
+
+    /* Test field "a": bits[0:3] */
+    dsc_type_t *bf_a = calloc(1, sizeof(*bf_a));
+    bf_a->kind = DSC_TYPE_BITFIELD;
+    bf_a->byte_size = 4;
+    bf_a->u.bitfield.base_type = &base32;
+    bf_a->u.bitfield.bit_offset = 0;
+    bf_a->u.bitfield.bit_size = 4;
+
+    UINT32 raw = 0xABCD123F;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&raw, sizeof(raw), bf_a, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    /* a = 0xF = 15 */
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "15") != NULL);
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "bits[0:3]") != NULL);
+
+    DscStrbufFree(&sb);
+    free(bf_a);
+}
+
+void format_bitfield_middle_field(void)
+{
+    dsc_type_t base32 = {0};
+    base32.kind = DSC_TYPE_BASE;
+    base32.byte_size = 4;
+    base32.u.base.encoding = DSC_ENC_UNSIGNED;
+
+    /* Test field "b": bits[4:15], value should be 0x123 = 291 */
+    dsc_type_t *bf_b = calloc(1, sizeof(*bf_b));
+    bf_b->kind = DSC_TYPE_BITFIELD;
+    bf_b->byte_size = 4;
+    bf_b->u.bitfield.base_type = &base32;
+    bf_b->u.bitfield.bit_offset = 4;
+    bf_b->u.bitfield.bit_size = 12;
+
+    UINT32 raw = 0xABCD123F;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&raw, sizeof(raw), bf_b, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    /* b = 0x123 = 291 */
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "291") != NULL);
+
+    DscStrbufFree(&sb);
+    free(bf_b);
+}
+
+/* ================================================================== */
+/* Format function pointer test                                       */
+/* ================================================================== */
+
+void format_function_type_label(void)
+{
+    /* DSC_TYPE_FUNC — should display "<function>" */
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_FUNC;
+    type->byte_size = 0;
+
+    UINT8 dummy = 0;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&dummy, 1, type, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("<function>", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+void format_function_pointer(void)
+{
+    /* pointer → function type — should show hex address */
+    dsc_type_t func_type = {0};
+    func_type.kind = DSC_TYPE_FUNC;
+
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_POINTER;
+    type->byte_size = 8;
+    type->u.pointer.pointee = &func_type;
+
+    UINT64 addr = 0x00400120;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&addr, sizeof(addr), type, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    /* Should contain the hex address */
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "0x") != NULL);
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "400120") != NULL);
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+/* ================================================================== */
 /* Runner                                                             */
 /* ================================================================== */
 
@@ -539,6 +647,14 @@ int test_format_main(void)
 
     /* pointer */
     RUN_TEST(format_pointer_hex);
+    RUN_TEST(format_function_pointer);
+
+    /* bitfield */
+    RUN_TEST(format_bitfield_extracts_bits);
+    RUN_TEST(format_bitfield_middle_field);
+
+    /* function type */
+    RUN_TEST(format_function_type_label);
 
     /* misc */
     RUN_TEST(format_null_opts_uses_defaults);
