@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* 从 data 读取 byte_size 字节的有符号整数，符号扩展到 INT64 */
-static inline INT64 dsc_read_signed(const void *data, UINT32 byte_size)
+static inline INT64 DscReadSigned(const void *data, UINT32 byte_size)
 {
     const UINT8 *p = (const UINT8 *)data;
     switch (byte_size) {
@@ -24,7 +24,7 @@ static inline INT64 dsc_read_signed(const void *data, UINT32 byte_size)
 }
 
 /* 从 data 读取 byte_size 字节的无符号整数，零扩展到 UINT64 */
-static inline UINT64 dsc_read_unsigned(const void *data, UINT32 byte_size)
+static inline UINT64 DscReadUnsigned(const void *data, UINT32 byte_size)
 {
     const UINT8 *p = (const UINT8 *)data;
     switch (byte_size) {

@@ -31,7 +31,7 @@ typedef struct {
     UINT32        cap;
     /* Internal: hashmap for O(1) name lookup.
      * Declared as opaque void* to avoid leaking hashmap.h into this header.
-     * Actual type is dsc_hashmap_t*, allocated on first use. */
+     * Actual type is DscHashmap*, allocated on first use. */
     void         *index;
 } dsc_symtab_t;
 
@@ -46,7 +46,7 @@ void dsc_symtab_init(dsc_symtab_t *tab);
 void dsc_symtab_free(dsc_symtab_t *tab);
 
 /* Add a symbol. The table copies `name`; `type` is borrowed.
- * Returns 0 on success, negative dsc_error_t on failure. */
+ * Returns 0 on success, negative DscError on failure. */
 int dsc_symtab_add(dsc_symtab_t *tab,
                    const char *name,
                    UINT64 address,

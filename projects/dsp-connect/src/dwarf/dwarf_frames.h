@@ -67,7 +67,7 @@ void dsc_frames_init(dsc_frames_t *frames);
 void dsc_frames_free(dsc_frames_t *frames);
 
 /* Load frame information from DWARF.
- * Returns 0 on success, negative dsc_error_t on failure. */
+ * Returns 0 on success, negative DscError on failure. */
 int dsc_frames_load(dsc_frames_t *frames, dsc_dwarf_t *dw);
 
 /* Unwind one frame: given registers at `addr`, compute the caller's registers.

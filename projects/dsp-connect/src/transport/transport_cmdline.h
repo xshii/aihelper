@@ -14,41 +14,41 @@
 /* 子类实现这两个函数，注入到 cmdline 层：
  *   io_send: 发送 len 字节到 fd，返回实际发送字节数（<0 = 错误）
  *   io_recv: 从 fd 接收 1 字节到 *out_char，返回 1 成功、0 EOF、<0 错误 */
-typedef INT32 (*dsc_cmdline_send_fn)(int fd, const void *buf, UINT32 len);
-typedef INT32 (*dsc_cmdline_recv_fn)(int fd, char *out_char);
+typedef INT32 (*DscCmdlineSendFn)(int fd, const void *buf, UINT32 len);
+typedef INT32 (*DscCmdlineRecvFn)(int fd, char *out_char);
 
 /* ---------- 命令行传输基类 ---------- */
 
 /* 嵌入到 telnet/serial 的私有 struct 中（不是第一个成员，
- * 而是放在 dsc_transport_t base 之后） */
+ * 而是放在 DscTransport base 之后） */
 typedef struct {
     int                   fd;         /* 活跃的文件描述符，-1 = 未连接 */
     int                   timeout_ms;
-    dsc_cmdline_send_fn   io_send;
-    dsc_cmdline_recv_fn   io_recv;
-} dsc_cmdline_ctx_t;
+    DscCmdlineSendFn   io_send;
+    DscCmdlineRecvFn   io_recv;
+} DscCmdlineCtx;
 
 /* ---------- 共享 IO 函数 ---------- */
 
 /* 等待 fd 可读，返回 1=可读 0=超时 -1=错误 */
-int dsc_cmdline_wait_readable(int fd, int timeout_ms);
+int DscCmdlineWaitReadable(int fd, int timeout_ms);
 
 /* 重试发送直到全部写出 */
-int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, UINT32 len);
+int DscCmdlineSendAll(DscCmdlineCtx *ctx, const void *buf, UINT32 len);
 
 /* 读一行（到 \n 为止），去除 \r\n */
-int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, UINT32 buf_len);
+int DscCmdlineRecvLine(DscCmdlineCtx *ctx, char *buf, UINT32 buf_len);
 
 /* 发命令 + 收一行响应 */
-int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
+int DscCmdlineExec(DscCmdlineCtx *ctx, const char *cmd,
                      char *resp, UINT32 resp_len);
 
 /* 标准 "md" 协议读内存 */
-int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+int DscCmdlineMemRead(DscCmdlineCtx *ctx, UINT64 addr,
                          void *buf, UINT32 len);
 
 /* 标准 "mw" 协议写内存 */
-int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+int DscCmdlineMemWrite(DscCmdlineCtx *ctx, UINT64 addr,
                           const void *buf, UINT32 len);
 
 #endif /* DSC_TRANSPORT_CMDLINE_H */

@@ -10,6 +10,6 @@
 /* Create a shared memory transport.
  * Reads cfg->shm_path (file to mmap), cfg->shm_size (region size in bytes).
  * The returned transport is allocated but NOT mapped — call open() first. */
-dsc_transport_t *shm_transport_create(const dsc_transport_config_t *cfg);
+DscTransport *shm_transport_create(const DscTransportConfig *cfg);
 
 #endif /* DSC_TRANSPORT_SHM_H */

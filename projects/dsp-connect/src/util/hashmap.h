@@ -10,34 +10,34 @@
 
 /* uthash 要求 hash handle 嵌入结构体，
  * 这个 entry 是内部实现，外部只通过 dsc_hashmap_* API 操作 */
-typedef struct dsc_hashmap_entry_t {
+typedef struct DscHashmapEntry {
     char            *key;   /* owned, strdup'd */
     void            *value; /* borrowed, caller manages lifetime */
     UT_hash_handle   hh;    /* uthash bookkeeping */
-} dsc_hashmap_entry_t;
+} DscHashmapEntry;
 
 /* 哈希表句柄 — 实际上就是 uthash 的头指针 */
 typedef struct {
-    dsc_hashmap_entry_t *head; /* uthash head pointer (NULL = empty) */
-} dsc_hashmap_t;
+    DscHashmapEntry *head; /* uthash head pointer (NULL = empty) */
+} DscHashmap;
 
 /* Create / destroy */
-void  dsc_hashmap_init(dsc_hashmap_t *map, UINT32 initial_cap);
-void  dsc_hashmap_free(dsc_hashmap_t *map);
+void  DscHashmapInit(DscHashmap *map, UINT32 initial_cap);
+void  DscHashmapFree(DscHashmap *map);
 
 /* Returns 0 on success, -1 on alloc failure */
-int   dsc_hashmap_put(dsc_hashmap_t *map, const char *key, void *value);
+int   DscHashmapPut(DscHashmap *map, const char *key, void *value);
 
 /* Returns value or NULL if not found */
-void *dsc_hashmap_get(const dsc_hashmap_t *map, const char *key);
+void *DscHashmapGet(const DscHashmap *map, const char *key);
 
 /* Returns 1 if found and removed, 0 if not found */
-int   dsc_hashmap_del(dsc_hashmap_t *map, const char *key);
+int   DscHashmapDel(DscHashmap *map, const char *key);
 
 /* Remove all entries (frees keys, not values) */
-void  dsc_hashmap_clear(dsc_hashmap_t *map);
+void  DscHashmapClear(DscHashmap *map);
 
 /* Entry count */
-UINT32 dsc_hashmap_count(const dsc_hashmap_t *map);
+UINT32 DscHashmapCount(const DscHashmap *map);
 
 #endif /* DSC_HASHMAP_H */

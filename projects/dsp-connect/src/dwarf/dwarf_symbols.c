@@ -40,8 +40,8 @@ void dsc_symtab_free(dsc_symtab_t *tab)
 
     /* Free the hashmap index */
     if (tab->index) {
-        dsc_hashmap_t *map = (dsc_hashmap_t *)tab->index;
-        dsc_hashmap_free(map);
+        DscHashmap *map = (DscHashmap *)tab->index;
+        DscHashmapFree(map);
         free(map);
     }
 
@@ -79,15 +79,15 @@ static int ensure_index(dsc_symtab_t *tab)
         return DSC_OK;
     }
 
-    dsc_hashmap_t *map = malloc(sizeof(dsc_hashmap_t));
+    DscHashmap *map = malloc(sizeof(DscHashmap));
     if (!map) {
         return DSC_ERR_NOMEM;
     }
-    dsc_hashmap_init(map, tab->cap > 0 ? tab->cap : INITIAL_CAP);
+    DscHashmapInit(map, tab->cap > 0 ? tab->cap : INITIAL_CAP);
 
     /* Index all existing symbols */
     for (UINT32 i = 0; i < tab->count; i++) {
-        DSC_TRY(dsc_hashmap_put(map, tab->symbols[i].name, &tab->symbols[i]));
+        DSC_TRY(DscHashmapPut(map, tab->symbols[i].name, &tab->symbols[i]));
     }
 
     tab->index = map;
@@ -126,12 +126,12 @@ int dsc_symtab_add(dsc_symtab_t *tab,
 
     /* Update hashmap index if it exists */
     if (tab->index) {
-        dsc_hashmap_t *map = (dsc_hashmap_t *)tab->index;
-        int rc = dsc_hashmap_put(map, name_copy, sym);
+        DscHashmap *map = (DscHashmap *)tab->index;
+        int rc = DscHashmapPut(map, name_copy, sym);
         if (rc < 0) {
             /* Index failed — symbol is still in the array, just not indexed.
              * The next lookup will rebuild the index. */
-            dsc_hashmap_free(map);
+            DscHashmapFree(map);
             free(map);
             tab->index = NULL;
         }
@@ -163,8 +163,8 @@ const dsc_symbol_t *dsc_symtab_lookup(const dsc_symtab_t *tab,
         return NULL;
     }
 
-    dsc_hashmap_t *map = (dsc_hashmap_t *)tab->index;
-    return (const dsc_symbol_t *)dsc_hashmap_get(map, name);
+    DscHashmap *map = (DscHashmap *)tab->index;
+    return (const dsc_symbol_t *)DscHashmapGet(map, name);
 }
 
 /* ------------------------------------------------------------------ */

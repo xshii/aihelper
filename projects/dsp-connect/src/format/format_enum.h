@@ -13,8 +13,8 @@
  * type->kind must be DSC_TYPE_ENUM.
  * Supports both simple enums and flags-style (OR'd) enums.
  * Returns DSC_OK on success, negative error code on failure. */
-int dsc_format_enum(const void *data, UINT32 data_len,
-                    const dsc_type_t *type, const dsc_format_opts_t *opts,
-                    dsc_strbuf_t *out);
+int DscFormatEnum(const void *data, UINT32 data_len,
+                    const dsc_type_t *type, const DscFormatOpts *opts,
+                    DscStrbuf *out);
 
 #endif /* DSC_FORMAT_ENUM_H */

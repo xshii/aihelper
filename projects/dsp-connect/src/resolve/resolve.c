@@ -138,8 +138,8 @@ static const dsc_struct_field_t *find_field(const dsc_type_t *composite,
 /* ------------------------------------------------------------------ */
 /* Public API                                                         */
 /* ------------------------------------------------------------------ */
-int dsc_resolve(const dsc_symtab_t *symtab, const dsc_arch_t *arch,
-                const char *path, dsc_resolved_t *out)
+int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
+                const char *path, DscResolved *out)
 {
     (void)arch;
     if (symtab == NULL || path == NULL || out == NULL) {

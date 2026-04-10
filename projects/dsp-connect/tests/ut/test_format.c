@@ -112,15 +112,15 @@ void format_uint32_decimal(void)
 {
     dsc_type_t *type = make_uint32_type();
     UINT32 val = 42;
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(&val, sizeof(val), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("42", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("42", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -128,16 +128,16 @@ void format_uint32_hex(void)
 {
     dsc_type_t *type = make_uint32_type();
     UINT32 val = 42;
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
+    DscFormatOpts opts = DscFormatOptsDefault();
     opts.hex_integers = 1;
-    int rc = dsc_format(&val, sizeof(val), type, &opts, &sb);
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("0x0000002A", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("0x0000002A", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -145,15 +145,15 @@ void format_int16_negative(void)
 {
     dsc_type_t *type = make_int16_type();
     INT16 val = -100;
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(&val, sizeof(val), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("-100", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("-100", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -165,15 +165,15 @@ void format_enum_known_value(void)
 {
     dsc_type_t *type = make_state_enum_type();
     INT32 val = 0;  /* STATE_IDLE */
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(&val, sizeof(val), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("STATE_IDLE (0)", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("STATE_IDLE (0)", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -181,15 +181,15 @@ void format_enum_second_value(void)
 {
     dsc_type_t *type = make_state_enum_type();
     INT32 val = 1;  /* STATE_RUN */
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(&val, sizeof(val), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("STATE_RUN (1)", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("STATE_RUN (1)", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -207,21 +207,21 @@ void format_struct_multiline(void)
     memcpy(data + 0, &a_val, 4);
     memcpy(data + 4, &b_val, 4);
 
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 256);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 256);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(data, sizeof(data), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(data, sizeof(data), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
 
-    const char *result = dsc_strbuf_cstr(&sb);
+    const char *result = DscStrbufCstr(&sb);
     /* Should contain field names and values */
     TEST_ASSERT_TRUE(strstr(result, ".a = 10") != NULL);
     TEST_ASSERT_TRUE(strstr(result, ".b = 20") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "{") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "}") != NULL);
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -234,20 +234,20 @@ void format_array_elements(void)
     dsc_type_t *type = make_uint32_array_type();
 
     UINT32 data[3] = {100, 200, 300};
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 256);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 256);
 
-    dsc_format_opts_t opts = dsc_format_opts_default();
-    int rc = dsc_format(data, sizeof(data), type, &opts, &sb);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(data, sizeof(data), type, &opts, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
 
-    const char *result = dsc_strbuf_cstr(&sb);
+    const char *result = DscStrbufCstr(&sb);
     /* Small array of primitives uses compact display */
     TEST_ASSERT_TRUE(strstr(result, "[0] = 100") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "[1] = 200") != NULL);
     TEST_ASSERT_TRUE(strstr(result, "[2] = 300") != NULL);
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -259,14 +259,14 @@ void format_null_opts_uses_defaults(void)
 {
     dsc_type_t *type = make_uint32_type();
     UINT32 val = 7;
-    dsc_strbuf_t sb;
-    dsc_strbuf_init(&sb, 64);
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
 
-    int rc = dsc_format(&val, sizeof(val), type, NULL, &sb);
+    int rc = DscFormat(&val, sizeof(val), type, NULL, &sb);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
-    TEST_ASSERT_EQUAL_STRING("7", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_STRING("7", DscStrbufCstr(&sb));
 
-    dsc_strbuf_free(&sb);
+    DscStrbufFree(&sb);
     free(type);
 }
 
@@ -279,7 +279,7 @@ void format_str_returns_allocated_string(void)
     dsc_type_t *type = make_uint32_type();
     UINT32 val = 99;
 
-    char *result = dsc_format_str(&val, sizeof(val), type, NULL);
+    char *result = DscFormatStr(&val, sizeof(val), type, NULL);
     TEST_ASSERT_NOT_NULL(result);
     TEST_ASSERT_EQUAL_STRING("99", result);
 

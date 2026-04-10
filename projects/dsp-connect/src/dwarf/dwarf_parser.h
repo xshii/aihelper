@@ -33,7 +33,7 @@ void dsc_dwarf_close(dsc_dwarf_t *dw);
 
 /* Populate `tab` with all variable symbols found in DWARF .debug_info.
  * The types referenced by symbols are owned by `dw` — valid until close.
- * Returns 0 on success, negative dsc_error_t on failure. */
+ * Returns 0 on success, negative DscError on failure. */
 int dsc_dwarf_load_symbols(dsc_dwarf_t *dw, dsc_symtab_t *tab);
 
 /* ------------------------------------------------------------------ */

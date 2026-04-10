@@ -10,6 +10,6 @@
 /* Create a telnet transport.
  * Reads cfg->host, cfg->port (default 23), cfg->timeout_ms (default 5000).
  * The returned transport is allocated but NOT connected — call open() first. */
-dsc_transport_t *telnet_transport_create(const dsc_transport_config_t *cfg);
+DscTransport *telnet_transport_create(const DscTransportConfig *cfg);
 
 #endif /* DSC_TRANSPORT_TELNET_H */

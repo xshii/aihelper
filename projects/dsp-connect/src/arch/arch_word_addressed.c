@@ -24,7 +24,7 @@
 
 /* --- Private data: extends base with word config --- */
 typedef struct {
-    dsc_arch_t base;            /* MUST be first member */
+    DscArch base;            /* MUST be first member */
     int word_bytes;             /* word size: 2, 3, or 4 bytes */
     int is_big_endian;          /* target endianness */
     int host_is_big_endian;     /* detected at creation time */
@@ -46,7 +46,7 @@ static int default_shift_for_word_bytes(int word_bytes)
 
 /* --- vtable implementations --- */
 
-static int word_logical_to_physical(const dsc_arch_t *self, UINT64 logical,
+static int word_logical_to_physical(const DscArch *self, UINT64 logical,
                                     UINT64 *physical)
 {
     const arch_word_t *a = (const arch_word_t *)self;
@@ -66,7 +66,7 @@ static int word_logical_to_physical(const dsc_arch_t *self, UINT64 logical,
     return DSC_OK;
 }
 
-static int word_physical_to_logical(const dsc_arch_t *self, UINT64 physical,
+static int word_physical_to_logical(const DscArch *self, UINT64 physical,
                                     UINT64 *logical)
 {
     const arch_word_t *a = (const arch_word_t *)self;
@@ -79,7 +79,7 @@ static int word_physical_to_logical(const dsc_arch_t *self, UINT64 physical,
     return DSC_OK;
 }
 
-static void word_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
+static void word_swap_endian(const DscArch *self, void *buf, UINT32 size)
 {
     const arch_word_t *a = (const arch_word_t *)self;
 
@@ -95,13 +95,13 @@ static void word_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
 
     UINT32 offset = 0;
     while (offset + ws <= size) {
-        dsc_byte_swap(p + offset, ws);
+        DscByteSwap(p + offset, ws);
         offset += ws;
     }
     /* Remaining bytes (partial word) are left as-is */
 }
 
-static UINT32 word_min_access_size(const dsc_arch_t *self)
+static UINT32 word_min_access_size(const DscArch *self)
 {
     const arch_word_t *a = (const arch_word_t *)self;
     /* Minimum access = one full word, because sub-word byte access
@@ -109,19 +109,19 @@ static UINT32 word_min_access_size(const dsc_arch_t *self)
     return (UINT32)a->word_bytes;
 }
 
-static UINT32 word_word_size(const dsc_arch_t *self)
+static UINT32 word_word_size(const DscArch *self)
 {
     const arch_word_t *a = (const arch_word_t *)self;
     return (UINT32)a->word_bytes;
 }
 
-static void word_destroy(dsc_arch_t *self)
+static void word_destroy(DscArch *self)
 {
     free(self);
 }
 
 /* --- Shared ops table --- */
-static const struct dsc_arch_ops word_ops = {
+static const struct DscArchOps word_ops = {
     .logical_to_physical = word_logical_to_physical,
     .physical_to_logical = word_physical_to_logical,
     .swap_endian         = word_swap_endian,
@@ -131,7 +131,7 @@ static const struct dsc_arch_ops word_ops = {
 };
 
 /* --- Generic creator --- */
-static dsc_arch_t *word_create_with(int word_bytes, int is_big_endian,
+static DscArch *word_create_with(int word_bytes, int is_big_endian,
                                     int addr_shift, const char *name)
 {
     arch_word_t *a = calloc(1, sizeof(*a));
@@ -142,7 +142,7 @@ static dsc_arch_t *word_create_with(int word_bytes, int is_big_endian,
     a->base.ops = &word_ops;
     a->word_bytes = word_bytes;
     a->is_big_endian = is_big_endian;
-    a->host_is_big_endian = dsc_host_is_big_endian();
+    a->host_is_big_endian = DscHostIsBigEndian();
 
     /* Use caller-specified shift, or compute default */
     if (addr_shift > 0) {
@@ -163,31 +163,31 @@ static dsc_arch_t *word_create_with(int word_bytes, int is_big_endian,
 
 /* --- Creator functions for each registered name --- */
 
-static dsc_arch_t *word16_create(const dsc_arch_config_t *cfg)
+static DscArch *word16_create(const DscArchConfig *cfg)
 {
     int big_endian = cfg ? cfg->is_big_endian : 1;  /* DSPs are often big-endian */
     int shift = cfg ? cfg->addr_shift : 0;
     return word_create_with(2, big_endian, shift, "word16");
 }
 
-static dsc_arch_t *word24_create(const dsc_arch_config_t *cfg)
+static DscArch *word24_create(const DscArchConfig *cfg)
 {
     int big_endian = cfg ? cfg->is_big_endian : 1;
     int shift = cfg ? cfg->addr_shift : 0;
     return word_create_with(3, big_endian, shift, "word24");
 }
 
-static dsc_arch_t *word32_create(const dsc_arch_config_t *cfg)
+static DscArch *word32_create(const DscArchConfig *cfg)
 {
     int big_endian = cfg ? cfg->is_big_endian : 1;
     int shift = cfg ? cfg->addr_shift : 0;
     return word_create_with(4, big_endian, shift, "word32");
 }
 
-/* --- Registration: called by dsc_arch_register_builtins() --- */
-void dsc_arch_word_register(void)
+/* --- Registration: called by DscArchRegisterBuiltins() --- */
+void DscArchWordRegister(void)
 {
-    dsc_arch_register("word16", word16_create);
-    dsc_arch_register("word24", word24_create);
-    dsc_arch_register("word32", word32_create);
+    DscArchRegister("word16", word16_create);
+    DscArchRegister("word24", word24_create);
+    DscArchRegister("word32", word32_create);
 }

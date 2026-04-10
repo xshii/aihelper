@@ -49,7 +49,7 @@ void dsc_lines_init(dsc_lines_t *lines);
 void dsc_lines_free(dsc_lines_t *lines);
 
 /* Load line information from DWARF.
- * Returns 0 on success, negative dsc_error_t on failure. */
+ * Returns 0 on success, negative DscError on failure. */
 int dsc_lines_load(dsc_lines_t *lines, dsc_dwarf_t *dw);
 
 /* Lookup the source location for an address.

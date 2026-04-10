@@ -9,8 +9,8 @@
  * Use this to chain fallible calls without nested ifs.
  *
  * Example:
- *   DSC_TRY(dsc_transport_open(tp));
- *   DSC_TRY(dsc_mem_read(tp, arch, addr, buf, len));
+ *   DSC_TRY(DscTransportOpen(tp));
+ *   DSC_TRY(DscMemRead(tp, arch, addr, buf, len));
  *   return DSC_OK;
  */
 #define DSC_TRY(expr) \

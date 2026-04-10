@@ -14,14 +14,14 @@
 
 typedef struct {
     char name[32];
-    dsc_arch_creator_fn creator;
+    DscArchCreatorFn creator;
 } arch_registry_entry_t;
 
 static arch_registry_entry_t registry[MAX_ARCH_BACKENDS];
 static int registry_count = 0;
 
 /* --- Register a backend --- */
-int dsc_arch_register(const char *name, dsc_arch_creator_fn creator)
+int DscArchRegister(const char *name, DscArchCreatorFn creator)
 {
     if (!name || !creator) {
         return DSC_ERR_INVALID_ARG;
@@ -49,7 +49,7 @@ int dsc_arch_register(const char *name, dsc_arch_creator_fn creator)
 }
 
 /* --- Create by name --- */
-dsc_arch_t *dsc_arch_create(const char *name, const dsc_arch_config_t *cfg)
+DscArch *DscArchCreate(const char *name, const DscArchConfig *cfg)
 {
     if (!name) {
         return NULL;
@@ -64,11 +64,11 @@ dsc_arch_t *dsc_arch_create(const char *name, const dsc_arch_config_t *cfg)
 }
 
 /* --- Register all built-in backends --- */
-void dsc_arch_register_builtins(void)
+void DscArchRegisterBuiltins(void)
 {
     /* Byte-addressed backends */
-    dsc_arch_byte_register();
+    DscArchByteRegister();
 
     /* Word-addressed backends */
-    dsc_arch_word_register();
+    DscArchWordRegister();
 }

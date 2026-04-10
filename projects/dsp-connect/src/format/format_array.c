@@ -43,7 +43,7 @@ static int is_byte_type(const dsc_type_t *elem_type)
 /* Format: "48 65 6C 6C 6F 00"  |Hello.|                              */
 /* ------------------------------------------------------------------ */
 static void format_hex_dump(const UINT8 *bytes, UINT32 count,
-                            UINT32 max_elems, dsc_strbuf_t *out)
+                            UINT32 max_elems, DscStrbuf *out)
 {
     UINT32 show = count;
     if (max_elems > 0 && show > max_elems) {
@@ -51,30 +51,30 @@ static void format_hex_dump(const UINT8 *bytes, UINT32 count,
     }
 
     /* Hex bytes */
-    dsc_strbuf_append(out, "\"");
+    DscStrbufAppend(out, "\"");
     for (UINT32 i = 0; i < show; i++) {
         if (i > 0) {
-            dsc_strbuf_append(out, " ");
+            DscStrbufAppend(out, " ");
         }
-        dsc_strbuf_appendf(out, "%02X", bytes[i]);
+        DscStrbufAppendf(out, "%02X", bytes[i]);
     }
-    dsc_strbuf_append(out, "\"");
+    DscStrbufAppend(out, "\"");
 
     /* ASCII sidebar */
-    dsc_strbuf_append(out, "  |");
+    DscStrbufAppend(out, "  |");
     for (UINT32 i = 0; i < show; i++) {
         char c = (char)bytes[i];
         if (c >= 0x20 && c < 0x7F) {
-            dsc_strbuf_appendf(out, "%c", c);
+            DscStrbufAppendf(out, "%c", c);
         } else {
-            dsc_strbuf_append(out, ".");
+            DscStrbufAppend(out, ".");
         }
     }
-    dsc_strbuf_append(out, "|");
+    DscStrbufAppend(out, "|");
 
     /* Truncation indicator */
     if (show < count) {
-        dsc_strbuf_appendf(out, " ... (%zu more)", count - show);
+        DscStrbufAppendf(out, " ... (%zu more)", count - show);
     }
 }
 
@@ -102,9 +102,9 @@ static UINT32 compute_total_elements(const dsc_array_dim_t *dims,
 /* ------------------------------------------------------------------ */
 /* Public: format an array value                                       */
 /* ------------------------------------------------------------------ */
-int dsc_format_array(const void *data, UINT32 data_len,
-                     const dsc_type_t *type, const dsc_format_opts_t *opts,
-                     int depth, dsc_strbuf_t *out)
+int DscFormatArray(const void *data, UINT32 data_len,
+                     const dsc_type_t *type, const DscFormatOpts *opts,
+                     int depth, DscStrbuf *out)
 {
     if (!data || !type || !out) {
         return DSC_ERR_INVALID_ARG;
@@ -112,7 +112,7 @@ int dsc_format_array(const void *data, UINT32 data_len,
 
     const dsc_type_t *elem_type = type->u.array.element_type;
     if (!elem_type) {
-        dsc_strbuf_append(out, "<array with no element type>");
+        DscStrbufAppend(out, "<array with no element type>");
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
@@ -120,13 +120,13 @@ int dsc_format_array(const void *data, UINT32 data_len,
     UINT32 total_elems = compute_total_elements(type->u.array.dims,
                                                 type->u.array.dim_count);
     if (total_elems == 0) {
-        dsc_strbuf_append(out, "[]");
+        DscStrbufAppend(out, "[]");
         return DSC_OK;
     }
 
     UINT32 elem_size = dsc_type_size(elem_type);
     if (elem_size == 0) {
-        dsc_strbuf_append(out, "<array of zero-size elements>");
+        DscStrbufAppend(out, "<array of zero-size elements>");
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
@@ -158,19 +158,19 @@ int dsc_format_array(const void *data, UINT32 data_len,
 
     if (compact) {
         /* Single-line: [0] = 1, [1] = 2, [2] = 3 */
-        dsc_strbuf_append(out, "{ ");
+        DscStrbufAppend(out, "{ ");
 
         for (UINT32 i = 0; i < show_elems; i++) {
             if (i > 0) {
-                dsc_strbuf_append(out, ", ");
+                DscStrbufAppend(out, ", ");
             }
 
             const UINT8 *elem_data = (const UINT8 *)data + (i * elem_size);
             UINT32 elem_data_len = data_len - (i * elem_size);
 
-            dsc_strbuf_appendf(out, "[%zu] = ", i);
+            DscStrbufAppendf(out, "[%zu] = ", i);
 
-            int elem_rc = dsc_format_value(elem_data, elem_data_len,
+            int elem_rc = DscFormatValue(elem_data, elem_data_len,
                                            elem_type, opts,
                                            inner_depth, out);
             if (elem_rc != DSC_OK && rc == DSC_OK) {
@@ -179,38 +179,38 @@ int dsc_format_array(const void *data, UINT32 data_len,
         }
 
         if (show_elems < total_elems) {
-            dsc_strbuf_appendf(out, ", ... (%zu more)", total_elems - show_elems);
+            DscStrbufAppendf(out, ", ... (%zu more)", total_elems - show_elems);
         }
 
-        dsc_strbuf_append(out, " }");
+        DscStrbufAppend(out, " }");
     } else {
         /* Multi-line display */
-        dsc_strbuf_append(out, "{\n");
+        DscStrbufAppend(out, "{\n");
 
         for (UINT32 i = 0; i < show_elems; i++) {
             const UINT8 *elem_data = (const UINT8 *)data + (i * elem_size);
             UINT32 elem_data_len = data_len - (i * elem_size);
 
-            dsc_strbuf_indent(out, inner_depth * indent_w / 2);
-            dsc_strbuf_appendf(out, "[%zu] = ", i);
+            DscStrbufIndent(out, inner_depth * indent_w / 2);
+            DscStrbufAppendf(out, "[%zu] = ", i);
 
-            int elem_rc = dsc_format_value(elem_data, elem_data_len,
+            int elem_rc = DscFormatValue(elem_data, elem_data_len,
                                            elem_type, opts,
                                            inner_depth, out);
             if (elem_rc != DSC_OK && rc == DSC_OK) {
                 rc = elem_rc;
             }
 
-            dsc_strbuf_append(out, ",\n");
+            DscStrbufAppend(out, ",\n");
         }
 
         if (show_elems < total_elems) {
-            dsc_strbuf_indent(out, inner_depth * indent_w / 2);
-            dsc_strbuf_appendf(out, "... (%zu more)\n", total_elems - show_elems);
+            DscStrbufIndent(out, inner_depth * indent_w / 2);
+            DscStrbufAppendf(out, "... (%zu more)\n", total_elems - show_elems);
         }
 
-        dsc_strbuf_indent(out, depth * indent_w / 2);
-        dsc_strbuf_append(out, "}");
+        DscStrbufIndent(out, depth * indent_w / 2);
+        DscStrbufAppend(out, "}");
     }
 
     return rc;

@@ -33,20 +33,20 @@ static INT32 sock_recv(int fd, char *ch)
 /* ---------- Private struct ---------- */
 
 typedef struct {
-    dsc_transport_t   base;     /* MUST be first member */
-    dsc_cmdline_ctx_t cmd;      /* 共享协议上下文 */
+    DscTransport   base;     /* MUST be first member */
+    DscCmdlineCtx cmd;      /* 共享协议上下文 */
     char              host[256];
     int               port;
 } telnet_transport_t;
 
-static inline telnet_transport_t *to_telnet(dsc_transport_t *t)
+static inline telnet_transport_t *to_telnet(DscTransport *t)
 {
     return (telnet_transport_t *)t;
 }
 
 /* ---------- vtable: open (telnet 特有) ---------- */
 
-static int telnet_open(dsc_transport_t *self)
+static int telnet_open(DscTransport *self)
 {
     telnet_transport_t *tt = to_telnet(self);
 
@@ -91,7 +91,7 @@ static int telnet_open(dsc_transport_t *self)
 
 /* ---------- vtable: close ---------- */
 
-static void telnet_close(dsc_transport_t *self)
+static void telnet_close(DscTransport *self)
 {
     telnet_transport_t *tt = to_telnet(self);
     if (tt->cmd.fd >= 0) {
@@ -102,25 +102,25 @@ static void telnet_close(dsc_transport_t *self)
 
 /* ---------- vtable: 协议操作全部委托给 cmdline ---------- */
 
-static int telnet_mem_read(dsc_transport_t *self, UINT64 addr,
+static int telnet_mem_read(DscTransport *self, UINT64 addr,
                            void *buf, UINT32 len)
 {
-    return dsc_cmdline_mem_read(&to_telnet(self)->cmd, addr, buf, len);
+    return DscCmdlineMemRead(&to_telnet(self)->cmd, addr, buf, len);
 }
 
-static int telnet_mem_write(dsc_transport_t *self, UINT64 addr,
+static int telnet_mem_write(DscTransport *self, UINT64 addr,
                             const void *buf, UINT32 len)
 {
-    return dsc_cmdline_mem_write(&to_telnet(self)->cmd, addr, buf, len);
+    return DscCmdlineMemWrite(&to_telnet(self)->cmd, addr, buf, len);
 }
 
-static int telnet_exec_cmd(dsc_transport_t *self, const char *cmd,
+static int telnet_exec_cmd(DscTransport *self, const char *cmd,
                            char *resp, UINT32 resp_len)
 {
-    return dsc_cmdline_exec(&to_telnet(self)->cmd, cmd, resp, resp_len);
+    return DscCmdlineExec(&to_telnet(self)->cmd, cmd, resp, resp_len);
 }
 
-static void telnet_destroy(dsc_transport_t *self)
+static void telnet_destroy(DscTransport *self)
 {
     telnet_close(self);
     free(to_telnet(self));
@@ -128,7 +128,7 @@ static void telnet_destroy(dsc_transport_t *self)
 
 /* ---------- vtable ---------- */
 
-static const dsc_transport_ops telnet_ops = {
+static const DscTransportOps telnet_ops = {
     .open      = telnet_open,
     .close     = telnet_close,
     .mem_read  = telnet_mem_read,
@@ -139,7 +139,7 @@ static const dsc_transport_ops telnet_ops = {
 
 /* ---------- Constructor ---------- */
 
-dsc_transport_t *telnet_transport_create(const dsc_transport_config_t *cfg)
+DscTransport *telnet_transport_create(const DscTransportConfig *cfg)
 {
     telnet_transport_t *tt = calloc(1, sizeof(*tt));
     if (!tt) {

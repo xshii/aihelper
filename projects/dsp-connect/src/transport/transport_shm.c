@@ -42,7 +42,7 @@
 /* ---------- Private struct ---------- */
 
 typedef struct {
-    dsc_transport_t base;       /* MUST be first member */
+    DscTransport base;       /* MUST be first member */
     char            shm_path[256];
     UINT32          shm_size;   /* total mmap size (ctrl + data) */
     int             timeout_ms;
@@ -50,7 +50,7 @@ typedef struct {
     UINT8        *map;        /* mmap base pointer, NULL when not mapped */
 } shm_transport_t;
 
-static inline shm_transport_t *to_shm(dsc_transport_t *t)
+static inline shm_transport_t *to_shm(DscTransport *t)
 {
     return (shm_transport_t *)t;
 }
@@ -94,7 +94,7 @@ static int shm_wait_doorbell(shm_transport_t *st)
 
 /* ---------- vtable implementations ---------- */
 
-static int shm_tp_open(dsc_transport_t *self)
+static int shm_tp_open(DscTransport *self)
 {
     shm_transport_t *st = to_shm(self);
 
@@ -135,7 +135,7 @@ static int shm_tp_open(dsc_transport_t *self)
     return DSC_OK;
 }
 
-static void shm_tp_close(dsc_transport_t *self)
+static void shm_tp_close(DscTransport *self)
 {
     shm_transport_t *st = to_shm(self);
 
@@ -152,7 +152,7 @@ static void shm_tp_close(dsc_transport_t *self)
 
 /* mem_read: direct memcpy from the shared memory data region.
  * addr is treated as an offset into the data region. */
-static int shm_mem_read(dsc_transport_t *self, UINT64 addr,
+static int shm_mem_read(DscTransport *self, UINT64 addr,
                         void *buf, UINT32 len)
 {
     shm_transport_t *st = to_shm(self);
@@ -172,7 +172,7 @@ static int shm_mem_read(dsc_transport_t *self, UINT64 addr,
 }
 
 /* mem_write: direct memcpy into the shared memory data region. */
-static int shm_mem_write(dsc_transport_t *self, UINT64 addr,
+static int shm_mem_write(DscTransport *self, UINT64 addr,
                          const void *buf, UINT32 len)
 {
     shm_transport_t *st = to_shm(self);
@@ -192,7 +192,7 @@ static int shm_mem_write(dsc_transport_t *self, UINT64 addr,
 }
 
 /* exec_cmd: write command to shared buffer, ring doorbell, wait for response. */
-static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
+static int shm_exec_cmd(DscTransport *self, const char *cmd,
                         char *resp, UINT32 resp_len)
 {
     shm_transport_t *st = to_shm(self);
@@ -227,7 +227,7 @@ static int shm_exec_cmd(dsc_transport_t *self, const char *cmd,
     return DSC_OK;
 }
 
-static void shm_destroy(dsc_transport_t *self)
+static void shm_destroy(DscTransport *self)
 {
     shm_transport_t *st = to_shm(self);
     shm_tp_close(self);
@@ -236,7 +236,7 @@ static void shm_destroy(dsc_transport_t *self)
 
 /* ---------- vtable definition ---------- */
 
-static const dsc_transport_ops shm_ops = {
+static const DscTransportOps shm_ops = {
     .open      = shm_tp_open,
     .close     = shm_tp_close,
     .mem_read  = shm_mem_read,
@@ -249,7 +249,7 @@ static const dsc_transport_ops shm_ops = {
 
 #define SHM_DEFAULT_SIZE (1024 * 1024 + SHM_CTRL_SIZE)  /* 1 MiB data + ctrl page */
 
-dsc_transport_t *shm_transport_create(const dsc_transport_config_t *cfg)
+DscTransport *shm_transport_create(const DscTransportConfig *cfg)
 {
     shm_transport_t *st = calloc(1, sizeof(*st));
     if (!st) {

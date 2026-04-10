@@ -13,7 +13,7 @@ static const struct { int code; const char *msg; } error_table[] = {
 
 #define ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 
-const char *dsc_strerror(int err)
+const char *DscStrerror(int err)
 {
     for (UINT32 i = 0; i < ARRAY_LEN(error_table); i++) {
         if (error_table[i].code == err) {

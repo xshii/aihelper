@@ -63,7 +63,7 @@ static int is_flags_enum(const dsc_enum_value_t *values, UINT32 count)
 /* Decomposes the value into contributing flags.                        */
 /* ------------------------------------------------------------------ */
 static void format_flags(const dsc_enum_value_t *values, UINT32 count,
-                         INT64 raw, dsc_strbuf_t *out)
+                         INT64 raw, DscStrbuf *out)
 {
     UINT64 remaining = (UINT64)raw;
     int first = 1;
@@ -79,9 +79,9 @@ static void format_flags(const dsc_enum_value_t *values, UINT32 count,
 
         if ((remaining & flag) == flag) {
             if (!first) {
-                dsc_strbuf_append(out, " | ");
+                DscStrbufAppend(out, " | ");
             }
-            dsc_strbuf_append(out, values[i].name);
+            DscStrbufAppend(out, values[i].name);
             remaining &= ~flag;
             first = 0;
         }
@@ -92,9 +92,9 @@ static void format_flags(const dsc_enum_value_t *values, UINT32 count,
         /* Look for a zero-valued enumerator (e.g., "NONE") */
         const char *zero_name = find_exact_match(values, count, 0);
         if (zero_name) {
-            dsc_strbuf_append(out, zero_name);
+            DscStrbufAppend(out, zero_name);
         } else {
-            dsc_strbuf_append(out, "0");
+            DscStrbufAppend(out, "0");
         }
         return;
     }
@@ -102,21 +102,21 @@ static void format_flags(const dsc_enum_value_t *values, UINT32 count,
     /* If there are leftover bits not covered by any flag */
     if (remaining != 0) {
         if (!first) {
-            dsc_strbuf_append(out, " | ");
+            DscStrbufAppend(out, " | ");
         }
-        dsc_strbuf_appendf(out, "0x%llX", (unsigned long long)remaining);
+        DscStrbufAppendf(out, "0x%llX", (unsigned long long)remaining);
     }
 
     /* Append numeric value in parens */
-    dsc_strbuf_appendf(out, " (0x%02llX)", (unsigned long long)(UINT64)raw);
+    DscStrbufAppendf(out, " (0x%02llX)", (unsigned long long)(UINT64)raw);
 }
 
 /* ------------------------------------------------------------------ */
 /* Public: format an enum value                                        */
 /* ------------------------------------------------------------------ */
-int dsc_format_enum(const void *data, UINT32 data_len,
-                    const dsc_type_t *type, const dsc_format_opts_t *opts,
-                    dsc_strbuf_t *out)
+int DscFormatEnum(const void *data, UINT32 data_len,
+                    const dsc_type_t *type, const DscFormatOpts *opts,
+                    DscStrbuf *out)
 {
     (void)opts; /* opts reserved for future use (e.g., always-hex mode) */
 
@@ -130,26 +130,26 @@ int dsc_format_enum(const void *data, UINT32 data_len,
         byte_size = type->u.enumeration.underlying->byte_size;
     }
     if (byte_size == 0 || data_len < byte_size) {
-        dsc_strbuf_append(out, "<incomplete enum>");
+        DscStrbufAppend(out, "<incomplete enum>");
         return DSC_ERR_TYPE_INCOMPLETE;
     }
 
-    INT64 raw = dsc_read_signed(data, byte_size);
+    INT64 raw = DscReadSigned(data, byte_size);
 
     const dsc_enum_value_t *values = type->u.enumeration.values;
     UINT32 value_count = type->u.enumeration.value_count;
 
     /* No enumerators defined — just show the number */
     if (!values || value_count == 0) {
-        dsc_strbuf_appendf(out, "%lld", (long long)raw);
+        DscStrbufAppendf(out, "%lld", (long long)raw);
         return DSC_OK;
     }
 
     /* Try exact match first */
     const char *name = find_exact_match(values, value_count, raw);
     if (name) {
-        dsc_strbuf_append(out, name);
-        dsc_strbuf_appendf(out, " (%lld)", (long long)raw);
+        DscStrbufAppend(out, name);
+        DscStrbufAppendf(out, " (%lld)", (long long)raw);
         return DSC_OK;
     }
 
@@ -160,7 +160,7 @@ int dsc_format_enum(const void *data, UINT32 data_len,
     }
 
     /* Fallback: show numeric value only */
-    dsc_strbuf_appendf(out, "%lld /* unknown enumerator */", (long long)raw);
+    DscStrbufAppendf(out, "%lld /* unknown enumerator */", (long long)raw);
 
     return DSC_OK;
 }

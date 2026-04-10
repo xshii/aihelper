@@ -35,10 +35,10 @@
 #define X_ENUM(name, code, desc) name = code,
 typedef enum {
     DSC_ERROR_TABLE(X_ENUM)
-} dsc_error_t;
+} DscError;
 #undef X_ENUM
 
 /* --- API --- */
-const char *dsc_strerror(int err);
+const char *DscStrerror(int err);
 
 #endif /* DSC_ERRORS_H */

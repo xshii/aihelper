@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 /* 检测当前主机是否为大端序（返回 1 = 大端，0 = 小端） */
-static inline int dsc_host_is_big_endian(void)
+static inline int DscHostIsBigEndian(void)
 {
     UINT16 val = 0x0102;
     UINT8 *bytes = (UINT8 *)&val;
@@ -18,7 +18,7 @@ static inline int dsc_host_is_big_endian(void)
 }
 
 /* 就地反转 buf 的字节序 */
-static inline void dsc_byte_swap(void *buf, UINT32 size)
+static inline void DscByteSwap(void *buf, UINT32 size)
 {
     UINT8 *p = (UINT8 *)buf;
     for (UINT32 i = 0; i < size / 2; i++) {

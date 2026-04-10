@@ -13,26 +13,26 @@
 /* ------------------------------------------------------------------ */
 /* Internal struct                                                    */
 /* ------------------------------------------------------------------ */
-struct dsc_resolve_cache_t {
-    dsc_hashmap_t map;       /* path string → dsc_resolved_t*       */
+struct DscResolveCache {
+    DscHashmap map;       /* path string → DscResolved*       */
     UINT32        capacity;  /* maximum number of cached entries     */
 };
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                          */
 /* ------------------------------------------------------------------ */
-dsc_resolve_cache_t *dsc_resolve_cache_create(UINT32 capacity)
+DscResolveCache *DscResolveCacheCreate(UINT32 capacity)
 {
     if (capacity == 0) {
         capacity = 64;
     }
 
-    dsc_resolve_cache_t *cache = calloc(1, sizeof(*cache));
+    DscResolveCache *cache = calloc(1, sizeof(*cache));
     if (cache == NULL) {
         return NULL;
     }
 
-    dsc_hashmap_init(&cache->map, capacity);
+    DscHashmapInit(&cache->map, capacity);
     cache->capacity = capacity;
 
     DSC_LOG_DEBUG("resolve_cache: created with capacity %zu", capacity);
@@ -40,37 +40,37 @@ dsc_resolve_cache_t *dsc_resolve_cache_create(UINT32 capacity)
 }
 
 /* Free all heap-allocated result values stored in the cache */
-static void free_cached_values(dsc_hashmap_t *map)
+static void free_cached_values(DscHashmap *map)
 {
-    dsc_hashmap_entry_t *cur, *tmp;
+    DscHashmapEntry *cur, *tmp;
     HASH_ITER(hh, map->head, cur, tmp) {
-        free(cur->value); /* free the dsc_resolved_t* */
+        free(cur->value); /* free the DscResolved* */
     }
 }
 
-void dsc_resolve_cache_destroy(dsc_resolve_cache_t *cache)
+void DscResolveCacheDestroy(DscResolveCache *cache)
 {
     if (cache == NULL) {
         return;
     }
     free_cached_values(&cache->map);
-    dsc_hashmap_free(&cache->map);
+    DscHashmapFree(&cache->map);
     free(cache);
 }
 
 /* ------------------------------------------------------------------ */
 /* Cache lookup / populate                                            */
 /* ------------------------------------------------------------------ */
-int dsc_resolve_cached(dsc_resolve_cache_t *cache,
-                       const dsc_symtab_t *symtab, const dsc_arch_t *arch,
-                       const char *path, dsc_resolved_t *out)
+int DscResolveCached(DscResolveCache *cache,
+                       const dsc_symtab_t *symtab, const DscArch *arch,
+                       const char *path, DscResolved *out)
 {
     if (cache == NULL || path == NULL || out == NULL) {
         return DSC_ERR_INVALID_ARG;
     }
 
     /* Step 1: check the cache */
-    dsc_resolved_t *cached = dsc_hashmap_get(&cache->map, path);
+    DscResolved *cached = DscHashmapGet(&cache->map, path);
     if (cached != NULL) {
         *out = *cached;
         DSC_LOG_DEBUG("resolve_cache: hit for '%s'", path);
@@ -78,18 +78,18 @@ int dsc_resolve_cached(dsc_resolve_cache_t *cache,
     }
 
     /* Step 2: resolve the path */
-    dsc_resolved_t result;
-    int rc = dsc_resolve(symtab, arch, path, &result);
+    DscResolved result;
+    int rc = DscResolve(symtab, arch, path, &result);
     if (rc < 0) {
         return rc;
     }
 
     /* Step 3: store in cache (skip if at capacity) */
-    if (dsc_hashmap_count(&cache->map) < cache->capacity) {
-        dsc_resolved_t *stored = malloc(sizeof(*stored));
+    if (DscHashmapCount(&cache->map) < cache->capacity) {
+        DscResolved *stored = malloc(sizeof(*stored));
         if (stored != NULL) {
             *stored = result;
-            if (dsc_hashmap_put(&cache->map, path, stored) < 0) {
+            if (DscHashmapPut(&cache->map, path, stored) < 0) {
                 free(stored);
                 /* Non-fatal: we still have the result, just not cached */
                 DSC_LOG_WARN("resolve_cache: failed to store '%s'", path);
@@ -106,13 +106,13 @@ int dsc_resolve_cached(dsc_resolve_cache_t *cache,
 /* ------------------------------------------------------------------ */
 /* Invalidation                                                       */
 /* ------------------------------------------------------------------ */
-void dsc_resolve_cache_invalidate(dsc_resolve_cache_t *cache)
+void DscResolveCacheInvalidate(DscResolveCache *cache)
 {
     if (cache == NULL) {
         return;
     }
 
     free_cached_values(&cache->map);
-    dsc_hashmap_clear(&cache->map);
+    DscHashmapClear(&cache->map);
     DSC_LOG_DEBUG("resolve_cache: invalidated all entries");
 }

@@ -12,7 +12,7 @@
 /* ------------------------------------------------------------------ */
 /* Opaque context — holds all session state                           */
 /* ------------------------------------------------------------------ */
-typedef struct dsc_context_t dsc_context_t;
+typedef struct DscContext DscContext;
 
 /* ------------------------------------------------------------------ */
 /* Layer 0: Zero-config open                                          */
@@ -30,15 +30,15 @@ typedef struct {
     const char *shm_path;         /* shm: file path                     */
     UINT32      shm_size;         /* shm: region size                   */
     int         timeout_ms;       /* I/O timeout (0 = backend default)   */
-} dsc_open_params_t;
+} DscOpenParams;
 
 /* Open a debug session.
  * Returns context handle on success, NULL on failure.
  * On failure, reason is logged via DSC_LOG_ERROR. */
-dsc_context_t *dsc_open(const dsc_open_params_t *params);
+DscContext *DscOpen(const DscOpenParams *params);
 
 /* Close session and free all resources. Safe to call with NULL. */
-void dsc_close(dsc_context_t *ctx);
+void DscClose(DscContext *ctx);
 
 /* ------------------------------------------------------------------ */
 /* Layer 0: One-call variable read                                    */
@@ -46,8 +46,8 @@ void dsc_close(dsc_context_t *ctx);
 
 /* Read a variable by path, format it, write result to caller buffer.
  * Path examples: "g_counter", "g_config.mode", "g_buf[3].x"
- * Returns DSC_OK on success, negative dsc_error_t on failure. */
-int dsc_read_var(dsc_context_t *ctx, const char *var_path,
+ * Returns DSC_OK on success, negative DscError on failure. */
+int DscReadVar(DscContext *ctx, const char *var_path,
                  char *out, UINT32 out_len);
 
 /* ------------------------------------------------------------------ */
@@ -55,12 +55,12 @@ int dsc_read_var(dsc_context_t *ctx, const char *var_path,
 /* ------------------------------------------------------------------ */
 
 /* Forward declare — actual definition lives in format/format.h */
-typedef struct dsc_format_opts_t dsc_format_opts_t;
+typedef struct DscFormatOpts DscFormatOpts;
 
-/* Same as dsc_read_var but with custom formatting.
+/* Same as DscReadVar but with custom formatting.
  * Pass NULL for opts to get default formatting. */
-int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
-                    const dsc_format_opts_t *opts,
+int DscReadVarEx(DscContext *ctx, const char *var_path,
+                    const DscFormatOpts *opts,
                     char *out, UINT32 out_len);
 
 /* ------------------------------------------------------------------ */
@@ -68,11 +68,11 @@ int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
 /* ------------------------------------------------------------------ */
 
 /* Read raw bytes from logical address. */
-int dsc_read_mem(dsc_context_t *ctx, UINT64 addr,
+int DscReadMem(DscContext *ctx, UINT64 addr,
                  void *buf, UINT32 len);
 
 /* Write raw bytes to logical address. */
-int dsc_write_mem(dsc_context_t *ctx, UINT64 addr,
+int DscWriteMem(DscContext *ctx, UINT64 addr,
                   const void *buf, UINT32 len);
 
 /* ------------------------------------------------------------------ */
@@ -81,7 +81,7 @@ int dsc_write_mem(dsc_context_t *ctx, UINT64 addr,
 
 /* Returns last error message for this context.
  * The returned pointer is valid until the next API call on this ctx. */
-const char *dsc_last_error(const dsc_context_t *ctx);
+const char *DscLastError(const DscContext *ctx);
 
 /* ------------------------------------------------------------------ */
 /* Utility                                                            */
@@ -91,6 +91,6 @@ const char *dsc_last_error(const dsc_context_t *ctx);
  * Closes DWARF, reopens the same path, reloads symbols,
  * invalidates resolve cache. Transport stays connected.
  * Returns DSC_OK on success. */
-int dsc_reload(dsc_context_t *ctx);
+int DscReload(DscContext *ctx);
 
 #endif /* DSC_H */

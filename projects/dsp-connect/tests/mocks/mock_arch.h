@@ -8,12 +8,12 @@
 #include "../../src/arch/arch.h"
 
 /* Identity arch: byte-addressed, little-endian, no address translation.
- * Returns a pointer to a static object — do NOT call dsc_arch_destroy(). */
-dsc_arch_t *mock_arch_identity(void);
+ * Returns a pointer to a static object — do NOT call DscArchDestroy(). */
+DscArch *mock_arch_identity(void);
 
 /* Word16 arch: 16-bit word-addressed, little-endian on LE host.
  * logical = physical * 2.
- * Returns a pointer to a static object — do NOT call dsc_arch_destroy(). */
-dsc_arch_t *mock_arch_word16(void);
+ * Returns a pointer to a static object — do NOT call DscArchDestroy(). */
+DscArch *mock_arch_word16(void);
 
 #endif /* MOCK_ARCH_H */

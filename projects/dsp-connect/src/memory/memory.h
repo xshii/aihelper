@@ -22,14 +22,14 @@
  *   - Logical → physical address translation via arch
  *   - Chunked reads if len exceeds transport max chunk size
  *   - Endianness swap via arch
- * Returns DSC_OK on success, negative dsc_error_t on failure. */
-int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
+ * Returns DSC_OK on success, negative DscError on failure. */
+int DscMemRead(DscTransport *tp, const DscArch *arch,
                  UINT64 logical_addr, void *buf, UINT32 len);
 
 /* Write `len` bytes from `buf` to logical address.
- * Handles the same translations as dsc_mem_read.
- * Returns DSC_OK on success, negative dsc_error_t on failure. */
-int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
+ * Handles the same translations as DscMemRead.
+ * Returns DSC_OK on success, negative DscError on failure. */
+int DscMemWrite(DscTransport *tp, const DscArch *arch,
                   UINT64 logical_addr, const void *buf, UINT32 len);
 
 #endif /* DSC_MEMORY_H */

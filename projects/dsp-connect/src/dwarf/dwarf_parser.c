@@ -27,7 +27,7 @@ struct dsc_dwarf {
     UINT32          type_cap;
 
     /* DIE offset → dsc_type_t* index for O(1) lookup */
-    dsc_hashmap_t   type_index;
+    DscHashmap   type_index;
 
     /* Whether symbols have been loaded already */
     int             symbols_loaded;
@@ -70,7 +70,7 @@ static int index_type(dsc_dwarf_t *dw, dsc_type_t *type)
 {
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)type->die_offset);
-    return dsc_hashmap_put(&dw->type_index, key, type);
+    return DscHashmapPut(&dw->type_index, key, type);
 }
 
 /* Allocate and zero-initialize a new type node */
@@ -301,7 +301,7 @@ static dsc_type_t *parse_type_die(dsc_dwarf_t *dw, Dwarf_Debug dbg, Dwarf_Die di
     /* Check cache first */
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)off);
-    dsc_type_t *cached = dsc_hashmap_get(&dw->type_index, key);
+    dsc_type_t *cached = DscHashmapGet(&dw->type_index, key);
     if (cached) {
         return cached;
     }
@@ -431,7 +431,7 @@ dsc_dwarf_t *dsc_dwarf_open(const char *elf_path, int *err_out)
     dw->elf_path = strdup(elf_path);
     dw->types    = calloc(TYPE_POOL_INITIAL_CAP, sizeof(dsc_type_t *));
     dw->type_cap = TYPE_POOL_INITIAL_CAP;
-    dsc_hashmap_init(&dw->type_index, TYPE_POOL_INITIAL_CAP);
+    DscHashmapInit(&dw->type_index, TYPE_POOL_INITIAL_CAP);
     dw->dbg    = dbg;
     dw->elf_fd = fd;
 
@@ -453,7 +453,7 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
         dsc_type_free(dw->types[i]);
     }
     free(dw->types);
-    dsc_hashmap_free(&dw->type_index);
+    DscHashmapFree(&dw->type_index);
 
 #ifdef DSC_USE_LIBDWARF
     if (dw->dbg) {
@@ -495,7 +495,7 @@ const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, UINT64 die_offset)
 
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)die_offset);
-    return (const dsc_type_t *)dsc_hashmap_get(&dw->type_index, key);
+    return (const dsc_type_t *)DscHashmapGet(&dw->type_index, key);
 }
 
 const char *dsc_dwarf_path(const dsc_dwarf_t *dw)
@@ -525,7 +525,7 @@ dsc_dwarf_t *dsc_dwarf_open(const char *elf_path, int *err_out)
     dw->elf_path = strdup(elf_path);
     dw->types    = calloc(TYPE_POOL_INITIAL_CAP, sizeof(dsc_type_t *));
     dw->type_cap = TYPE_POOL_INITIAL_CAP;
-    dsc_hashmap_init(&dw->type_index, TYPE_POOL_INITIAL_CAP);
+    DscHashmapInit(&dw->type_index, TYPE_POOL_INITIAL_CAP);
 
     DSC_LOG_WARN("stub DWARF parser — define DSC_USE_LIBDWARF for real parsing");
 
@@ -543,7 +543,7 @@ void dsc_dwarf_close(dsc_dwarf_t *dw)
         dsc_type_free(dw->types[i]);
     }
     free(dw->types);
-    dsc_hashmap_free(&dw->type_index);
+    DscHashmapFree(&dw->type_index);
     free(dw->elf_path);
     free(dw);
 }
@@ -566,7 +566,7 @@ const dsc_type_t *dsc_dwarf_lookup_type(dsc_dwarf_t *dw, UINT64 die_offset)
 
     char key[21];
     snprintf(key, sizeof(key), "%llu", (unsigned long long)die_offset);
-    return (const dsc_type_t *)dsc_hashmap_get(&dw->type_index, key);
+    return (const dsc_type_t *)DscHashmapGet(&dw->type_index, key);
 }
 
 const char *dsc_dwarf_path(const dsc_dwarf_t *dw)

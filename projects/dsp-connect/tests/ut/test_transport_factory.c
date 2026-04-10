@@ -11,42 +11,42 @@
 /* --- Dummy transport for factory tests --- */
 
 typedef struct {
-    dsc_transport_t base;
+    DscTransport base;
     int             created;
 } dummy_transport_t;
 
-static int dummy_open(dsc_transport_t *self)
+static int dummy_open(DscTransport *self)
 {
     (void)self;
     return DSC_OK;
 }
 
-static void dummy_close(dsc_transport_t *self) { (void)self; }
+static void dummy_close(DscTransport *self) { (void)self; }
 
-static int dummy_mem_read(dsc_transport_t *self, UINT64 addr,
+static int dummy_mem_read(DscTransport *self, UINT64 addr,
                           void *buf, UINT32 len)
 {
     (void)self; (void)addr; (void)buf; (void)len;
     return DSC_OK;
 }
 
-static int dummy_mem_write(dsc_transport_t *self, UINT64 addr,
+static int dummy_mem_write(DscTransport *self, UINT64 addr,
                            const void *buf, UINT32 len)
 {
     (void)self; (void)addr; (void)buf; (void)len;
     return DSC_OK;
 }
 
-static int dummy_exec_cmd(dsc_transport_t *self, const char *cmd,
+static int dummy_exec_cmd(DscTransport *self, const char *cmd,
                           char *resp, UINT32 resp_len)
 {
     (void)self; (void)cmd; (void)resp; (void)resp_len;
     return DSC_OK;
 }
 
-static void dummy_destroy(dsc_transport_t *self) { free(self); }
+static void dummy_destroy(DscTransport *self) { free(self); }
 
-static const dsc_transport_ops dummy_ops = {
+static const DscTransportOps dummy_ops = {
     .open      = dummy_open,
     .close     = dummy_close,
     .mem_read  = dummy_mem_read,
@@ -55,7 +55,7 @@ static const dsc_transport_ops dummy_ops = {
     .destroy   = dummy_destroy,
 };
 
-static dsc_transport_t *dummy_ctor(const dsc_transport_config_t *cfg)
+static DscTransport *dummy_ctor(const DscTransportConfig *cfg)
 {
     (void)cfg;
     dummy_transport_t *d = calloc(1, sizeof(*d));
@@ -73,10 +73,10 @@ static dsc_transport_t *dummy_ctor(const dsc_transport_config_t *cfg)
 
 void factory_register_and_create(void)
 {
-    int rc = dsc_transport_register("test_dummy", dummy_ctor);
+    int rc = DscTransportRegister("test_dummy", dummy_ctor);
     TEST_ASSERT_EQUAL(DSC_OK, rc);
 
-    dsc_transport_t *t = dsc_transport_create("test_dummy", NULL);
+    DscTransport *t = DscTransportCreate("test_dummy", NULL);
     TEST_ASSERT_NOT_NULL(t);
 
     dummy_transport_t *d = (dummy_transport_t *)t;
@@ -87,25 +87,25 @@ void factory_register_and_create(void)
 
 void factory_unknown_name_returns_null(void)
 {
-    dsc_transport_t *t = dsc_transport_create("no_such_backend", NULL);
+    DscTransport *t = DscTransportCreate("no_such_backend", NULL);
     TEST_ASSERT_NULL(t);
 }
 
 void factory_null_name_returns_null(void)
 {
-    dsc_transport_t *t = dsc_transport_create(NULL, NULL);
+    DscTransport *t = DscTransportCreate(NULL, NULL);
     TEST_ASSERT_NULL(t);
 }
 
 void factory_register_null_name_fails(void)
 {
-    int rc = dsc_transport_register(NULL, dummy_ctor);
+    int rc = DscTransportRegister(NULL, dummy_ctor);
     TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 }
 
 void factory_register_null_ctor_fails(void)
 {
-    int rc = dsc_transport_register("valid_name", NULL);
+    int rc = DscTransportRegister("valid_name", NULL);
     TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 }
 
@@ -113,7 +113,7 @@ void factory_list_registered(void)
 {
     /* "test_dummy" was registered in an earlier test */
     const char *names[16];
-    int count = dsc_transport_list(names, 16);
+    int count = DscTransportList(names, 16);
     TEST_ASSERT_TRUE(count >= 1);
 
     /* Verify our test_dummy is in the list */

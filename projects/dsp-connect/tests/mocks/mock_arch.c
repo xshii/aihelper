@@ -8,7 +8,7 @@
 /* Identity arch: byte-addressed, no translation, no endian swap      */
 /* ================================================================== */
 
-static int id_logical_to_physical(const dsc_arch_t *self,
+static int id_logical_to_physical(const DscArch *self,
                                   UINT64 logical, UINT64 *physical)
 {
     (void)self;
@@ -16,7 +16,7 @@ static int id_logical_to_physical(const dsc_arch_t *self,
     return DSC_OK;
 }
 
-static int id_physical_to_logical(const dsc_arch_t *self,
+static int id_physical_to_logical(const DscArch *self,
                                   UINT64 physical, UINT64 *logical)
 {
     (void)self;
@@ -24,27 +24,27 @@ static int id_physical_to_logical(const dsc_arch_t *self,
     return DSC_OK;
 }
 
-static void id_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
+static void id_swap_endian(const DscArch *self, void *buf, UINT32 size)
 {
     (void)self; (void)buf; (void)size;
     /* No swap — identity arch assumes host == target endianness */
 }
 
-static UINT32 id_min_access(const dsc_arch_t *self)
+static UINT32 id_min_access(const DscArch *self)
 {
     (void)self;
     return 1;
 }
 
-static UINT32 id_word_size(const dsc_arch_t *self)
+static UINT32 id_word_size(const DscArch *self)
 {
     (void)self;
     return 1;
 }
 
-static void id_destroy(dsc_arch_t *self) { (void)self; }
+static void id_destroy(DscArch *self) { (void)self; }
 
-static const struct dsc_arch_ops identity_ops = {
+static const struct DscArchOps identity_ops = {
     .logical_to_physical = id_logical_to_physical,
     .physical_to_logical = id_physical_to_logical,
     .swap_endian         = id_swap_endian,
@@ -53,12 +53,12 @@ static const struct dsc_arch_ops identity_ops = {
     .destroy             = id_destroy,
 };
 
-static dsc_arch_t s_identity = {
+static DscArch s_identity = {
     .ops  = &identity_ops,
     .name = "mock_identity",
 };
 
-dsc_arch_t *mock_arch_identity(void)
+DscArch *mock_arch_identity(void)
 {
     return &s_identity;
 }
@@ -67,7 +67,7 @@ dsc_arch_t *mock_arch_identity(void)
 /* Word16 arch: 16-bit words, logical = physical * 2                  */
 /* ================================================================== */
 
-static int w16_logical_to_physical(const dsc_arch_t *self,
+static int w16_logical_to_physical(const DscArch *self,
                                    UINT64 logical, UINT64 *physical)
 {
     (void)self;
@@ -78,7 +78,7 @@ static int w16_logical_to_physical(const dsc_arch_t *self,
     return DSC_OK;
 }
 
-static int w16_physical_to_logical(const dsc_arch_t *self,
+static int w16_physical_to_logical(const DscArch *self,
                                    UINT64 physical, UINT64 *logical)
 {
     (void)self;
@@ -86,27 +86,27 @@ static int w16_physical_to_logical(const dsc_arch_t *self,
     return DSC_OK;
 }
 
-static void w16_swap_endian(const dsc_arch_t *self, void *buf, UINT32 size)
+static void w16_swap_endian(const DscArch *self, void *buf, UINT32 size)
 {
     (void)self; (void)buf; (void)size;
     /* No swap — mock assumes host matches target */
 }
 
-static UINT32 w16_min_access(const dsc_arch_t *self)
+static UINT32 w16_min_access(const DscArch *self)
 {
     (void)self;
     return 2;
 }
 
-static UINT32 w16_word_size(const dsc_arch_t *self)
+static UINT32 w16_word_size(const DscArch *self)
 {
     (void)self;
     return 2;
 }
 
-static void w16_destroy(dsc_arch_t *self) { (void)self; }
+static void w16_destroy(DscArch *self) { (void)self; }
 
-static const struct dsc_arch_ops word16_ops = {
+static const struct DscArchOps word16_ops = {
     .logical_to_physical = w16_logical_to_physical,
     .physical_to_logical = w16_physical_to_logical,
     .swap_endian         = w16_swap_endian,
@@ -115,12 +115,12 @@ static const struct dsc_arch_ops word16_ops = {
     .destroy             = w16_destroy,
 };
 
-static dsc_arch_t s_word16 = {
+static DscArch s_word16 = {
     .ops  = &word16_ops,
     .name = "mock_word16",
 };
 
-dsc_arch_t *mock_arch_word16(void)
+DscArch *mock_arch_word16(void)
 {
     return &s_word16;
 }

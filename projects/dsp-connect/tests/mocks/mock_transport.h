@@ -23,22 +23,22 @@ typedef struct {
 
 /* Create a mock transport backed by an internal buffer.
  * Returns a transport pointer; caller must call mock_transport_destroy(). */
-dsc_transport_t *mock_transport_create(void);
+DscTransport *mock_transport_create(void);
 
 /* Destroy a mock transport created by mock_transport_create(). */
-void mock_transport_destroy(dsc_transport_t *t);
+void mock_transport_destroy(DscTransport *t);
 
 /* Get pointer to the internal memory buffer for setup/verification. */
-UINT8 *mock_transport_get_memory(dsc_transport_t *t);
+UINT8 *mock_transport_get_memory(DscTransport *t);
 
 /* Get the call record for verification after test. */
-const mock_transport_record_t *mock_transport_get_record(dsc_transport_t *t);
+const mock_transport_record_t *mock_transport_get_record(DscTransport *t);
 
 /* Pre-fill memory at a given offset with data. */
-void mock_transport_set_memory(dsc_transport_t *t,
+void mock_transport_set_memory(DscTransport *t,
                                UINT64 addr, const void *data, UINT32 len);
 
 /* Reset call records and optionally clear memory. */
-void mock_transport_reset(dsc_transport_t *t, int clear_memory);
+void mock_transport_reset(DscTransport *t, int clear_memory);
 
 #endif /* MOCK_TRANSPORT_H */

@@ -8,7 +8,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 
-static void ensure_cap(dsc_strbuf_t *sb, UINT32 extra)
+static void ensure_cap(DscStrbuf *sb, UINT32 extra)
 {
     UINT32 need = sb->len + extra + 1; /* +1 for '\0' */
     if (need <= sb->cap) {
@@ -27,7 +27,7 @@ static void ensure_cap(dsc_strbuf_t *sb, UINT32 extra)
     sb->cap = newcap;
 }
 
-void dsc_strbuf_init(dsc_strbuf_t *sb, UINT32 initial_cap)
+void DscStrbufInit(DscStrbuf *sb, UINT32 initial_cap)
 {
     if (initial_cap < 64) {
         initial_cap = 64;
@@ -38,7 +38,7 @@ void dsc_strbuf_init(dsc_strbuf_t *sb, UINT32 initial_cap)
     sb->cap = initial_cap;
 }
 
-void dsc_strbuf_free(dsc_strbuf_t *sb)
+void DscStrbufFree(DscStrbuf *sb)
 {
     free(sb->buf);
     sb->buf = NULL;
@@ -46,7 +46,7 @@ void dsc_strbuf_free(dsc_strbuf_t *sb)
     sb->cap = 0;
 }
 
-void dsc_strbuf_append(dsc_strbuf_t *sb, const char *str)
+void DscStrbufAppend(DscStrbuf *sb, const char *str)
 {
     UINT32 slen = strlen(str);
     ensure_cap(sb, slen);
@@ -54,7 +54,7 @@ void dsc_strbuf_append(dsc_strbuf_t *sb, const char *str)
     sb->len += slen;
 }
 
-void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, UINT32 n)
+void DscStrbufAppendn(DscStrbuf *sb, const char *str, UINT32 n)
 {
     ensure_cap(sb, n);
     memcpy(sb->buf + sb->len, str, n);
@@ -62,7 +62,7 @@ void dsc_strbuf_appendn(dsc_strbuf_t *sb, const char *str, UINT32 n)
     sb->buf[sb->len] = '\0';
 }
 
-void dsc_strbuf_appendf(dsc_strbuf_t *sb, const char *fmt, ...)
+void DscStrbufAppendf(DscStrbuf *sb, const char *fmt, ...)
 {
     va_list ap;
 
@@ -85,7 +85,7 @@ void dsc_strbuf_appendf(dsc_strbuf_t *sb, const char *fmt, ...)
     sb->len += (UINT32)needed;
 }
 
-void dsc_strbuf_indent(dsc_strbuf_t *sb, int depth)
+void DscStrbufIndent(DscStrbuf *sb, int depth)
 {
     int spaces = depth * 2;
     ensure_cap(sb, (UINT32)spaces);
@@ -95,7 +95,7 @@ void dsc_strbuf_indent(dsc_strbuf_t *sb, int depth)
     sb->buf[sb->len] = '\0';
 }
 
-void dsc_strbuf_reset(dsc_strbuf_t *sb)
+void DscStrbufReset(DscStrbuf *sb)
 {
     sb->len = 0;
     if (sb->buf) {
@@ -103,7 +103,7 @@ void dsc_strbuf_reset(dsc_strbuf_t *sb)
     }
 }
 
-const char *dsc_strbuf_cstr(const dsc_strbuf_t *sb)
+const char *DscStrbufCstr(const DscStrbuf *sb)
 {
     return sb->buf;
 }

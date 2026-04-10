@@ -6,13 +6,13 @@
 
 /* --- Private data structure --- */
 typedef struct {
-    dsc_transport_t       base;    /* MUST be first member */
+    DscTransport       base;    /* MUST be first member */
     UINT8               mem[MOCK_MEM_SIZE];
     mock_transport_record_t record;
 } mock_transport_impl_t;
 
 /* --- vtable: open --- */
-static int mock_open(dsc_transport_t *self)
+static int mock_open(DscTransport *self)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
     m->record.open_count++;
@@ -20,14 +20,14 @@ static int mock_open(dsc_transport_t *self)
 }
 
 /* --- vtable: close --- */
-static void mock_close(dsc_transport_t *self)
+static void mock_close(DscTransport *self)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
     m->record.close_count++;
 }
 
 /* --- vtable: mem_read --- */
-static int mock_mem_read(dsc_transport_t *self, UINT64 addr,
+static int mock_mem_read(DscTransport *self, UINT64 addr,
                          void *buf, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
@@ -43,7 +43,7 @@ static int mock_mem_read(dsc_transport_t *self, UINT64 addr,
 }
 
 /* --- vtable: mem_write --- */
-static int mock_mem_write(dsc_transport_t *self, UINT64 addr,
+static int mock_mem_write(DscTransport *self, UINT64 addr,
                           const void *buf, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)self;
@@ -59,7 +59,7 @@ static int mock_mem_write(dsc_transport_t *self, UINT64 addr,
 }
 
 /* --- vtable: exec_cmd --- */
-static int mock_exec_cmd(dsc_transport_t *self, const char *cmd,
+static int mock_exec_cmd(DscTransport *self, const char *cmd,
                          char *resp, UINT32 resp_len)
 {
     (void)self; (void)cmd;
@@ -70,13 +70,13 @@ static int mock_exec_cmd(dsc_transport_t *self, const char *cmd,
 }
 
 /* --- vtable: destroy --- */
-static void mock_destroy(dsc_transport_t *self)
+static void mock_destroy(DscTransport *self)
 {
     free(self);
 }
 
 /* --- Shared ops table --- */
-static const dsc_transport_ops mock_ops = {
+static const DscTransportOps mock_ops = {
     .open      = mock_open,
     .close     = mock_close,
     .mem_read  = mock_mem_read,
@@ -87,7 +87,7 @@ static const dsc_transport_ops mock_ops = {
 
 /* --- Public API --- */
 
-dsc_transport_t *mock_transport_create(void)
+DscTransport *mock_transport_create(void)
 {
     mock_transport_impl_t *m = calloc(1, sizeof(*m));
     if (!m) return NULL;
@@ -97,24 +97,24 @@ dsc_transport_t *mock_transport_create(void)
     return &m->base;
 }
 
-void mock_transport_destroy(dsc_transport_t *t)
+void mock_transport_destroy(DscTransport *t)
 {
     free(t);
 }
 
-UINT8 *mock_transport_get_memory(dsc_transport_t *t)
+UINT8 *mock_transport_get_memory(DscTransport *t)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
     return m->mem;
 }
 
-const mock_transport_record_t *mock_transport_get_record(dsc_transport_t *t)
+const mock_transport_record_t *mock_transport_get_record(DscTransport *t)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
     return &m->record;
 }
 
-void mock_transport_set_memory(dsc_transport_t *t,
+void mock_transport_set_memory(DscTransport *t,
                                UINT64 addr, const void *data, UINT32 len)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
@@ -123,7 +123,7 @@ void mock_transport_set_memory(dsc_transport_t *t,
     }
 }
 
-void mock_transport_reset(dsc_transport_t *t, int clear_memory)
+void mock_transport_reset(DscTransport *t, int clear_memory)
 {
     mock_transport_impl_t *m = (mock_transport_impl_t *)t;
     memset(&m->record, 0, sizeof(m->record));

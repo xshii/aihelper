@@ -34,13 +34,13 @@
 /* ------------------------------------------------------------------ */
 /* Context struct — holds all sub-system handles                      */
 /* ------------------------------------------------------------------ */
-struct dsc_context_t {
+struct DscContext {
     /* Sub-systems (all owned) */
     dsc_dwarf_t           *dwarf;
     dsc_symtab_t           symtab;
-    dsc_transport_t       *transport;
-    dsc_arch_t            *arch;
-    dsc_resolve_cache_t   *cache;
+    DscTransport       *transport;
+    DscArch            *arch;
+    DscResolveCache   *cache;
 
     /* Config snapshot for reload */
     char                  *elf_path;
@@ -52,7 +52,7 @@ struct dsc_context_t {
 /* ------------------------------------------------------------------ */
 /* Internal: set last error message                                   */
 /* ------------------------------------------------------------------ */
-static void set_error(dsc_context_t *ctx, const char *fmt, ...)
+static void set_error(DscContext *ctx, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -63,7 +63,7 @@ static void set_error(dsc_context_t *ctx, const char *fmt, ...)
 /* ------------------------------------------------------------------ */
 /* Internal: validate open params                                     */
 /* ------------------------------------------------------------------ */
-static int validate_params(const dsc_open_params_t *p)
+static int validate_params(const DscOpenParams *p)
 {
     if (!p) {
         return DSC_ERR_INVALID_ARG;
@@ -83,9 +83,9 @@ static int validate_params(const dsc_open_params_t *p)
 /* ------------------------------------------------------------------ */
 /* Internal: copy transport config from open params                   */
 /* ------------------------------------------------------------------ */
-static dsc_transport_config_t make_transport_config(const dsc_open_params_t *p)
+static DscTransportConfig make_transport_config(const DscOpenParams *p)
 {
-    dsc_transport_config_t cfg;
+    DscTransportConfig cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.host       = p->host;
     cfg.port       = p->port;
@@ -100,9 +100,9 @@ static dsc_transport_config_t make_transport_config(const dsc_open_params_t *p)
 /* ------------------------------------------------------------------ */
 /* Internal: allocate and zero-init context                           */
 /* ------------------------------------------------------------------ */
-static dsc_context_t *alloc_context(const char *elf_path)
+static DscContext *alloc_context(const char *elf_path)
 {
-    dsc_context_t *ctx = calloc(1, sizeof(*ctx));
+    DscContext *ctx = calloc(1, sizeof(*ctx));
     if (!ctx) {
         return NULL;
     }
@@ -119,17 +119,17 @@ static dsc_context_t *alloc_context(const char *elf_path)
 /* ------------------------------------------------------------------ */
 /* Internal: open DWARF and load symbols                              */
 /* ------------------------------------------------------------------ */
-static int open_dwarf(dsc_context_t *ctx)
+static int open_dwarf(DscContext *ctx)
 {
     int err = 0;
     ctx->dwarf = dsc_dwarf_open(ctx->elf_path, &err);
     if (!ctx->dwarf) {
-        set_error(ctx, "DWARF open failed: %s", dsc_strerror(err));
+        set_error(ctx, "DWARF open failed: %s", DscStrerror(err));
         return err ? err : DSC_ERR_DWARF_INIT;
     }
     int rc = dsc_dwarf_load_symbols(ctx->dwarf, &ctx->symtab);
     if (rc < 0) {
-        set_error(ctx, "symbol load failed: %s", dsc_strerror(rc));
+        set_error(ctx, "symbol load failed: %s", DscStrerror(rc));
         return rc;
     }
     DSC_LOG_INFO("loaded %zu symbols from %s",
@@ -140,17 +140,17 @@ static int open_dwarf(dsc_context_t *ctx)
 /* ------------------------------------------------------------------ */
 /* Internal: create and open transport                                */
 /* ------------------------------------------------------------------ */
-static int open_transport(dsc_context_t *ctx, const dsc_open_params_t *p)
+static int open_transport(DscContext *ctx, const DscOpenParams *p)
 {
-    dsc_transport_config_t cfg = make_transport_config(p);
-    ctx->transport = dsc_transport_create(p->transport, &cfg);
+    DscTransportConfig cfg = make_transport_config(p);
+    ctx->transport = DscTransportCreate(p->transport, &cfg);
     if (!ctx->transport) {
         set_error(ctx, "unknown transport: %s", p->transport);
         return DSC_ERR_TRANSPORT_OPEN;
     }
-    int rc = dsc_transport_open(ctx->transport);
+    int rc = DscTransportOpen(ctx->transport);
     if (rc < 0) {
-        set_error(ctx, "transport open failed: %s", dsc_strerror(rc));
+        set_error(ctx, "transport open failed: %s", DscStrerror(rc));
         return rc;
     }
     DSC_LOG_INFO("transport '%s' opened", p->transport);
@@ -160,11 +160,11 @@ static int open_transport(dsc_context_t *ctx, const dsc_open_params_t *p)
 /* ------------------------------------------------------------------ */
 /* Internal: create arch adapter                                      */
 /* ------------------------------------------------------------------ */
-static int create_arch(dsc_context_t *ctx, const char *arch_name)
+static int create_arch(DscContext *ctx, const char *arch_name)
 {
-    dsc_arch_config_t arch_cfg;
+    DscArchConfig arch_cfg;
     memset(&arch_cfg, 0, sizeof(arch_cfg));
-    ctx->arch = dsc_arch_create(arch_name, &arch_cfg);
+    ctx->arch = DscArchCreate(arch_name, &arch_cfg);
     if (!ctx->arch) {
         set_error(ctx, "unknown arch: %s", arch_name);
         return DSC_ERR_INVALID_ARG;
@@ -176,9 +176,9 @@ static int create_arch(dsc_context_t *ctx, const char *arch_name)
 /* ------------------------------------------------------------------ */
 /* Internal: create resolve cache                                     */
 /* ------------------------------------------------------------------ */
-static int create_cache(dsc_context_t *ctx)
+static int create_cache(DscContext *ctx)
 {
-    ctx->cache = dsc_resolve_cache_create(DSC_CACHE_CAPACITY);
+    ctx->cache = DscResolveCacheCreate(DSC_CACHE_CAPACITY);
     if (!ctx->cache) {
         set_error(ctx, "resolve cache allocation failed");
         return DSC_ERR_NOMEM;
@@ -189,17 +189,17 @@ static int create_cache(dsc_context_t *ctx)
 /* ------------------------------------------------------------------ */
 /* Internal: tear down on partial open failure                        */
 /* ------------------------------------------------------------------ */
-static void cleanup_partial(dsc_context_t *ctx)
+static void cleanup_partial(DscContext *ctx)
 {
     if (ctx->cache) {
-        dsc_resolve_cache_destroy(ctx->cache);
+        DscResolveCacheDestroy(ctx->cache);
     }
     if (ctx->transport) {
-        dsc_transport_close(ctx->transport);
-        dsc_transport_destroy(ctx->transport);
+        DscTransportClose(ctx->transport);
+        DscTransportDestroy(ctx->transport);
     }
     if (ctx->arch) {
-        dsc_arch_destroy(ctx->arch);
+        DscArchDestroy(ctx->arch);
     }
     if (ctx->dwarf) {
         dsc_dwarf_close(ctx->dwarf);
@@ -210,18 +210,18 @@ static void cleanup_partial(dsc_context_t *ctx)
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_open                                                   */
+/* Public: DscOpen                                                   */
 /* ------------------------------------------------------------------ */
-dsc_context_t *dsc_open(const dsc_open_params_t *params)
+DscContext *DscOpen(const DscOpenParams *params)
 {
     if (validate_params(params) < 0) {
-        DSC_LOG_ERROR("dsc_open: invalid params");
+        DSC_LOG_ERROR("DscOpen: invalid params");
         return NULL;
     }
 
-    dsc_context_t *ctx = alloc_context(params->elf_path);
+    DscContext *ctx = alloc_context(params->elf_path);
     if (!ctx) {
-        DSC_LOG_ERROR("dsc_open: out of memory");
+        DSC_LOG_ERROR("DscOpen: out of memory");
         return NULL;
     }
 
@@ -242,23 +242,23 @@ dsc_context_t *dsc_open(const dsc_open_params_t *params)
     return ctx;
 
 fail:
-    DSC_LOG_ERROR("dsc_open failed: %s", ctx->last_error);
+    DSC_LOG_ERROR("DscOpen failed: %s", ctx->last_error);
     cleanup_partial(ctx);
     return NULL;
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_close                                                  */
+/* Public: DscClose                                                  */
 /* ------------------------------------------------------------------ */
-void dsc_close(dsc_context_t *ctx)
+void DscClose(DscContext *ctx)
 {
     if (!ctx) {
         return;
     }
-    dsc_resolve_cache_destroy(ctx->cache);
-    dsc_transport_close(ctx->transport);
-    dsc_transport_destroy(ctx->transport);
-    dsc_arch_destroy(ctx->arch);
+    DscResolveCacheDestroy(ctx->cache);
+    DscTransportClose(ctx->transport);
+    DscTransportDestroy(ctx->transport);
+    DscArchDestroy(ctx->arch);
     dsc_dwarf_close(ctx->dwarf);
     dsc_symtab_free(&ctx->symtab);
     free(ctx->elf_path);
@@ -268,13 +268,13 @@ void dsc_close(dsc_context_t *ctx)
 /* ------------------------------------------------------------------ */
 /* Internal: resolve variable path (with caching)                     */
 /* ------------------------------------------------------------------ */
-static int resolve_var(dsc_context_t *ctx, const char *var_path,
-                       dsc_resolved_t *resolved)
+static int resolve_var(DscContext *ctx, const char *var_path,
+                       DscResolved *resolved)
 {
-    int rc = dsc_resolve_cached(ctx->cache, &ctx->symtab, ctx->arch,
+    int rc = DscResolveCached(ctx->cache, &ctx->symtab, ctx->arch,
                                 var_path, resolved);
     if (rc < 0) {
-        set_error(ctx, "resolve '%s': %s", var_path, dsc_strerror(rc));
+        set_error(ctx, "resolve '%s': %s", var_path, DscStrerror(rc));
     }
     return rc;
 }
@@ -282,18 +282,18 @@ static int resolve_var(dsc_context_t *ctx, const char *var_path,
 /* ------------------------------------------------------------------ */
 /* Internal: read raw bytes for a resolved variable                   */
 /* ------------------------------------------------------------------ */
-static int read_var_bytes(dsc_context_t *ctx, const dsc_resolved_t *resolved,
+static int read_var_bytes(DscContext *ctx, const DscResolved *resolved,
                           void *buf, UINT32 buf_len)
 {
     if (resolved->size > buf_len) {
         set_error(ctx, "variable too large: %zu bytes", resolved->size);
         return DSC_ERR_INVALID_ARG;
     }
-    int rc = dsc_mem_read(ctx->transport, ctx->arch,
+    int rc = DscMemRead(ctx->transport, ctx->arch,
                           resolved->addr, buf, resolved->size);
     if (rc < 0) {
         set_error(ctx, "mem_read @0x%llx: %s",
-                  (unsigned long long)resolved->addr, dsc_strerror(rc));
+                  (unsigned long long)resolved->addr, DscStrerror(rc));
     }
     return rc;
 }
@@ -301,13 +301,13 @@ static int read_var_bytes(dsc_context_t *ctx, const dsc_resolved_t *resolved,
 /* ------------------------------------------------------------------ */
 /* Internal: format resolved variable into output buffer              */
 /* ------------------------------------------------------------------ */
-static int format_var(dsc_context_t *ctx,
+static int format_var(DscContext *ctx,
                       const void *data, UINT32 data_len,
                       const dsc_type_t *type,
-                      const dsc_format_opts_t *opts,
+                      const DscFormatOpts *opts,
                       char *out, UINT32 out_len)
 {
-    char *formatted = dsc_format_str(data, data_len, type, opts);
+    char *formatted = DscFormatStr(data, data_len, type, opts);
     if (!formatted) {
         set_error(ctx, "format failed");
         return DSC_ERR_NOMEM;
@@ -330,11 +330,11 @@ static int format_var(dsc_context_t *ctx,
 /* ------------------------------------------------------------------ */
 /* Internal: read + format core (shared by read_var and read_var_ex)  */
 /* ------------------------------------------------------------------ */
-static int read_var_core(dsc_context_t *ctx, const char *var_path,
-                         const dsc_format_opts_t *opts,
+static int read_var_core(DscContext *ctx, const char *var_path,
+                         const DscFormatOpts *opts,
                          char *out, UINT32 out_len)
 {
-    dsc_resolved_t resolved;
+    DscResolved resolved;
     DSC_TRY(resolve_var(ctx, var_path, &resolved));
 
     /* Use stack buffer for small vars, heap for large */
@@ -361,9 +361,9 @@ static int read_var_core(dsc_context_t *ctx, const char *var_path,
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_read_var (Layer 0 — zero config)                       */
+/* Public: DscReadVar (Layer 0 — zero config)                       */
 /* ------------------------------------------------------------------ */
-int dsc_read_var(dsc_context_t *ctx, const char *var_path,
+int DscReadVar(DscContext *ctx, const char *var_path,
                  char *out, UINT32 out_len)
 {
     if (!ctx || !var_path || !out || out_len == 0) {
@@ -373,10 +373,10 @@ int dsc_read_var(dsc_context_t *ctx, const char *var_path,
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_read_var_ex (Layer 1 — custom format)                  */
+/* Public: DscReadVarEx (Layer 1 — custom format)                  */
 /* ------------------------------------------------------------------ */
-int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
-                    const dsc_format_opts_t *opts,
+int DscReadVarEx(DscContext *ctx, const char *var_path,
+                    const DscFormatOpts *opts,
                     char *out, UINT32 out_len)
 {
     if (!ctx || !var_path || !out || out_len == 0) {
@@ -386,43 +386,43 @@ int dsc_read_var_ex(dsc_context_t *ctx, const char *var_path,
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_read_mem                                               */
+/* Public: DscReadMem                                               */
 /* ------------------------------------------------------------------ */
-int dsc_read_mem(dsc_context_t *ctx, UINT64 addr,
+int DscReadMem(DscContext *ctx, UINT64 addr,
                  void *buf, UINT32 len)
 {
     if (!ctx || !buf || len == 0) {
         return DSC_ERR_INVALID_ARG;
     }
-    int rc = dsc_mem_read(ctx->transport, ctx->arch, addr, buf, len);
+    int rc = DscMemRead(ctx->transport, ctx->arch, addr, buf, len);
     if (rc < 0) {
         set_error(ctx, "read_mem @0x%llx len=%zu: %s",
-                  (unsigned long long)addr, len, dsc_strerror(rc));
+                  (unsigned long long)addr, len, DscStrerror(rc));
     }
     return rc;
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_write_mem                                              */
+/* Public: DscWriteMem                                              */
 /* ------------------------------------------------------------------ */
-int dsc_write_mem(dsc_context_t *ctx, UINT64 addr,
+int DscWriteMem(DscContext *ctx, UINT64 addr,
                   const void *buf, UINT32 len)
 {
     if (!ctx || !buf || len == 0) {
         return DSC_ERR_INVALID_ARG;
     }
-    int rc = dsc_mem_write(ctx->transport, ctx->arch, addr, buf, len);
+    int rc = DscMemWrite(ctx->transport, ctx->arch, addr, buf, len);
     if (rc < 0) {
         set_error(ctx, "write_mem @0x%llx len=%zu: %s",
-                  (unsigned long long)addr, len, dsc_strerror(rc));
+                  (unsigned long long)addr, len, DscStrerror(rc));
     }
     return rc;
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_last_error                                             */
+/* Public: DscLastError                                             */
 /* ------------------------------------------------------------------ */
-const char *dsc_last_error(const dsc_context_t *ctx)
+const char *DscLastError(const DscContext *ctx)
 {
     if (!ctx) {
         return "NULL context";
@@ -433,7 +433,7 @@ const char *dsc_last_error(const dsc_context_t *ctx)
 /* ------------------------------------------------------------------ */
 /* Internal: close DWARF and clear symbol table (for reload)          */
 /* ------------------------------------------------------------------ */
-static void close_dwarf(dsc_context_t *ctx)
+static void close_dwarf(DscContext *ctx)
 {
     if (ctx->dwarf) {
         dsc_dwarf_close(ctx->dwarf);
@@ -444,9 +444,9 @@ static void close_dwarf(dsc_context_t *ctx)
 }
 
 /* ------------------------------------------------------------------ */
-/* Public: dsc_reload                                                 */
+/* Public: DscReload                                                 */
 /* ------------------------------------------------------------------ */
-int dsc_reload(dsc_context_t *ctx)
+int DscReload(DscContext *ctx)
 {
     if (!ctx) {
         return DSC_ERR_INVALID_ARG;
@@ -457,7 +457,7 @@ int dsc_reload(dsc_context_t *ctx)
     close_dwarf(ctx);
 
     /* Invalidate resolve cache */
-    dsc_resolve_cache_invalidate(ctx->cache);
+    DscResolveCacheInvalidate(ctx->cache);
 
     /* Reopen and reload */
     int rc = open_dwarf(ctx);

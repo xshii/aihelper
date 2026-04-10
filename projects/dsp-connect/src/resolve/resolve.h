@@ -19,7 +19,7 @@ typedef struct {
     UINT64    addr;   /* resolved absolute address                  */
     UINT32      size;   /* byte size of the resolved element          */
     dsc_type_t *type;   /* type info (borrowed, owned by dwarf layer) */
-} dsc_resolved_t;
+} DscResolved;
 
 /* ------------------------------------------------------------------ */
 /* Main API                                                           */
@@ -34,8 +34,8 @@ typedef struct {
  *   - Array index:      "g_buffer[3]"
  *   - Combined:         "g_config.items[2].name"
  *
- * Returns DSC_OK on success, negative dsc_error_t on failure. */
-int dsc_resolve(const dsc_symtab_t *symtab, const dsc_arch_t *arch,
-                const char *path, dsc_resolved_t *out);
+ * Returns DSC_OK on success, negative DscError on failure. */
+int DscResolve(const dsc_symtab_t *symtab, const DscArch *arch,
+                const char *path, DscResolved *out);
 
 #endif /* DSC_RESOLVE_H */

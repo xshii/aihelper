@@ -10,23 +10,23 @@
 static const char *level_names[] = {"DEBUG", "INFO", "WARN", "ERROR"};
 
 /* --- Global state --- */
-dsc_log_level_t dsc_log_min_level = DSC_LOG_LEVEL_INFO;
-dsc_log_fn dsc_log_impl = dsc_log_default;
+DscLogLevel DscLogMinLevel = DSC_LOG_LEVEL_INFO;
+DscLogFn DscLogImpl = DscLogDefault;
 
-void dsc_log_set_handler(dsc_log_fn fn)
+void DscLogSetHandler(DscLogFn fn)
 {
-    dsc_log_impl = fn ? fn : dsc_log_default;
+    DscLogImpl = fn ? fn : DscLogDefault;
 }
 
-void dsc_log_set_level(dsc_log_level_t level)
+void DscLogSetLevel(DscLogLevel level)
 {
-    dsc_log_min_level = level;
+    DscLogMinLevel = level;
 }
 
-void dsc_log_default(dsc_log_level_t level, const char *file,
+void DscLogDefault(DscLogLevel level, const char *file,
                      int line, const char *fmt, ...)
 {
-    if (level < dsc_log_min_level) {
+    if (level < DscLogMinLevel) {
         return;
     }
 

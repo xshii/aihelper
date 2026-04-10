@@ -20,7 +20,7 @@
 /* ------------------------------------------------------------------ */
 /* Public API: read                                                   */
 /* ------------------------------------------------------------------ */
-int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
+int DscMemRead(DscTransport *tp, const DscArch *arch,
                  UINT64 logical_addr, void *buf, UINT32 len)
 {
     if (tp == NULL || buf == NULL) {
@@ -33,7 +33,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     /* Step 1: translate logical → physical address */
     UINT64 phys_addr = logical_addr;
     if (arch != NULL) {
-        DSC_TRY(dsc_arch_logical_to_physical(arch, logical_addr, &phys_addr));
+        DSC_TRY(DscArchLogicalToPhysical(arch, logical_addr, &phys_addr));
     }
 
     DSC_LOG_DEBUG("mem_read: logical=0x%llx phys=0x%llx len=%zu",
@@ -49,7 +49,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
     while (remaining > 0) {
         UINT32 chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
 
-        int rc = dsc_transport_mem_read(tp, addr, dst, chunk);
+        int rc = DscTransportMemRead(tp, addr, dst, chunk);
         if (rc < 0) {
             DSC_LOG_ERROR("mem_read: transport error at phys=0x%llx chunk=%zu",
                           (unsigned long long)addr, chunk);
@@ -66,7 +66,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
      * (i.e., size is a power of two and <= 8 bytes — typical scalar).
      * Bulk reads of byte arrays should NOT be swapped. */
     if (arch != NULL && len <= 8 && (len & (len - 1)) == 0) {
-        dsc_arch_swap_endian(arch, buf, len);
+        DscArchSwapEndian(arch, buf, len);
     }
 
     return DSC_OK;
@@ -75,7 +75,7 @@ int dsc_mem_read(dsc_transport_t *tp, const dsc_arch_t *arch,
 /* ------------------------------------------------------------------ */
 /* Public API: write                                                  */
 /* ------------------------------------------------------------------ */
-int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
+int DscMemWrite(DscTransport *tp, const DscArch *arch,
                   UINT64 logical_addr, const void *buf, UINT32 len)
 {
     if (tp == NULL || buf == NULL) {
@@ -88,7 +88,7 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
     /* Step 1: translate logical → physical address */
     UINT64 phys_addr = logical_addr;
     if (arch != NULL) {
-        DSC_TRY(dsc_arch_logical_to_physical(arch, logical_addr, &phys_addr));
+        DSC_TRY(DscArchLogicalToPhysical(arch, logical_addr, &phys_addr));
     }
 
     DSC_LOG_DEBUG("mem_write: logical=0x%llx phys=0x%llx len=%zu",
@@ -103,7 +103,7 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
 
     if (arch != NULL && len <= 8 && (len & (len - 1)) == 0) {
         memcpy(swap_buf, buf, len);
-        dsc_arch_swap_endian(arch, swap_buf, len);
+        DscArchSwapEndian(arch, swap_buf, len);
         src = swap_buf;
     }
 
@@ -114,7 +114,7 @@ int dsc_mem_write(dsc_transport_t *tp, const dsc_arch_t *arch,
     while (remaining > 0) {
         UINT32 chunk = (remaining > MAX_CHUNK_SIZE) ? MAX_CHUNK_SIZE : remaining;
 
-        int rc = dsc_transport_mem_write(tp, addr, src, chunk);
+        int rc = DscTransportMemWrite(tp, addr, src, chunk);
         if (rc < 0) {
             DSC_LOG_ERROR("mem_write: transport error at phys=0x%llx chunk=%zu",
                           (unsigned long long)addr, chunk);

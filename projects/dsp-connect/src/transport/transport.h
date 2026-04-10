@@ -14,29 +14,29 @@
 
 /* ---------- Forward declarations ---------- */
 
-typedef struct dsc_transport_t    dsc_transport_t;
-typedef struct dsc_transport_ops  dsc_transport_ops;
+typedef struct DscTransport    DscTransport;
+typedef struct DscTransportOps  DscTransportOps;
 
 /* ---------- Virtual table ---------- */
 
 /* Every concrete transport implements this table.
  * All functions receive the base struct pointer — the implementation casts it
- * to its private struct (whose first member IS a dsc_transport_t). */
-struct dsc_transport_ops {
-    int  (*open)(dsc_transport_t *self);
-    void (*close)(dsc_transport_t *self);
-    int  (*mem_read)(dsc_transport_t *self, UINT64 addr, void *buf, UINT32 len);
-    int  (*mem_write)(dsc_transport_t *self, UINT64 addr, const void *buf, UINT32 len);
-    int  (*exec_cmd)(dsc_transport_t *self, const char *cmd, char *resp, UINT32 resp_len);
-    void (*destroy)(dsc_transport_t *self);
+ * to its private struct (whose first member IS a DscTransport). */
+struct DscTransportOps {
+    int  (*open)(DscTransport *self);
+    void (*close)(DscTransport *self);
+    int  (*mem_read)(DscTransport *self, UINT64 addr, void *buf, UINT32 len);
+    int  (*mem_write)(DscTransport *self, UINT64 addr, const void *buf, UINT32 len);
+    int  (*exec_cmd)(DscTransport *self, const char *cmd, char *resp, UINT32 resp_len);
+    void (*destroy)(DscTransport *self);
 };
 
 /* ---------- Base "class" ---------- */
 
 /* Concrete implementations embed this as their FIRST member so that
- * (dsc_transport_t *)ptr and (concrete_t *)ptr have the same address. */
-struct dsc_transport_t {
-    const dsc_transport_ops *ops;
+ * (DscTransport *)ptr and (concrete_t *)ptr have the same address. */
+struct DscTransport {
+    const DscTransportOps *ops;
     char name[32];
 };
 
@@ -56,41 +56,41 @@ typedef struct {
     const char *shm_path;   /* shm: shared memory file path       */
     UINT32      shm_size;   /* shm: region size in bytes          */
     int         timeout_ms; /* I/O timeout, 0 = use backend default */
-} dsc_transport_config_t;
+} DscTransportConfig;
 
 /* ---------- Convenience inline wrappers ---------- */
 
 /* These dispatch through the vtable so callers never touch ->ops directly. */
 
-static inline int dsc_transport_open(dsc_transport_t *t)
+static inline int DscTransportOpen(DscTransport *t)
 {
     return t->ops->open(t);
 }
 
-static inline void dsc_transport_close(dsc_transport_t *t)
+static inline void DscTransportClose(DscTransport *t)
 {
     t->ops->close(t);
 }
 
-static inline int dsc_transport_mem_read(dsc_transport_t *t,
+static inline int DscTransportMemRead(DscTransport *t,
                                          UINT64 addr, void *buf, UINT32 len)
 {
     return t->ops->mem_read(t, addr, buf, len);
 }
 
-static inline int dsc_transport_mem_write(dsc_transport_t *t,
+static inline int DscTransportMemWrite(DscTransport *t,
                                           UINT64 addr, const void *buf, UINT32 len)
 {
     return t->ops->mem_write(t, addr, buf, len);
 }
 
-static inline int dsc_transport_exec_cmd(dsc_transport_t *t,
+static inline int DscTransportExecCmd(DscTransport *t,
                                          const char *cmd, char *resp, UINT32 resp_len)
 {
     return t->ops->exec_cmd(t, cmd, resp, resp_len);
 }
 
-static inline void dsc_transport_destroy(dsc_transport_t *t)
+static inline void DscTransportDestroy(DscTransport *t)
 {
     if (t && t->ops->destroy) {
         t->ops->destroy(t);

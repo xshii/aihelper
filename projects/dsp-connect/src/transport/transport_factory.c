@@ -13,7 +13,7 @@
 
 typedef struct {
     const char        *name;
-    dsc_transport_ctor ctor;
+    DscTransportCtor ctor;
 } registry_entry_t;
 
 static registry_entry_t s_registry[DSC_MAX_TRANSPORTS];
@@ -21,7 +21,7 @@ static int              s_registry_count = 0;
 
 /* ---------- Registration ---------- */
 
-int dsc_transport_register(const char *name, dsc_transport_ctor ctor)
+int DscTransportRegister(const char *name, DscTransportCtor ctor)
 {
     if (!name || !ctor) {
         return DSC_ERR_INVALID_ARG;
@@ -52,8 +52,8 @@ int dsc_transport_register(const char *name, dsc_transport_ctor ctor)
 
 /* ---------- Creation ---------- */
 
-dsc_transport_t *dsc_transport_create(const char *name,
-                                      const dsc_transport_config_t *cfg)
+DscTransport *DscTransportCreate(const char *name,
+                                      const DscTransportConfig *cfg)
 {
     if (!name) {
         return NULL;
@@ -61,7 +61,7 @@ dsc_transport_t *dsc_transport_create(const char *name,
 
     for (int i = 0; i < s_registry_count; i++) {
         if (strcmp(s_registry[i].name, name) == 0) {
-            dsc_transport_t *t = s_registry[i].ctor(cfg);
+            DscTransport *t = s_registry[i].ctor(cfg);
             if (t) {
                 DSC_LOG_INFO("created transport '%s'", name);
             }
@@ -75,7 +75,7 @@ dsc_transport_t *dsc_transport_create(const char *name,
 
 /* ---------- Cleanup ---------- */
 
-void dsc_transport_free(dsc_transport_t *t)
+void dsc_transport_free(DscTransport *t)
 {
     if (!t) {
         return;
@@ -86,7 +86,7 @@ void dsc_transport_free(dsc_transport_t *t)
 
 /* ---------- Listing ---------- */
 
-int dsc_transport_list(const char **names, int max_names)
+int DscTransportList(const char **names, int max_names)
 {
     int count = (s_registry_count < max_names) ? s_registry_count : max_names;
     for (int i = 0; i < count; i++) {

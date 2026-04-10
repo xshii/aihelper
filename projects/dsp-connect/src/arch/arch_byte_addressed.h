@@ -8,7 +8,7 @@
 #include "arch.h"
 
 /* Register "byte_le" and "byte_be" backends with the factory.
- * Called by dsc_arch_register_builtins(). */
-void dsc_arch_byte_register(void);
+ * Called by DscArchRegisterBuiltins(). */
+void DscArchByteRegister(void);
 
 #endif /* DSC_ARCH_BYTE_ADDRESSED_H */

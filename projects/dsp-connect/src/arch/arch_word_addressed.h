@@ -8,7 +8,7 @@
 #include "arch.h"
 
 /* Register "word16", "word24", "word32" backends with the factory.
- * Called by dsc_arch_register_builtins(). */
-void dsc_arch_word_register(void);
+ * Called by DscArchRegisterBuiltins(). */
+void DscArchWordRegister(void);
 
 #endif /* DSC_ARCH_WORD_ADDRESSED_H */

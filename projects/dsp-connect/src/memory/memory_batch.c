@@ -82,8 +82,8 @@ static void free_spans(merged_span_t *spans, UINT32 count)
 /* ------------------------------------------------------------------ */
 /* Public API                                                         */
 /* ------------------------------------------------------------------ */
-int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
-                       dsc_mem_region_t *regions, UINT32 count)
+int DscMemBatchRead(DscTransport *tp, const DscArch *arch,
+                       DscMemRegion *regions, UINT32 count)
 {
     /* Three-phase batch read:
      *   Phase 1: Sort region indices by start address
@@ -195,11 +195,11 @@ int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
         }
 
         /* Read the entire span.
-         * Use dsc_mem_read which handles address translation and chunking.
+         * Use DscMemRead which handles address translation and chunking.
          * NOTE: we pass the raw span bytes without per-element endian swap,
          * since each region may represent a different data type. Callers are
          * responsible for endian handling at the value interpretation level. */
-        int rc = dsc_transport_mem_read(tp, span->start, tmp, span_len);
+        int rc = DscTransportMemRead(tp, span->start, tmp, span_len);
         if (rc < 0) {
             DSC_LOG_ERROR("mem_batch_read: span read failed at 0x%llx len=%zu",
                           (unsigned long long)span->start, span_len);

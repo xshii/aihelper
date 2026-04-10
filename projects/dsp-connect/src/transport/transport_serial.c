@@ -31,14 +31,14 @@ static INT32 fd_recv(int fd, char *ch)
 /* ---------- Private struct ---------- */
 
 typedef struct {
-    dsc_transport_t   base;       /* MUST be first member */
-    dsc_cmdline_ctx_t cmd;        /* 共享协议上下文 */
+    DscTransport   base;       /* MUST be first member */
+    DscCmdlineCtx cmd;        /* 共享协议上下文 */
     char              device[256];
     int               baudrate;
     struct termios    orig_tios;
 } serial_transport_t;
 
-static inline serial_transport_t *to_serial(dsc_transport_t *t)
+static inline serial_transport_t *to_serial(DscTransport *t)
 {
     return (serial_transport_t *)t;
 }
@@ -107,7 +107,7 @@ static int configure_termios(int fd, int baudrate, const char *device)
 
 /* ---------- vtable: open (serial 特有) ---------- */
 
-static int serial_open(dsc_transport_t *self)
+static int serial_open(DscTransport *self)
 {
     serial_transport_t *st = to_serial(self);
 
@@ -135,7 +135,7 @@ static int serial_open(dsc_transport_t *self)
     return DSC_OK;
 }
 
-static void serial_close(dsc_transport_t *self)
+static void serial_close(DscTransport *self)
 {
     serial_transport_t *st = to_serial(self);
     if (st->cmd.fd >= 0) {
@@ -149,25 +149,25 @@ static void serial_close(dsc_transport_t *self)
 
 /* ---------- vtable: 协议操作委托给 cmdline ---------- */
 
-static int serial_mem_read(dsc_transport_t *self, UINT64 addr,
+static int serial_mem_read(DscTransport *self, UINT64 addr,
                            void *buf, UINT32 len)
 {
-    return dsc_cmdline_mem_read(&to_serial(self)->cmd, addr, buf, len);
+    return DscCmdlineMemRead(&to_serial(self)->cmd, addr, buf, len);
 }
 
-static int serial_mem_write(dsc_transport_t *self, UINT64 addr,
+static int serial_mem_write(DscTransport *self, UINT64 addr,
                             const void *buf, UINT32 len)
 {
-    return dsc_cmdline_mem_write(&to_serial(self)->cmd, addr, buf, len);
+    return DscCmdlineMemWrite(&to_serial(self)->cmd, addr, buf, len);
 }
 
-static int serial_exec_cmd(dsc_transport_t *self, const char *cmd,
+static int serial_exec_cmd(DscTransport *self, const char *cmd,
                            char *resp, UINT32 resp_len)
 {
-    return dsc_cmdline_exec(&to_serial(self)->cmd, cmd, resp, resp_len);
+    return DscCmdlineExec(&to_serial(self)->cmd, cmd, resp, resp_len);
 }
 
-static void serial_destroy(dsc_transport_t *self)
+static void serial_destroy(DscTransport *self)
 {
     serial_close(self);
     free(to_serial(self));
@@ -175,7 +175,7 @@ static void serial_destroy(dsc_transport_t *self)
 
 /* ---------- vtable ---------- */
 
-static const dsc_transport_ops serial_ops = {
+static const DscTransportOps serial_ops = {
     .open      = serial_open,
     .close     = serial_close,
     .mem_read  = serial_mem_read,
@@ -186,7 +186,7 @@ static const dsc_transport_ops serial_ops = {
 
 /* ---------- Constructor ---------- */
 
-dsc_transport_t *serial_transport_create(const dsc_transport_config_t *cfg)
+DscTransport *serial_transport_create(const DscTransportConfig *cfg)
 {
     serial_transport_t *st = calloc(1, sizeof(*st));
     if (!st) {

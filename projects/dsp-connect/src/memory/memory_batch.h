@@ -21,7 +21,7 @@ typedef struct {
     UINT32   len;       /* number of bytes to read                    */
     void    *buf;       /* caller-provided output buffer              */
     int      status;    /* per-region result: DSC_OK or error code    */
-} dsc_mem_region_t;
+} DscMemRegion;
 
 /* ------------------------------------------------------------------ */
 /* API                                                                */
@@ -38,7 +38,7 @@ typedef struct {
  *
  * Returns DSC_OK if all regions succeeded, or the first error code
  * encountered (individual statuses are still set). */
-int dsc_mem_batch_read(dsc_transport_t *tp, const dsc_arch_t *arch,
-                       dsc_mem_region_t *regions, UINT32 count);
+int DscMemBatchRead(DscTransport *tp, const DscArch *arch,
+                       DscMemRegion *regions, UINT32 count);
 
 #endif /* DSC_MEMORY_BATCH_H */

@@ -7,15 +7,15 @@
 
 #include "hashmap.h"
 
-void dsc_hashmap_init(dsc_hashmap_t *map, UINT32 initial_cap)
+void DscHashmapInit(DscHashmap *map, UINT32 initial_cap)
 {
     (void)initial_cap; /* uthash 自动管理容量 */
     map->head = NULL;
 }
 
-void dsc_hashmap_free(dsc_hashmap_t *map)
+void DscHashmapFree(DscHashmap *map)
 {
-    dsc_hashmap_entry_t *cur, *tmp;
+    DscHashmapEntry *cur, *tmp;
     HASH_ITER(hh, map->head, cur, tmp) {
         HASH_DEL(map->head, cur);
         free(cur->key);
@@ -24,10 +24,10 @@ void dsc_hashmap_free(dsc_hashmap_t *map)
     map->head = NULL;
 }
 
-int dsc_hashmap_put(dsc_hashmap_t *map, const char *key, void *value)
+int DscHashmapPut(DscHashmap *map, const char *key, void *value)
 {
     /* 先查是否已存在 */
-    dsc_hashmap_entry_t *existing = NULL;
+    DscHashmapEntry *existing = NULL;
     HASH_FIND_STR(map->head, key, existing);
     if (existing) {
         existing->value = value; /* 更新 */
@@ -35,7 +35,7 @@ int dsc_hashmap_put(dsc_hashmap_t *map, const char *key, void *value)
     }
 
     /* 新建 entry */
-    dsc_hashmap_entry_t *entry = malloc(sizeof(*entry));
+    DscHashmapEntry *entry = malloc(sizeof(*entry));
     if (!entry) {
         return -1;
     }
@@ -51,17 +51,17 @@ int dsc_hashmap_put(dsc_hashmap_t *map, const char *key, void *value)
     return 0;
 }
 
-void *dsc_hashmap_get(const dsc_hashmap_t *map, const char *key)
+void *DscHashmapGet(const DscHashmap *map, const char *key)
 {
-    dsc_hashmap_entry_t *entry = NULL;
+    DscHashmapEntry *entry = NULL;
     /* uthash 的 HASH_FIND_STR 第一个参数不能是 const，需要 cast */
-    HASH_FIND_STR(((dsc_hashmap_t *)map)->head, key, entry);
+    HASH_FIND_STR(((DscHashmap *)map)->head, key, entry);
     return entry ? entry->value : NULL;
 }
 
-int dsc_hashmap_del(dsc_hashmap_t *map, const char *key)
+int DscHashmapDel(DscHashmap *map, const char *key)
 {
-    dsc_hashmap_entry_t *entry = NULL;
+    DscHashmapEntry *entry = NULL;
     HASH_FIND_STR(map->head, key, entry);
     if (!entry) {
         return 0;
@@ -73,9 +73,9 @@ int dsc_hashmap_del(dsc_hashmap_t *map, const char *key)
     return 1;
 }
 
-void dsc_hashmap_clear(dsc_hashmap_t *map)
+void DscHashmapClear(DscHashmap *map)
 {
-    dsc_hashmap_entry_t *cur, *tmp;
+    DscHashmapEntry *cur, *tmp;
     HASH_ITER(hh, map->head, cur, tmp) {
         HASH_DEL(map->head, cur);
         free(cur->key);
@@ -84,7 +84,7 @@ void dsc_hashmap_clear(dsc_hashmap_t *map)
     map->head = NULL;
 }
 
-UINT32 dsc_hashmap_count(const dsc_hashmap_t *map)
+UINT32 DscHashmapCount(const DscHashmap *map)
 {
-    return (UINT32)HASH_COUNT(((dsc_hashmap_t *)map)->head);
+    return (UINT32)HASH_COUNT(((DscHashmap *)map)->head);
 }

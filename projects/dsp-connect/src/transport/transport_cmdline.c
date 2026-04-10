@@ -17,7 +17,7 @@
 /* ------------------------------------------------------------------ */
 /* wait_readable: select() 等待 fd 可读                                */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_wait_readable(int fd, int timeout_ms)
+int DscCmdlineWaitReadable(int fd, int timeout_ms)
 {
     fd_set fds;
     FD_ZERO(&fds);
@@ -38,7 +38,7 @@ int dsc_cmdline_wait_readable(int fd, int timeout_ms)
 /* ------------------------------------------------------------------ */
 /* send_all: 通过 io_send 回调重试发送直到全部写出                       */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, UINT32 len)
+int DscCmdlineSendAll(DscCmdlineCtx *ctx, const void *buf, UINT32 len)
 {
     const char *p = (const char *)buf;
     UINT32 remaining = len;
@@ -61,12 +61,12 @@ int dsc_cmdline_send_all(dsc_cmdline_ctx_t *ctx, const void *buf, UINT32 len)
 /* ------------------------------------------------------------------ */
 /* recv_line: 逐字节读取直到 \n，去除 \r\n                              */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, UINT32 buf_len)
+int DscCmdlineRecvLine(DscCmdlineCtx *ctx, char *buf, UINT32 buf_len)
 {
     UINT32 pos = 0;
 
     while (pos < buf_len - 1) {
-        int ready = dsc_cmdline_wait_readable(ctx->fd, ctx->timeout_ms);
+        int ready = DscCmdlineWaitReadable(ctx->fd, ctx->timeout_ms);
         if (ready < 0) {
             return DSC_ERR_TRANSPORT_IO;
         }
@@ -101,7 +101,7 @@ int dsc_cmdline_recv_line(dsc_cmdline_ctx_t *ctx, char *buf, UINT32 buf_len)
 /* ------------------------------------------------------------------ */
 /* exec: 发命令(\r\n) + 收一行响应                                     */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
+int DscCmdlineExec(DscCmdlineCtx *ctx, const char *cmd,
                      char *resp, UINT32 resp_len)
 {
     char line[1024];
@@ -109,9 +109,9 @@ int dsc_cmdline_exec(dsc_cmdline_ctx_t *ctx, const char *cmd,
     if (n < 0 || (UINT32)n >= sizeof(line)) {
         return DSC_ERR_INVALID_ARG;
     }
-    DSC_TRY(dsc_cmdline_send_all(ctx, line, (UINT32)n));
+    DSC_TRY(DscCmdlineSendAll(ctx, line, (UINT32)n));
 
-    int rc = dsc_cmdline_recv_line(ctx, resp, resp_len);
+    int rc = DscCmdlineRecvLine(ctx, resp, resp_len);
     if (rc < 0) {
         return rc;
     }
@@ -159,7 +159,7 @@ static int parse_hex_response(const char *resp, UINT8 *out, UINT32 len)
 /* ------------------------------------------------------------------ */
 /* mem_read: 发 "md <addr> <len>"，解析 hex 响应                       */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+int DscCmdlineMemRead(DscCmdlineCtx *ctx, UINT64 addr,
                          void *buf, UINT32 len)
 {
     if (ctx->fd < 0) {
@@ -171,7 +171,7 @@ int dsc_cmdline_mem_read(dsc_cmdline_ctx_t *ctx, UINT64 addr,
              (unsigned long long)addr, len);
 
     char resp[4096];
-    DSC_TRY(dsc_cmdline_exec(ctx, cmd, resp, sizeof(resp)));
+    DSC_TRY(DscCmdlineExec(ctx, cmd, resp, sizeof(resp)));
     return parse_hex_response(resp, (UINT8 *)buf, len);
 }
 
@@ -190,7 +190,7 @@ static UINT32 pack_word_be(const UINT8 *src, UINT32 chunk)
 /* ------------------------------------------------------------------ */
 /* mem_write: 逐 word 发 "mw <addr> <value>"                          */
 /* ------------------------------------------------------------------ */
-int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, UINT64 addr,
+int DscCmdlineMemWrite(DscCmdlineCtx *ctx, UINT64 addr,
                           const void *buf, UINT32 len)
 {
     if (ctx->fd < 0) {
@@ -209,7 +209,7 @@ int dsc_cmdline_mem_write(dsc_cmdline_ctx_t *ctx, UINT64 addr,
                  (unsigned long long)(addr + offset), word);
 
         char resp[256];
-        DSC_TRY(dsc_cmdline_exec(ctx, cmd, resp, sizeof(resp)));
+        DSC_TRY(DscCmdlineExec(ctx, cmd, resp, sizeof(resp)));
         offset += chunk;
     }
     return DSC_OK;
