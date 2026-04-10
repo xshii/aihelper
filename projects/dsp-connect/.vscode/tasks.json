@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CI 全量检查",
+      "type": "shell",
+      "command": "make clean && make check && make test",
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"],
+      "detail": "clean → 编译(-Werror) → 运行测试",
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "运行测试",
+      "type": "shell",
+      "command": "make test",
+      "group": { "kind": "test", "isDefault": true },
+      "problemMatcher": ["$gcc"],
+      "detail": "编译并运行全部单元测试 + 集成测试",
+      "options": { "cwd": "${workspaceFolder}" }
+    },
+    {
+      "label": "Debug 编译测试",
+      "type": "shell",
+      "command": "make -C tests clean && make -C tests CFLAGS='-g -O0 -Wall -Wextra -std=c11'",
+      "problemMatcher": ["$gcc"],
+      "detail": "以 -g -O0 编译，用于 lldb 断点调试",
+      "options": { "cwd": "${workspaceFolder}" }
+    }
+  ]
+}
