@@ -12,9 +12,6 @@ add_compile_options(-Wall -Wextra -Wpedantic)
 # ------------------------------------------------------------------ #
 # Option: link libdwarf for real DWARF parsing                       #
 # ------------------------------------------------------------------ #
-option(DSC_USE_LIBDWARF "Link libdwarf/libelf for real DWARF parsing" OFF)
-
-# ------------------------------------------------------------------ #
 # Static library: libdsc                                             #
 # ------------------------------------------------------------------ #
 file(GLOB_RECURSE LIB_SRCS src/*/*.c)
@@ -32,11 +29,6 @@ endif()
 find_package(Threads)
 if(Threads_FOUND)
     target_link_libraries(dsc PUBLIC Threads::Threads)
-endif()
-
-if(DSC_USE_LIBDWARF)
-    target_compile_definitions(dsc PUBLIC DSC_USE_LIBDWARF)
-    target_link_libraries(dsc PUBLIC dwarf elf)
 endif()
 
 # ------------------------------------------------------------------ #

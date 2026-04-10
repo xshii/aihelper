@@ -167,7 +167,7 @@ int DscCmdlineMemRead(DscCmdlineCtx *ctx, UINT64 addr,
     }
 
     char cmd[128];
-    snprintf(cmd, sizeof(cmd), "md 0x%llx %zu",
+    snprintf(cmd, sizeof(cmd), "md 0x%llx %u",
              (unsigned long long)addr, len);
 
     char resp[4096];
