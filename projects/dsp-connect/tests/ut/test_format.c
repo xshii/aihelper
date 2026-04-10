@@ -288,6 +288,224 @@ void format_str_returns_allocated_string(void)
 }
 
 /* ================================================================== */
+/* Format pointer test                                                */
+/* ================================================================== */
+
+void format_pointer_hex(void)
+{
+    dsc_type_t pointee = {0};
+    pointee.kind = DSC_TYPE_BASE;
+    pointee.name = "uint32_t";
+    pointee.byte_size = 4;
+
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_POINTER;
+    type->byte_size = 8;
+    type->u.pointer.pointee = &pointee;
+
+    UINT64 addr = 0x20001000;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&addr, sizeof(addr), type, &opts, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "0x") != NULL);
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+/* ================================================================== */
+/* Format typedef unwrap test                                         */
+/* ================================================================== */
+
+void format_typedef_unwraps(void)
+{
+    /* typedef -> uint32 base */
+    dsc_type_t base = {0};
+    base.kind = DSC_TYPE_BASE;
+    base.byte_size = 4;
+    base.u.base.encoding = DSC_ENC_UNSIGNED;
+
+    dsc_type_t *td = calloc(1, sizeof(*td));
+    td->kind = DSC_TYPE_TYPEDEF;
+    td->name = "counter_t";
+    td->byte_size = 4;
+    td->u.modifier.target = &base;
+
+    UINT32 val = 77;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), td, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("77", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(td);
+}
+
+/* ================================================================== */
+/* Format const unwrap test                                           */
+/* ================================================================== */
+
+void format_const_unwraps(void)
+{
+    dsc_type_t base = {0};
+    base.kind = DSC_TYPE_BASE;
+    base.byte_size = 4;
+    base.u.base.encoding = DSC_ENC_UNSIGNED;
+
+    dsc_type_t *ct = calloc(1, sizeof(*ct));
+    ct->kind = DSC_TYPE_CONST;
+    ct->byte_size = 4;
+    ct->u.modifier.target = &base;
+
+    UINT32 val = 0xCAFE;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), ct, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("51966", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(ct);
+}
+
+/* ================================================================== */
+/* Format volatile unwrap test                                        */
+/* ================================================================== */
+
+void format_volatile_unwraps(void)
+{
+    dsc_type_t base = {0};
+    base.kind = DSC_TYPE_BASE;
+    base.byte_size = 2;
+    base.u.base.encoding = DSC_ENC_SIGNED;
+
+    dsc_type_t *vt = calloc(1, sizeof(*vt));
+    vt->kind = DSC_TYPE_VOLATILE;
+    vt->byte_size = 2;
+    vt->u.modifier.target = &base;
+
+    INT16 val = -5;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), vt, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("-5", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(vt);
+}
+
+/* ================================================================== */
+/* Format union test (same as struct display)                         */
+/* ================================================================== */
+
+static dsc_type_t s_union_field_type;
+static dsc_struct_field_t s_union_fields[2];
+
+void format_union_shows_fields(void)
+{
+    memset(&s_union_field_type, 0, sizeof(s_union_field_type));
+    s_union_field_type.kind = DSC_TYPE_BASE;
+    s_union_field_type.byte_size = 4;
+    s_union_field_type.u.base.encoding = DSC_ENC_UNSIGNED;
+
+    s_union_fields[0].name = "u32";
+    s_union_fields[0].byte_offset = 0;
+    s_union_fields[0].type = &s_union_field_type;
+
+    s_union_fields[1].name = "f32";
+    s_union_fields[1].byte_offset = 0;
+    s_union_fields[1].type = &s_union_field_type;
+
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_UNION;
+    type->byte_size = 4;
+    type->u.composite.fields = s_union_fields;
+    type->u.composite.field_count = 2;
+
+    UINT32 val = 0xDEADBEEF;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 256);
+    DscFormatOpts opts = DscFormatOptsDefault();
+    int rc = DscFormat(&val, sizeof(val), type, &opts, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+
+    const char *result = DscStrbufCstr(&sb);
+    TEST_ASSERT_TRUE(strstr(result, ".u32") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, ".f32") != NULL);
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+/* ================================================================== */
+/* Format bool test                                                   */
+/* ================================================================== */
+
+void format_bool_true(void)
+{
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_BASE;
+    type->byte_size = 1;
+    type->u.base.encoding = DSC_ENC_BOOL;
+
+    UINT8 val = 1;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), type, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("true", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+void format_bool_false(void)
+{
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_BASE;
+    type->byte_size = 1;
+    type->u.base.encoding = DSC_ENC_BOOL;
+
+    UINT8 val = 0;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), type, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("false", DscStrbufCstr(&sb));
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+/* ================================================================== */
+/* Format float test                                                  */
+/* ================================================================== */
+
+void format_float32(void)
+{
+    dsc_type_t *type = calloc(1, sizeof(*type));
+    type->kind = DSC_TYPE_BASE;
+    type->byte_size = 4;
+    type->u.base.encoding = DSC_ENC_FLOAT;
+
+    float val = 3.14f;
+    DscStrbuf sb;
+    DscStrbufInit(&sb, 64);
+    int rc = DscFormat(&val, sizeof(val), type, NULL, &sb);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    /* Should contain "3.14" somewhere */
+    TEST_ASSERT_TRUE(strstr(DscStrbufCstr(&sb), "3.14") != NULL);
+
+    DscStrbufFree(&sb);
+    free(type);
+}
+
+/* ================================================================== */
 /* Runner                                                             */
 /* ================================================================== */
 
@@ -295,13 +513,34 @@ int test_format_main(void)
 {
     UNITY_BEGIN();
 
+    /* base types */
     RUN_TEST(format_uint32_decimal);
     RUN_TEST(format_uint32_hex);
     RUN_TEST(format_int16_negative);
+    RUN_TEST(format_bool_true);
+    RUN_TEST(format_bool_false);
+    RUN_TEST(format_float32);
+
+    /* enum */
     RUN_TEST(format_enum_known_value);
     RUN_TEST(format_enum_second_value);
+
+    /* composite */
     RUN_TEST(format_struct_multiline);
+    RUN_TEST(format_union_shows_fields);
+
+    /* array */
     RUN_TEST(format_array_elements);
+
+    /* modifiers: typedef / const / volatile */
+    RUN_TEST(format_typedef_unwraps);
+    RUN_TEST(format_const_unwraps);
+    RUN_TEST(format_volatile_unwraps);
+
+    /* pointer */
+    RUN_TEST(format_pointer_hex);
+
+    /* misc */
     RUN_TEST(format_null_opts_uses_defaults);
     RUN_TEST(format_str_returns_allocated_string);
 
