@@ -1,12 +1,13 @@
-/* PURPOSE: Minimal usage example — Layer 0 zero-config API
- * PATTERN: Single main() that demonstrates the entire pipeline:
- *          open context -> read variable -> print -> close
- * FOR: Weak AI to see the simplest possible usage of dsp-connect */
+/* PURPOSE: 演示程序 — 支持单次查询和交互式 Shell 两种模式
+ * PATTERN: Layer 0 API + Shell 交互层
+ * FOR: Weak AI to see the simplest usage of dsp-connect */
 
-#include "core/dsc.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "core/dsc.h"
+#include "shell/shell.h"
 
 /* Parse "host:port" into params. Uses static buffer. */
 static void parse_host_port(const char *arg, DscOpenParams *params)
@@ -18,7 +19,7 @@ static void parse_host_port(const char *arg, DscOpenParams *params)
         *colon = '\0';
         params->port = atoi(colon + 1);
     } else {
-        params->port = 23; /* default telnet port */
+        params->port = 23;
     }
     params->host = hostbuf;
 }
@@ -26,11 +27,29 @@ static void parse_host_port(const char *arg, DscOpenParams *params)
 static void print_usage(const char *prog)
 {
     fprintf(stderr,
-        "Usage: %s <elf_file> <var_name> [transport] [host:port]\n\n"
-        "Examples:\n"
-        "  %s firmware.elf g_counter\n"
+        "Usage:\n"
+        "  %s <elf> shell [transport] [host:port]     Interactive shell\n"
+        "  %s <elf> <varname> [transport] [host:port]  Single query\n"
+        "\nExamples:\n"
+        "  %s firmware.elf shell telnet 192.168.1.100:4444\n"
         "  %s firmware.elf g_config.mode telnet 192.168.1.100:4444\n",
-        prog, prog, prog);
+        prog, prog, prog, prog);
+}
+
+static DscContext *open_session(int argc, char **argv)
+{
+    const char *transport = (argc > 3) ? argv[3] : "shm";
+
+    DscOpenParams params;
+    memset(&params, 0, sizeof(params));
+    params.elf_path  = argv[1];
+    params.transport = transport;
+    params.arch      = "byte_le";
+
+    if (argc > 4 && strcmp(transport, "telnet") == 0) {
+        parse_host_port(argv[4], &params);
+    }
+    return DscOpen(&params);
 }
 
 int main(int argc, char **argv)
@@ -40,34 +59,29 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const char *elf_path  = argv[1];
-    const char *var_name  = argv[2];
-    const char *transport = (argc > 3) ? argv[3] : "shm";
-
-    DscOpenParams params;
-    memset(&params, 0, sizeof(params));
-    params.elf_path  = elf_path;
-    params.transport = transport;
-
-    if (argc > 4 && strcmp(transport, "telnet") == 0) {
-        parse_host_port(argv[4], &params);
-    }
-
-    DscContext *ctx = DscOpen(&params);
+    DscContext *ctx = open_session(argc, argv);
     if (!ctx) {
         fprintf(stderr, "Error: failed to open session\n");
         return 1;
     }
 
-    char buf[4096];
-    int rc = DscReadVar(ctx, var_name, buf, sizeof(buf));
-    if (rc < 0) {
-        fprintf(stderr, "Error: %s\n", DscLastError(ctx));
-        DscClose(ctx);
-        return 1;
+    if (strcmp(argv[2], "shell") == 0) {
+        /* 交互式 Shell 模式 */
+        DscShell *sh = DscShellCreate(ctx);
+        DscShellLoop(sh);
+        DscShellDestroy(sh);
+    } else {
+        /* 单次变量查询 */
+        char buf[4096];
+        int rc = DscReadVar(ctx, argv[2], buf, sizeof(buf));
+        if (rc < 0) {
+            fprintf(stderr, "Error: %s\n", DscLastError(ctx));
+            DscClose(ctx);
+            return 1;
+        }
+        printf("%s = %s\n", argv[2], buf);
     }
 
-    printf("%s = %s\n", var_name, buf);
     DscClose(ctx);
     return 0;
 }

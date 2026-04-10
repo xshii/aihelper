@@ -449,6 +449,22 @@ static void close_dwarf(DscContext *ctx)
 /* ------------------------------------------------------------------ */
 /* Public: DscReload                                                 */
 /* ------------------------------------------------------------------ */
+int DscExecCmd(DscContext *ctx, const char *cmd,
+               char *resp, UINT32 resp_len)
+{
+    if (!ctx || !cmd || !resp || resp_len == 0) {
+        return DSC_ERR_INVALID_ARG;
+    }
+    int rc = DscTransportExecCmd(ctx->transport, cmd, resp, resp_len);
+    if (rc < 0) {
+        set_error(ctx, "exec_cmd '%s': %s", cmd, DscStrerror(rc));
+    }
+    return rc;
+}
+
+/* ------------------------------------------------------------------ */
+/* Public: DscReload                                                 */
+/* ------------------------------------------------------------------ */
 int DscReload(DscContext *ctx)
 {
     if (!ctx) {

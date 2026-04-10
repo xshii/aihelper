@@ -93,4 +93,9 @@ const char *DscLastError(const DscContext *ctx);
  * Returns DSC_OK on success. */
 int DscReload(DscContext *ctx);
 
+/* Execute a raw command on the transport (for passthrough commands).
+ * Sends cmd string to target, receives response into resp buffer. */
+int DscExecCmd(DscContext *ctx, const char *cmd,
+               char *resp, UINT32 resp_len);
+
 #endif /* DSC_H */
