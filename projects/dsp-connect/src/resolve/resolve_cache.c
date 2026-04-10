@@ -40,19 +40,21 @@ dsc_resolve_cache_t *dsc_resolve_cache_create(size_t capacity)
     return cache;
 }
 
+/* Free all heap-allocated result values stored in the cache */
+static void free_cached_values(dsc_hashmap_t *map)
+{
+    dsc_hashmap_entry_t *cur, *tmp;
+    HASH_ITER(hh, map->head, cur, tmp) {
+        free(cur->value); /* free the dsc_resolved_t* */
+    }
+}
+
 void dsc_resolve_cache_destroy(dsc_resolve_cache_t *cache)
 {
     if (cache == NULL) {
         return;
     }
-
-    /* Free all heap-allocated result values */
-    for (size_t i = 0; i < cache->map.cap; i++) {
-        if (cache->map.entries[i].key != NULL) {
-            free(cache->map.entries[i].value);
-        }
-    }
-
+    free_cached_values(&cache->map);
     dsc_hashmap_free(&cache->map);
     free(cache);
 }
@@ -84,7 +86,7 @@ int dsc_resolve_cached(dsc_resolve_cache_t *cache,
     }
 
     /* Step 3: store in cache (skip if at capacity) */
-    if (cache->map.count < cache->capacity) {
+    if (dsc_hashmap_count(&cache->map) < cache->capacity) {
         dsc_resolved_t *stored = malloc(sizeof(*stored));
         if (stored != NULL) {
             *stored = result;
@@ -111,14 +113,7 @@ void dsc_resolve_cache_invalidate(dsc_resolve_cache_t *cache)
         return;
     }
 
-    /* Free all heap-allocated result values before clearing keys */
-    for (size_t i = 0; i < cache->map.cap; i++) {
-        if (cache->map.entries[i].key != NULL) {
-            free(cache->map.entries[i].value);
-            cache->map.entries[i].value = NULL;
-        }
-    }
-
+    free_cached_values(&cache->map);
     dsc_hashmap_clear(&cache->map);
     DSC_LOG_DEBUG("resolve_cache: invalidated all entries");
 }

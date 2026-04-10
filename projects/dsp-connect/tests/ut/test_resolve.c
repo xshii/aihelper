@@ -1,6 +1,6 @@
 /* PURPOSE: Tests for symbol path resolution */
 
-#include "test_helper.h"
+#include "unity/unity.h"
 #include "mocks/mock_arch.h"
 #include "../src/resolve/resolve.h"
 #include "../src/dwarf/dwarf_types.h"
@@ -9,6 +9,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+
 
 /* ================================================================== */
 /* Helpers: build mock type objects on the stack/heap                  */
@@ -90,8 +91,6 @@ static void setup_symtab(void)
 
 static void teardown_symtab(void)
 {
-    /* Free the symtab but NOT the types (they are static) */
-    /* dsc_symtab_free frees names and index, but types are borrowed */
     dsc_symtab_free(&s_symtab);
 }
 
@@ -99,96 +98,96 @@ static void teardown_symtab(void)
 /* Tests                                                              */
 /* ================================================================== */
 
-TEST(resolve_simple_variable)
+void resolve_simple_variable(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "simple_var", &out);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_EQ(out.addr, (uint64_t)0x1000);
-    ASSERT_EQ(out.size, (size_t)4);
-    ASSERT_EQ(out.type, &s_uint32_type);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x1000, out.addr);
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
+    TEST_ASSERT_EQUAL_PTR(&s_uint32_type, out.type);
 
     teardown_symtab();
 }
 
-TEST(resolve_struct_field)
+void resolve_struct_field(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "my_struct.y", &out);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_EQ(out.addr, (uint64_t)0x2004);
-    ASSERT_EQ(out.size, (size_t)4);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x2004, out.addr);
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
 
     teardown_symtab();
 }
 
-TEST(resolve_array_index)
+void resolve_array_index(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "arr[2]", &out);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_EQ(out.addr, (uint64_t)0x3008);  /* 0x3000 + 2*4 */
-    ASSERT_EQ(out.size, (size_t)4);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x3008, out.addr);  /* 0x3000 + 2*4 */
+    TEST_ASSERT_EQUAL_size_t(4, out.size);
 
     teardown_symtab();
 }
 
-TEST(resolve_nonexistent_returns_not_found)
+void resolve_nonexistent_returns_not_found(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "nonexistent", &out);
-    ASSERT_EQ(rc, DSC_ERR_NOT_FOUND);
+    TEST_ASSERT_EQUAL(DSC_ERR_NOT_FOUND, rc);
 
     teardown_symtab();
 }
 
-TEST(resolve_empty_path_returns_error)
+void resolve_empty_path_returns_error(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "", &out);
-    ASSERT_EQ(rc, DSC_ERR_INVALID_ARG);
+    TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 
     teardown_symtab();
 }
 
-TEST(resolve_null_args_return_error)
+void resolve_null_args_return_error(void)
 {
     dsc_resolved_t out;
     int rc = dsc_resolve(NULL, NULL, "x", &out);
-    ASSERT_EQ(rc, DSC_ERR_INVALID_ARG);
+    TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 
     rc = dsc_resolve(&s_symtab, NULL, NULL, &out);
-    ASSERT_EQ(rc, DSC_ERR_INVALID_ARG);
+    TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 }
 
-TEST(resolve_array_out_of_bounds)
+void resolve_array_out_of_bounds(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
     dsc_resolved_t out;
 
     int rc = dsc_resolve(&s_symtab, arch, "arr[99]", &out);
-    ASSERT_EQ(rc, DSC_ERR_RESOLVE_INDEX);
+    TEST_ASSERT_EQUAL(DSC_ERR_RESOLVE_INDEX, rc);
 
     teardown_symtab();
 }
 
-TEST(resolve_field_on_non_struct_fails)
+void resolve_field_on_non_struct_fails(void)
 {
     setup_symtab();
     dsc_arch_t *arch = mock_arch_identity();
@@ -196,7 +195,7 @@ TEST(resolve_field_on_non_struct_fails)
 
     /* simple_var is uint32, not a struct */
     int rc = dsc_resolve(&s_symtab, arch, "simple_var.field", &out);
-    ASSERT_EQ(rc, DSC_ERR_RESOLVE_PATH);
+    TEST_ASSERT_EQUAL(DSC_ERR_RESOLVE_PATH, rc);
 
     teardown_symtab();
 }
@@ -207,7 +206,7 @@ TEST(resolve_field_on_non_struct_fails)
 
 int test_resolve_main(void)
 {
-    printf("=== test_resolve ===\n");
+    UNITY_BEGIN();
 
     RUN_TEST(resolve_simple_variable);
     RUN_TEST(resolve_struct_field);
@@ -218,5 +217,5 @@ int test_resolve_main(void)
     RUN_TEST(resolve_array_out_of_bounds);
     RUN_TEST(resolve_field_on_non_struct_fails);
 
-    TEST_SUMMARY();
+    return UNITY_END();
 }

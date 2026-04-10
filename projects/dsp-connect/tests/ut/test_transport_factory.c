@@ -1,6 +1,6 @@
 /* PURPOSE: Tests for transport factory — registration and creation */
 
-#include "test_helper.h"
+#include "unity/unity.h"
 #include "../src/transport/transport.h"
 #include "../src/transport/transport_factory.h"
 #include "../src/core/dsc_errors.h"
@@ -66,54 +66,55 @@ static dsc_transport_t *dummy_ctor(const dsc_transport_config_t *cfg)
     return &d->base;
 }
 
+
 /* ================================================================== */
 /* Tests                                                              */
 /* ================================================================== */
 
-TEST(factory_register_and_create)
+void factory_register_and_create(void)
 {
     int rc = dsc_transport_register("test_dummy", dummy_ctor);
-    ASSERT_EQ(rc, DSC_OK);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
 
     dsc_transport_t *t = dsc_transport_create("test_dummy", NULL);
-    ASSERT_NOT_NULL(t);
+    TEST_ASSERT_NOT_NULL(t);
 
     dummy_transport_t *d = (dummy_transport_t *)t;
-    ASSERT_EQ(d->created, 1);
+    TEST_ASSERT_EQUAL(1, d->created);
 
     dsc_transport_free(t);
 }
 
-TEST(factory_unknown_name_returns_null)
+void factory_unknown_name_returns_null(void)
 {
     dsc_transport_t *t = dsc_transport_create("no_such_backend", NULL);
-    ASSERT_NULL(t);
+    TEST_ASSERT_NULL(t);
 }
 
-TEST(factory_null_name_returns_null)
+void factory_null_name_returns_null(void)
 {
     dsc_transport_t *t = dsc_transport_create(NULL, NULL);
-    ASSERT_NULL(t);
+    TEST_ASSERT_NULL(t);
 }
 
-TEST(factory_register_null_name_fails)
+void factory_register_null_name_fails(void)
 {
     int rc = dsc_transport_register(NULL, dummy_ctor);
-    ASSERT_EQ(rc, DSC_ERR_INVALID_ARG);
+    TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 }
 
-TEST(factory_register_null_ctor_fails)
+void factory_register_null_ctor_fails(void)
 {
     int rc = dsc_transport_register("valid_name", NULL);
-    ASSERT_EQ(rc, DSC_ERR_INVALID_ARG);
+    TEST_ASSERT_EQUAL(DSC_ERR_INVALID_ARG, rc);
 }
 
-TEST(factory_list_registered)
+void factory_list_registered(void)
 {
     /* "test_dummy" was registered in an earlier test */
     const char *names[16];
     int count = dsc_transport_list(names, 16);
-    ASSERT(count >= 1);
+    TEST_ASSERT_TRUE(count >= 1);
 
     /* Verify our test_dummy is in the list */
     int found = 0;
@@ -122,7 +123,7 @@ TEST(factory_list_registered)
             found = 1;
         }
     }
-    ASSERT(found);
+    TEST_ASSERT_TRUE(found);
 }
 
 /* ================================================================== */
@@ -131,7 +132,7 @@ TEST(factory_list_registered)
 
 int test_transport_factory_main(void)
 {
-    printf("=== test_transport_factory ===\n");
+    UNITY_BEGIN();
 
     RUN_TEST(factory_register_and_create);
     RUN_TEST(factory_unknown_name_returns_null);
@@ -140,5 +141,5 @@ int test_transport_factory_main(void)
     RUN_TEST(factory_register_null_ctor_fails);
     RUN_TEST(factory_list_registered);
 
-    TEST_SUMMARY();
+    return UNITY_END();
 }

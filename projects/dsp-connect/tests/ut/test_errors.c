@@ -1,60 +1,64 @@
 /* PURPOSE: Tests for error code to string mapping */
 
-#include "test_helper.h"
+#include "unity/unity.h"
 #include "../src/core/dsc_errors.h"
 
 #include <string.h>
+
 
 /* ================================================================== */
 /* Tests                                                              */
 /* ================================================================== */
 
-TEST(strerror_ok)
+void strerror_ok(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_OK), "success");
+    TEST_ASSERT_EQUAL_STRING("success", dsc_strerror(DSC_OK));
 }
 
-TEST(strerror_not_found)
+void strerror_not_found(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_NOT_FOUND), "symbol not found");
+    TEST_ASSERT_EQUAL_STRING("symbol not found",
+                             dsc_strerror(DSC_ERR_NOT_FOUND));
 }
 
-TEST(strerror_nomem)
+void strerror_nomem(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_NOMEM), "out of memory");
+    TEST_ASSERT_EQUAL_STRING("out of memory",
+                             dsc_strerror(DSC_ERR_NOMEM));
 }
 
-TEST(strerror_invalid_arg)
+void strerror_invalid_arg(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_INVALID_ARG), "invalid argument");
+    TEST_ASSERT_EQUAL_STRING("invalid argument",
+                             dsc_strerror(DSC_ERR_INVALID_ARG));
 }
 
-TEST(strerror_transport_open)
+void strerror_transport_open(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_TRANSPORT_OPEN),
-                  "transport connection failed");
+    TEST_ASSERT_EQUAL_STRING("transport connection failed",
+                             dsc_strerror(DSC_ERR_TRANSPORT_OPEN));
 }
 
-TEST(strerror_transport_io)
+void strerror_transport_io(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_TRANSPORT_IO),
-                  "transport I/O error");
+    TEST_ASSERT_EQUAL_STRING("transport I/O error",
+                             dsc_strerror(DSC_ERR_TRANSPORT_IO));
 }
 
-TEST(strerror_mem_align)
+void strerror_mem_align(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(DSC_ERR_MEM_ALIGN),
-                  "unaligned memory access");
+    TEST_ASSERT_EQUAL_STRING("unaligned memory access",
+                             dsc_strerror(DSC_ERR_MEM_ALIGN));
 }
 
-TEST(strerror_unknown_code)
+void strerror_unknown_code(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(9999), "unknown error");
+    TEST_ASSERT_EQUAL_STRING("unknown error", dsc_strerror(9999));
 }
 
-TEST(strerror_negative_unknown)
+void strerror_negative_unknown(void)
 {
-    ASSERT_STR_EQ(dsc_strerror(-9999), "unknown error");
+    TEST_ASSERT_EQUAL_STRING("unknown error", dsc_strerror(-9999));
 }
 
 /* ================================================================== */
@@ -63,7 +67,7 @@ TEST(strerror_negative_unknown)
 
 int test_errors_main(void)
 {
-    printf("=== test_errors ===\n");
+    UNITY_BEGIN();
 
     RUN_TEST(strerror_ok);
     RUN_TEST(strerror_not_found);
@@ -75,5 +79,5 @@ int test_errors_main(void)
     RUN_TEST(strerror_unknown_code);
     RUN_TEST(strerror_negative_unknown);
 
-    TEST_SUMMARY();
+    return UNITY_END();
 }

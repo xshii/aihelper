@@ -1,45 +1,46 @@
 /* PURPOSE: Tests for hashmap and strbuf utilities */
 
-#include "test_helper.h"
+#include "unity/unity.h"
 #include "../src/util/hashmap.h"
 #include "../src/util/strbuf.h"
+
 
 /* ================================================================== */
 /* Hashmap tests                                                      */
 /* ================================================================== */
 
-TEST(hashmap_put_and_get)
+void hashmap_put_and_get(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
 
     int val_a = 42;
     int val_b = 99;
-    ASSERT_EQ(dsc_hashmap_put(&map, "key_a", &val_a), 0);
-    ASSERT_EQ(dsc_hashmap_put(&map, "key_b", &val_b), 0);
+    TEST_ASSERT_EQUAL(0, dsc_hashmap_put(&map, "key_a", &val_a));
+    TEST_ASSERT_EQUAL(0, dsc_hashmap_put(&map, "key_b", &val_b));
 
-    ASSERT_EQ(dsc_hashmap_get(&map, "key_a"), &val_a);
-    ASSERT_EQ(dsc_hashmap_get(&map, "key_b"), &val_b);
-    ASSERT_EQ(map.count, (size_t)2);
+    TEST_ASSERT_EQUAL_PTR(&val_a, dsc_hashmap_get(&map, "key_a"));
+    TEST_ASSERT_EQUAL_PTR(&val_b, dsc_hashmap_get(&map, "key_b"));
+    TEST_ASSERT_EQUAL_size_t(2, dsc_hashmap_count(&map));
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_get_missing_returns_null)
+void hashmap_get_missing_returns_null(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
 
-    ASSERT_NULL(dsc_hashmap_get(&map, "nonexistent"));
+    TEST_ASSERT_NULL(dsc_hashmap_get(&map, "nonexistent"));
 
     int val = 1;
     dsc_hashmap_put(&map, "exists", &val);
-    ASSERT_NULL(dsc_hashmap_get(&map, "nope"));
+    TEST_ASSERT_NULL(dsc_hashmap_get(&map, "nope"));
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_overwrite_existing_key)
+void hashmap_overwrite_existing_key(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
@@ -49,37 +50,37 @@ TEST(hashmap_overwrite_existing_key)
     dsc_hashmap_put(&map, "key", &old_val);
     dsc_hashmap_put(&map, "key", &new_val);
 
-    ASSERT_EQ(dsc_hashmap_get(&map, "key"), &new_val);
-    ASSERT_EQ(map.count, (size_t)1);
+    TEST_ASSERT_EQUAL_PTR(&new_val, dsc_hashmap_get(&map, "key"));
+    TEST_ASSERT_EQUAL_size_t(1, dsc_hashmap_count(&map));
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_delete_existing)
+void hashmap_delete_existing(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
 
     int val = 42;
     dsc_hashmap_put(&map, "key", &val);
-    ASSERT_EQ(dsc_hashmap_del(&map, "key"), 1);
-    ASSERT_NULL(dsc_hashmap_get(&map, "key"));
-    ASSERT_EQ(map.count, (size_t)0);
+    TEST_ASSERT_EQUAL(1, dsc_hashmap_del(&map, "key"));
+    TEST_ASSERT_NULL(dsc_hashmap_get(&map, "key"));
+    TEST_ASSERT_EQUAL_size_t(0, dsc_hashmap_count(&map));
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_delete_missing_returns_zero)
+void hashmap_delete_missing_returns_zero(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
 
-    ASSERT_EQ(dsc_hashmap_del(&map, "nope"), 0);
+    TEST_ASSERT_EQUAL(0, dsc_hashmap_del(&map, "nope"));
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_handles_collisions)
+void hashmap_handles_collisions(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 4);  /* small capacity forces collisions */
@@ -89,19 +90,19 @@ TEST(hashmap_handles_collisions)
     for (int i = 0; i < 20; i++) {
         vals[i] = i * 10;
         snprintf(keys[i], sizeof(keys[i]), "item_%d", i);
-        ASSERT_EQ(dsc_hashmap_put(&map, keys[i], &vals[i]), 0);
+        TEST_ASSERT_EQUAL(0, dsc_hashmap_put(&map, keys[i], &vals[i]));
     }
 
     for (int i = 0; i < 20; i++) {
         int *got = (int *)dsc_hashmap_get(&map, keys[i]);
-        ASSERT_NOT_NULL(got);
-        ASSERT_EQ(*got, i * 10);
+        TEST_ASSERT_NOT_NULL(got);
+        TEST_ASSERT_EQUAL(i * 10, *got);
     }
 
     dsc_hashmap_free(&map);
 }
 
-TEST(hashmap_clear)
+void hashmap_clear(void)
 {
     dsc_hashmap_t map;
     dsc_hashmap_init(&map, 16);
@@ -111,9 +112,9 @@ TEST(hashmap_clear)
     dsc_hashmap_put(&map, "b", &b);
     dsc_hashmap_clear(&map);
 
-    ASSERT_EQ(map.count, (size_t)0);
-    ASSERT_NULL(dsc_hashmap_get(&map, "a"));
-    ASSERT_NULL(dsc_hashmap_get(&map, "b"));
+    TEST_ASSERT_EQUAL_size_t(0, dsc_hashmap_count(&map));
+    TEST_ASSERT_NULL(dsc_hashmap_get(&map, "a"));
+    TEST_ASSERT_NULL(dsc_hashmap_get(&map, "b"));
 
     dsc_hashmap_free(&map);
 }
@@ -122,43 +123,43 @@ TEST(hashmap_clear)
 /* Strbuf tests                                                       */
 /* ================================================================== */
 
-TEST(strbuf_append)
+void strbuf_append(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
     dsc_strbuf_append(&sb, "hello");
     dsc_strbuf_append(&sb, " world");
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "hello world");
-    ASSERT_EQ(sb.len, (size_t)11);
+    TEST_ASSERT_EQUAL_STRING("hello world", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_size_t(11, sb.len);
 
     dsc_strbuf_free(&sb);
 }
 
-TEST(strbuf_appendf)
+void strbuf_appendf(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
     dsc_strbuf_appendf(&sb, "val=%d hex=0x%X", 42, 255);
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "val=42 hex=0xFF");
+    TEST_ASSERT_EQUAL_STRING("val=42 hex=0xFF", dsc_strbuf_cstr(&sb));
 
     dsc_strbuf_free(&sb);
 }
 
-TEST(strbuf_indent)
+void strbuf_indent(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
     dsc_strbuf_indent(&sb, 3);  /* 3 * 2 = 6 spaces */
     dsc_strbuf_append(&sb, "x");
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "      x");
+    TEST_ASSERT_EQUAL_STRING("      x", dsc_strbuf_cstr(&sb));
 
     dsc_strbuf_free(&sb);
 }
 
-TEST(strbuf_reset_keeps_capacity)
+void strbuf_reset_keeps_capacity(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
@@ -167,26 +168,26 @@ TEST(strbuf_reset_keeps_capacity)
     size_t cap_before = sb.cap;
 
     dsc_strbuf_reset(&sb);
-    ASSERT_EQ(sb.len, (size_t)0);
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "");
-    ASSERT_EQ(sb.cap, cap_before);
+    TEST_ASSERT_EQUAL_size_t(0, sb.len);
+    TEST_ASSERT_EQUAL_STRING("", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_size_t(cap_before, sb.cap);
 
     dsc_strbuf_free(&sb);
 }
 
-TEST(strbuf_appendn)
+void strbuf_appendn(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
 
     dsc_strbuf_appendn(&sb, "hello world", 5);
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "hello");
-    ASSERT_EQ(sb.len, (size_t)5);
+    TEST_ASSERT_EQUAL_STRING("hello", dsc_strbuf_cstr(&sb));
+    TEST_ASSERT_EQUAL_size_t(5, sb.len);
 
     dsc_strbuf_free(&sb);
 }
 
-TEST(strbuf_grows_on_large_append)
+void strbuf_grows_on_large_append(void)
 {
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
@@ -195,12 +196,12 @@ TEST(strbuf_grows_on_large_append)
     for (int i = 0; i < 200; i++) {
         dsc_strbuf_append(&sb, "x");
     }
-    ASSERT_EQ(sb.len, (size_t)200);
+    TEST_ASSERT_EQUAL_size_t(200, sb.len);
     /* Verify all chars are 'x' */
     const char *s = dsc_strbuf_cstr(&sb);
-    ASSERT_EQ(s[0], 'x');
-    ASSERT_EQ(s[199], 'x');
-    ASSERT_EQ(s[200], '\0');
+    TEST_ASSERT_EQUAL('x', s[0]);
+    TEST_ASSERT_EQUAL('x', s[199]);
+    TEST_ASSERT_EQUAL('\0', s[200]);
 
     dsc_strbuf_free(&sb);
 }
@@ -211,7 +212,7 @@ TEST(strbuf_grows_on_large_append)
 
 int test_util_main(void)
 {
-    printf("=== test_util ===\n");
+    UNITY_BEGIN();
 
     RUN_TEST(hashmap_put_and_get);
     RUN_TEST(hashmap_get_missing_returns_null);
@@ -228,5 +229,5 @@ int test_util_main(void)
     RUN_TEST(strbuf_appendn);
     RUN_TEST(strbuf_grows_on_large_append);
 
-    TEST_SUMMARY();
+    return UNITY_END();
 }

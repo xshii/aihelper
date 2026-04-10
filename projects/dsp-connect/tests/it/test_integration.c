@@ -1,6 +1,6 @@
 /* PURPOSE: Full pipeline integration test — resolve -> read -> format */
 
-#include "test_helper.h"
+#include "unity/unity.h"
 #include "mocks/mock_transport.h"
 #include "mocks/mock_arch.h"
 #include "../src/resolve/resolve.h"
@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+
 
 /* ================================================================== */
 /* Helpers: static types shared by integration tests                  */
@@ -69,7 +70,7 @@ static void teardown_all(void)
 /* Test: resolve -> read -> format a struct field                     */
 /* ================================================================== */
 
-TEST(pipeline_resolve_read_format_field)
+void pipeline_resolve_read_format_field(void)
 {
     setup_all();
 
@@ -85,21 +86,21 @@ TEST(pipeline_resolve_read_format_field)
     /* Step 1: resolve "g_point.y" */
     dsc_resolved_t resolved;
     int rc = dsc_resolve(&s_symtab, arch, "g_point.y", &resolved);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_EQ(resolved.addr, (uint64_t)0x104);
-    ASSERT_EQ(resolved.size, (size_t)4);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_UINT64(0x104, resolved.addr);
+    TEST_ASSERT_EQUAL_size_t(4, resolved.size);
 
     /* Step 2: read memory */
     uint8_t read_buf[4];
     rc = dsc_mem_read(tp, arch, resolved.addr, read_buf, resolved.size);
-    ASSERT_EQ(rc, DSC_OK);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
 
     /* Step 3: format */
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 64);
     rc = dsc_format(read_buf, resolved.size, resolved.type, NULL, &sb);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_STR_EQ(dsc_strbuf_cstr(&sb), "99");
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_STRING("99", dsc_strbuf_cstr(&sb));
 
     dsc_strbuf_free(&sb);
     mock_transport_destroy(tp);
@@ -110,7 +111,7 @@ TEST(pipeline_resolve_read_format_field)
 /* Test: full struct read and format                                  */
 /* ================================================================== */
 
-TEST(pipeline_full_struct_format)
+void pipeline_full_struct_format(void)
 {
     setup_all();
 
@@ -125,23 +126,23 @@ TEST(pipeline_full_struct_format)
     /* Resolve the struct itself */
     dsc_resolved_t resolved;
     int rc = dsc_resolve(&s_symtab, arch, "g_point", &resolved);
-    ASSERT_EQ(rc, DSC_OK);
-    ASSERT_EQ(resolved.size, (size_t)8);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
+    TEST_ASSERT_EQUAL_size_t(8, resolved.size);
 
     /* Read full struct */
     uint8_t buf[8];
     rc = dsc_mem_read(tp, arch, resolved.addr, buf, resolved.size);
-    ASSERT_EQ(rc, DSC_OK);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
 
     /* Format */
     dsc_strbuf_t sb;
     dsc_strbuf_init(&sb, 256);
     rc = dsc_format(buf, resolved.size, resolved.type, NULL, &sb);
-    ASSERT_EQ(rc, DSC_OK);
+    TEST_ASSERT_EQUAL(DSC_OK, rc);
 
     const char *result = dsc_strbuf_cstr(&sb);
-    ASSERT(strstr(result, ".x = 10") != NULL);
-    ASSERT(strstr(result, ".y = 20") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, ".x = 10") != NULL);
+    TEST_ASSERT_TRUE(strstr(result, ".y = 20") != NULL);
 
     dsc_strbuf_free(&sb);
     mock_transport_destroy(tp);
@@ -152,7 +153,7 @@ TEST(pipeline_full_struct_format)
 /* Test: transport records read calls                                 */
 /* ================================================================== */
 
-TEST(pipeline_transport_records_calls)
+void pipeline_transport_records_calls(void)
 {
     setup_all();
 
@@ -166,9 +167,9 @@ TEST(pipeline_transport_records_calls)
     dsc_mem_read(tp, arch, 0x100, buf, 4);
 
     const mock_transport_record_t *rec = mock_transport_get_record(tp);
-    ASSERT(rec->call_count >= 1);
-    ASSERT_EQ(rec->last_addr, (uint64_t)0x100);
-    ASSERT_EQ(rec->last_len, (size_t)4);
+    TEST_ASSERT_TRUE(rec->call_count >= 1);
+    TEST_ASSERT_EQUAL_UINT64(0x100, rec->last_addr);
+    TEST_ASSERT_EQUAL_size_t(4, rec->last_len);
 
     mock_transport_destroy(tp);
     teardown_all();
@@ -180,11 +181,11 @@ TEST(pipeline_transport_records_calls)
 
 int test_integration_main(void)
 {
-    printf("=== test_integration ===\n");
+    UNITY_BEGIN();
 
     RUN_TEST(pipeline_resolve_read_format_field);
     RUN_TEST(pipeline_full_struct_format);
     RUN_TEST(pipeline_transport_records_calls);
 
-    TEST_SUMMARY();
+    return UNITY_END();
 }

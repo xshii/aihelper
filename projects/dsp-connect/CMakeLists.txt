@@ -79,9 +79,13 @@ set(TEST_IT
     tests/it/test_integration.c
 )
 
+# Unity test framework (ThrowTheSwitch)
+set(UNITY_SRC tests/unity/unity.c)
+
 # Full test runner (ut + it)
 add_executable(test_runner
     tests/test_main.c
+    ${UNITY_SRC}
     ${TEST_MOCKS}
     ${TEST_UT}
     ${TEST_IT}
