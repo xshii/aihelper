@@ -3,7 +3,7 @@
 #        make clean  — remove build artifacts
 
 CC      = cc
-CFLAGS  = -Wall -Wextra -std=c11 -g -O0
+CFLAGS  = -Wall -Wextra -std=c11 -g -O0 -I.
 SRCDIR  = ../src
 
 # Source files from the project (no dwarf_parser — needs libdwarf)
@@ -35,28 +35,35 @@ SRC_FORMAT = \
 SRC_TRANSPORT = \
 	$(SRCDIR)/transport/transport_factory.c
 
-# Mock and test sources
+# Mock sources
 SRC_MOCKS = \
 	mocks/mock_transport.c \
 	mocks/mock_arch.c
 
-SRC_TESTS = \
-	test_util.c \
-	test_arch.c \
-	test_transport_factory.c \
-	test_resolve.c \
-	test_format.c \
-	test_errors.c \
-	test_integration.c \
-	test_main.c
+# Test sources by level
+SRC_UT = \
+	ut/test_util.c \
+	ut/test_arch.c \
+	ut/test_transport_factory.c \
+	ut/test_resolve.c \
+	ut/test_format.c \
+	ut/test_errors.c
 
-ALL_SRC = $(SRC_UTIL) $(SRC_CORE) $(SRC_DWARF_TYPES) \
-          $(SRC_RESOLVE) $(SRC_MEMORY) $(SRC_FORMAT) \
-          $(SRC_TRANSPORT) $(SRC_MOCKS) $(SRC_TESTS)
+SRC_IT = \
+	it/test_integration.c
+
+SRC_ST =
+
+# Library sources (shared by all test levels)
+SRC_LIB = $(SRC_UTIL) $(SRC_CORE) $(SRC_DWARF_TYPES) \
+           $(SRC_RESOLVE) $(SRC_MEMORY) $(SRC_FORMAT) \
+           $(SRC_TRANSPORT) $(SRC_MOCKS)
+
+ALL_SRC = $(SRC_LIB) $(SRC_UT) $(SRC_IT) $(SRC_ST) test_main.c
 
 TARGET = run_tests
 
-.PHONY: all clean test
+.PHONY: all clean test ut it st
 
 all: test
 
@@ -66,5 +73,13 @@ $(TARGET): $(ALL_SRC)
 test: $(TARGET)
 	./$(TARGET)
 
+ut: $(SRC_LIB) $(SRC_UT) test_main.c
+	$(CC) $(CFLAGS) -lm -DSKIP_IT -o run_ut $^
+	./run_ut
+
+it: $(SRC_LIB) $(SRC_IT) $(SRC_UT) test_main.c
+	$(CC) $(CFLAGS) -lm -DSKIP_UT -o run_it $^
+	./run_it
+
 clean:
-	rm -f $(TARGET)
+	rm -f $(TARGET) run_ut run_it run_st
