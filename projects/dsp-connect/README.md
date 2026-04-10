@@ -37,9 +37,6 @@ ctest --test-dir build            # 运行测试
 
 # Debug 模式 + compile_commands.json（给 clangd / VSCode）
 cmake -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-
-# 启用 libdwarf（需系统安装）
-cmake -B build -DDSC_USE_LIBDWARF=ON
 ```
 
 ## 架构

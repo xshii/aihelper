@@ -219,6 +219,9 @@ DscContext *DscOpen(const DscOpenParams *params)
         return NULL;
     }
 
+    /* 确保内置 arch 后端已注册 */
+    DscArchRegisterBuiltins();
+
     DscContext *ctx = alloc_context(params->elf_path);
     if (!ctx) {
         DSC_LOG_ERROR("DscOpen: out of memory");

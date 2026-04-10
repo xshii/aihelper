@@ -30,9 +30,6 @@ typedef struct {
 
 /* ---------- 共享 IO 函数 ---------- */
 
-/* 等待 fd 可读，返回 1=可读 0=超时 -1=错误 */
-int DscCmdlineWaitReadable(int fd, int timeout_ms);
-
 /* 重试发送直到全部写出 */
 int DscCmdlineSendAll(DscCmdlineCtx *ctx, const void *buf, UINT32 len);
 

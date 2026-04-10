@@ -17,7 +17,7 @@
 /* ------------------------------------------------------------------ */
 /* wait_readable: select() 等待 fd 可读                                */
 /* ------------------------------------------------------------------ */
-int DscCmdlineWaitReadable(int fd, int timeout_ms)
+static int DscCmdlineWaitReadable(int fd, int timeout_ms)
 {
     fd_set fds;
     FD_ZERO(&fds);
