@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Software Probe Inventory",
+  "description": "Structured inventory of legacy softprobe codebase features",
+  "type": "object",
+  "required": ["project_name", "analysis_date", "summary", "modules", "rewrite_priority"],
+  "properties": {
+    "project_name": { "type": "string" },
+    "analysis_date": { "type": "string", "format": "date" },
+    "summary": {
+      "type": "object",
+      "required": ["total_functions", "keep", "remove", "uncertain"],
+      "properties": {
+        "total_functions": { "type": "integer" },
+        "keep": { "type": "integer" },
+        "remove": { "type": "integer" },
+        "uncertain": { "type": "integer" },
+        "estimated_loc_reduction_percent": { "type": "number" }
+      }
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "files", "features"],
+        "properties": {
+          "name": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "features": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "status"],
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "status": { "type": "string", "enum": ["keep", "remove", "uncertain"] },
+                "complexity": { "type": "string", "enum": ["low", "medium", "high"] },
+                "dependencies": { "type": "array", "items": { "type": "string" } },
+                "demo_equivalent": { "type": "string" },
+                "notes": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "rewrite_priority": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["order", "module", "reason"],
+        "properties": {
+          "order": { "type": "integer" },
+          "module": { "type": "string" },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "removed_features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "reason"],
+        "properties": {
+          "name": { "type": "string" },
+          "reason": { "type": "string" },
+          "impact": { "type": "string" }
+        }
+      }
+    }
+  }
+}
