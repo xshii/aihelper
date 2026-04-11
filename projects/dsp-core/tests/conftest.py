@@ -38,8 +38,8 @@ import shutil
 def int16_pair():
     """一对 INT16 DSPTensor (64,)。"""
     import dsp
-    a = dsp.ops.randn(64, dtype=dsp.core.int16)
-    b = dsp.ops.randn(64, dtype=dsp.core.int16)
+    a = dsp.ops.randn(64, dtype=dsp.core.bint16)
+    b = dsp.ops.randn(64, dtype=dsp.core.bint16)
     return a, b
 
 
@@ -47,8 +47,8 @@ def int16_pair():
 def float32_pair():
     """一对 Float32 DSPTensor (64,)。"""
     import dsp
-    a = dsp.ops.randn(64, dtype=dsp.core.float32)
-    b = dsp.ops.randn(64, dtype=dsp.core.float32)
+    a = dsp.ops.randn(64, dtype=dsp.core.double)
+    b = dsp.ops.randn(64, dtype=dsp.core.double)
     return a, b
 
 
@@ -56,14 +56,14 @@ def float32_pair():
 def int16_matrix():
     """INT16 矩阵 (4, 8)。"""
     import dsp
-    return dsp.ops.randn(4, 8, dtype=dsp.core.int16)
+    return dsp.ops.randn(4, 8, dtype=dsp.core.bint16)
 
 
 @pytest.fixture
 def float32_matrix():
     """Float32 矩阵 (4, 8)。"""
     import dsp
-    return dsp.ops.randn(4, 8, dtype=dsp.core.float32)
+    return dsp.ops.randn(4, 8, dtype=dsp.core.double)
 
 
 # ============================================================

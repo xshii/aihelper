@@ -1,17 +1,11 @@
-// 共享辅助：Python float32 numpy ↔ C++ typed int 的桥接
+// 共享辅助：Python float64 numpy <-> C++ typed 的桥接
 //
-// 为什么需要：
-//   Python 侧统一用 float32 numpy 传输数据（dispatch.py 转的），
-//   但 dsp_*.h 的 C 函数要求真实类型（int16_t*, int32_t*, q12_22_t*）。
-//   这两个模板在中间做类型转换，通过 trait 自动选对应的 golden C convert 函数。
+// to_typed<T>(arr)       — float64 numpy → vector<T>
+// write_back<T>(dst, d)  — vector<T> → float64 numpy
 //
-// to_typed<T>(arr)       — 输入转换：调 golden C 的 convert_float32_to_* 函数
-// write_back<T>(dst, d)  — 输出转换：C 函数输出的 ACC 值回写到 float32 numpy
-//
-// 注意：本层只做类型转换，不做 block padding/unpadding。
-//   当前 demo 的 C 函数直接操作原始 shape（如 [14,12]），不需要 padding。
-//   真实硬件接入时，C 函数操作 block 对齐后的数据（如 [16,16]），
-//   padding/unpadding 应在 convention 层或 dispatch 层处理（调 C 前 pad，调完 unpad）。
+// 支持的类型:
+//   裸类型: int8_t, int16_t, int32_t, float, q12_22_t, q24_40_t
+//   block 类型: bint8, bint16, bint32（256-bit block）
 #pragma once
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
@@ -21,58 +15,94 @@
 
 namespace py = pybind11;
 
-// --- 输入转换：float32 numpy → typed buffer（通过 golden C convert 函数）---
-// gc_from_float32 trait: 按类型选对应的 golden C 转换函数
+// ============================================================
+// gc_from_double — float32 → typed（输入转换）
+// ============================================================
 
-template<typename T> struct gc_from_float32;
-template<> struct gc_from_float32<float>   { static void call(float*   d, const float* s, int n) { for(int i=0;i<n;i++) d[i]=s[i]; }};
-template<> struct gc_from_float32<int8_t>  { static void call(int8_t*  d, const float* s, int n) { convert_float32_to_int8(d, s, n); }};
-template<> struct gc_from_float32<int16_t> { static void call(int16_t* d, const float* s, int n) { convert_float32_to_int16(d, s, n); }};
-template<> struct gc_from_float32<int32_t> { static void call(int32_t* d, const float* s, int n) { convert_float32_to_int32(d, s, n); }};
-// ACC 类型: float32 → int32 → 填入 .raw
-template<> struct gc_from_float32<q12_22_t> {
-    static void call(q12_22_t* d, const float* s, int n) {
-        std::vector<int32_t> tmp(n); convert_float32_to_int32(tmp.data(), s, n);
-        for (int i = 0; i < n; i++) d[i].raw = tmp[i];
+template<typename T> struct gc_from_double;
+
+// 裸类型
+template<> struct gc_from_double<double>   { static void call(double* d, const double* s, int n) { for(int i=0;i<n;i++) d[i]=s[i]; }};
+template<> struct gc_from_double<int8_t>  { static void call(int8_t*  d, const double* s, int n) { convert_double_to_int8(d, s, n); }};
+template<> struct gc_from_double<int16_t> { static void call(int16_t* d, const double* s, int n) { convert_double_to_int16(d, s, n); }};
+template<> struct gc_from_double<int32_t> { static void call(int32_t* d, const double* s, int n) { convert_double_to_int32(d, s, n); }};
+
+// Block 类型 — float 逐元素转 DUT 后填入 block.data
+template<> struct gc_from_double<bint8> {
+    static void call(bint8* d, const double* s, int n) {
+        convert_double_to_int8(reinterpret_cast<int8_t*>(d), s, n);
     }
 };
-template<> struct gc_from_float32<q24_40_t> {
-    static void call(q24_40_t* d, const float* s, int n) {
-        std::vector<int32_t> tmp(n); convert_float32_to_int32(tmp.data(), s, n);
-        for (int i = 0; i < n; i++) d[i].raw = tmp[i];
+template<> struct gc_from_double<bint16> {
+    static void call(bint16* d, const double* s, int n) {
+        convert_double_to_int16(reinterpret_cast<int16_t*>(d), s, n);
+    }
+};
+template<> struct gc_from_double<bint32> {
+    static void call(bint32* d, const double* s, int n) {
+        convert_double_to_int32(reinterpret_cast<int32_t*>(d), s, n);
     }
 };
 
+// to_typed: float numpy → vector<T>
 template<typename T>
-inline std::vector<T> to_typed(py::array_t<float> arr) {
+inline std::vector<T> to_typed(py::array_t<double> arr) {
     auto r = arr.unchecked<1>();
-    std::vector<T> buf(r.size());
-    gc_from_float32<T>::call(buf.data(), r.data(0), r.size());
+    int n = r.size();
+    std::vector<T> buf(n);
+    gc_from_double<T>::call(buf.data(), r.data(0), n);
     return buf;
 }
 
-// --- 输出转换：C 函数输出 → float32 numpy（通过 golden C convert 函数）---
-// gc_to_float32 trait: 按类型选对应的 golden C 转换函数
+// ============================================================
+// gc_to_double — typed → float32（输出转换）
+// ============================================================
 
-template<typename T> struct gc_to_float32;
-// DUT 类型
-template<> struct gc_to_float32<int8_t>    { static void call(float* d, const int8_t*    s, int n) { convert_int8_to_float32(d, s, n); }};
-template<> struct gc_to_float32<int16_t>   { static void call(float* d, const int16_t*   s, int n) { convert_int16_to_float32(d, s, n); }};
-template<> struct gc_to_float32<int32_t>   { static void call(float* d, const int32_t*   s, int n) { convert_int32_to_float32(d, s, n); }};
-// ACC 类型（底层 int32，但用 Q 格式解码）
-template<> struct gc_to_float32<q12_22_t> { static void call(float* d, const q12_22_t* s, int n) { convert_q12_22_to_float32(d, s, n); }};
-template<> struct gc_to_float32<q24_40_t> { static void call(float* d, const q24_40_t* s, int n) { convert_q24_40_to_float32(d, s, n); }};
+template<typename T> struct gc_to_double;
 
+// 裸类型
+template<> struct gc_to_double<int8_t>    { static void call(double* d, const int8_t*    s, int n) { convert_int8_to_double(d, s, n); }};
+template<> struct gc_to_double<int16_t>   { static void call(double* d, const int16_t*   s, int n) { convert_int16_to_double(d, s, n); }};
+template<> struct gc_to_double<int32_t>   { static void call(double* d, const int32_t*   s, int n) { convert_int32_to_double(d, s, n); }};
+
+
+
+// Block 类型 — block.data 逐元素转 float
+template<> struct gc_to_double<bint8> {
+    static void call(double* d, const bint8* s, int n) {
+        convert_int8_to_double(d, reinterpret_cast<const int8_t*>(s), n);
+    }
+};
+template<> struct gc_to_double<bint16> {
+    static void call(double* d, const bint16* s, int n) {
+        convert_int16_to_double(d, reinterpret_cast<const int16_t*>(s), n);
+    }
+};
+template<> struct gc_to_double<bint32> {
+    static void call(double* d, const bint32* s, int n) {
+        convert_int32_to_double(d, reinterpret_cast<const int32_t*>(s), n);
+    }
+};
+
+// double identity
+template<> struct gc_to_double<double> { static void call(double* d, const double* s, int n) { for(int i=0;i<n;i++) d[i]=s[i]; }};
+
+// write_back: vector<T> → float numpy
 template<typename T>
-inline void write_back(py::array_t<float> dst, const std::vector<T>& d) {
-    std::vector<float> buf(d.size());
-    gc_to_float32<T>::call(buf.data(), d.data(), d.size());
+inline void write_back(py::array_t<double> dst, const std::vector<T>& d, int n_elements) {
+    std::vector<double> buf(n_elements);
+    gc_to_double<T>::call(buf.data(), d.data(), n_elements);
     auto w = dst.mutable_unchecked<1>();
-    for (size_t i = 0; i < d.size(); i++) w(i) = buf[i];
+    for (int i = 0; i < n_elements; i++) w(i) = buf[i];
 }
 
-template<> inline void write_back<float>(py::array_t<float> dst, const std::vector<float>& d) {
+// 裸类型: d.size() == n_elements
+template<typename T>
+inline void write_back(py::array_t<double> dst, const std::vector<T>& d) {
+    write_back(dst, d, static_cast<int>(d.size()));
+}
+
+template<> inline void write_back<double>(py::array_t<double> dst, const std::vector<double>& d) {
     auto w = dst.mutable_unchecked<1>();
     for (size_t i = 0; i < d.size(); i++) w(i) = d[i];
 }
-

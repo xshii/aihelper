@@ -4,8 +4,7 @@ project(_raw_bindings LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# golden_c 目录（硬件团队提供的 .h 和 .so，平铺结构）
-set(GOLDEN_C_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../golden_c")
+set(GOLDEN_C_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../golden_c")
 
 find_package(pybind11 REQUIRED)
 
@@ -16,15 +15,15 @@ pybind11_add_module(_raw_bindings
     bind_vector.cpp
 )
 
-# 绑定文件 include bind_helpers.h（在当前目录）
-target_include_directories(_raw_bindings PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(_raw_bindings PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}    # bind_helpers.h
+    ${GOLDEN_C_ROOT}               # dsp/ wrapper
+    ${GOLDEN_C_ROOT}/current       # include/ 硬件头文件
+)
 
-# 包含硬件头文件（.h 直接在 golden_c/ 下）
-target_include_directories(_raw_bindings PRIVATE ${GOLDEN_C_DIR})
-
-# 链接硬件 .so（.so 直接在 golden_c/ 下）
-if(EXISTS "${GOLDEN_C_DIR}")
-    target_link_directories(_raw_bindings PRIVATE ${GOLDEN_C_DIR})
+# 链接硬件 .so（解压到 golden_c/current/ 下）
+if(EXISTS "${GOLDEN_C_ROOT}/current")
+    target_link_directories(_raw_bindings PRIVATE ${GOLDEN_C_ROOT}/current)
     # target_link_libraries(_raw_bindings PRIVATE golden)  # 取消注释接真 .so
 endif()
 

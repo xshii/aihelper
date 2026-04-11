@@ -125,7 +125,7 @@ class ElementwiseConvention(OpConvention, op=["add", "mul", "sub"]):
         src0 = inputs_np[0].flatten()
         src1 = inputs_np[1].flatten()
         count = min(src0.size, src1.size)
-        dst = np.zeros(count, dtype=np.float32)
+        dst = np.zeros(count, dtype=np.float64)
         func(dst, src0[:count], src1[:count], count)
         return dst
 
@@ -158,7 +158,7 @@ class MatmulConvention(OpConvention, op="matmul"):
         M = _pad_dim(orig_M, bh)
         K_padded = _pad_dim(K, bw)
         N = _pad_dim(orig_N, bw)
-        dst_flat = np.zeros(M * N, dtype=np.float32)
+        dst_flat = np.zeros(M * N, dtype=np.float64)
 
         # → [binding 做 to_dut → C 函数 → acc_to_float]
         func(dst_flat, src0_blocked, src1_blocked, M, K_padded, N)
@@ -197,7 +197,7 @@ class LinearConvention(OpConvention, op="linear"):
         M = _pad_dim(orig_M, bh)
         K_padded = _pad_dim(K, bw)
         N = _pad_dim(orig_N, bw)
-        dst_flat = np.zeros(M * N, dtype=np.float32)
+        dst_flat = np.zeros(M * N, dtype=np.float64)
 
         if src2 is not None:
             # bias: ND，只 pad 不分型
@@ -222,6 +222,6 @@ class CorrelateConvention(OpConvention, op="correlate"):
     def call_c_func(self, func, *inputs_np, **params):
         src0, src1 = inputs_np[0], inputs_np[1]
         n_out = src0.shape[-1] + src1.shape[-1] - 1
-        dst = np.zeros(n_out, dtype=np.float32)
+        dst = np.zeros(n_out, dtype=np.float64)
         func(dst, src0.flatten(), src1.flatten(), src0.shape[-1])
         return dst

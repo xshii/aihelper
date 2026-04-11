@@ -11,7 +11,7 @@
 用法:
     import dsp
 
-    a = dsp.data.randn(4, 8, dtype=dsp.core.int16)
+    a = dsp.data.randn(4, 8, dtype=dsp.core.bint16)
     out = dsp.ops.linear(a, weight, bias)
 
     dsp.context.set_mode(Mode.PSEUDO_QUANT)

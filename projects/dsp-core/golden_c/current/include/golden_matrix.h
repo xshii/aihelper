@@ -1,11 +1,11 @@
 #pragma once
-#include "../dsp/dsp_types.h"
+#include "dsp/dsp_types.h"
 
 // 硬件矩阵运算函数（参考实现）
 
 // matmul
 inline void sp_gemm_int16_int16_oint32_acc_q12_22(
-    q12_22_t* dst, const int16_t* src0, const int16_t* src1, int M, int K, int N) {
+    q12_22_t* dst, const BINT16* src0, const BINT16* src1, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;
@@ -14,7 +14,7 @@ inline void sp_gemm_int16_int16_oint32_acc_q12_22(
         }
 }
 inline void sp_gemm_int16_int16_oint16_acc_q12_22(
-    int16_t* dst, const int16_t* src0, const int16_t* src1, int M, int K, int N) {
+    BINT16* dst, const BINT16* src0, const BINT16* src1, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;
@@ -23,7 +23,7 @@ inline void sp_gemm_int16_int16_oint16_acc_q12_22(
         }
 }
 inline void sp_gemm_int32_int32_oint32_acc_q24_40(
-    q24_40_t* dst, const int32_t* src0, const int32_t* src1, int M, int K, int N) {
+    q24_40_t* dst, const BINT32* src0, const BINT32* src1, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;
@@ -34,8 +34,8 @@ inline void sp_gemm_int32_int32_oint32_acc_q24_40(
 
 // fused linear
 inline void sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22(
-    int16_t* dst, const int16_t* src0, const int16_t* src1,
-    const int32_t* src2, int scale_exp, int M, int K, int N) {
+    BINT16* dst, const BINT16* src0, const BINT16* src1,
+    const BINT32* src2, int scale_exp, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;
@@ -45,8 +45,8 @@ inline void sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22(
         }
 }
 inline void sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22(
-    q12_22_t* dst, const int16_t* src0, const int16_t* src1,
-    const int32_t* src2, int scale_exp, int M, int K, int N) {
+    q12_22_t* dst, const BINT16* src0, const BINT16* src1,
+    const BINT32* src2, int scale_exp, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;
@@ -56,8 +56,8 @@ inline void sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22(
         }
 }
 inline void sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40(
-    q24_40_t* dst, const int32_t* src0, const int32_t* src1,
-    const int32_t* src2, int scale_exp, int M, int K, int N) {
+    q24_40_t* dst, const BINT32* src0, const BINT32* src1,
+    const BINT32* src2, int scale_exp, int M, int K, int N) {
     for (int m = 0; m < M; m++)
         for (int n = 0; n < N; n++) {
             int64_t acc = 0;

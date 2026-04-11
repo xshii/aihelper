@@ -80,16 +80,16 @@ class ComputeKey(NamedTuple):
 # ============================================================
 
 TYPES = {
-    "int8": {
-        "c_names": ["int8", "INT8", "int8_t", "Int8Data", "Int8"],
+    "bint8": {
+        "c_names": ["BINT8", "int8_t", "int8"],
         "block_shapes": {"zz": (32, 32), "nn": (32, 64)},
     },
-    "int16": {
-        "c_names": ["int16", "INT16", "int16_t", "Int16Data", "Int16"],
+    "bint16": {
+        "c_names": ["BINT16", "int16_t", "int16"],
         "block_shapes": {"zz": (16, 16), "nn": (16, 32)},
     },
-    "int32": {
-        "c_names": ["int32", "INT32", "int32_t"],
+    "bint32": {
+        "c_names": ["BINT32", "int32_t", "int32"],
         "block_shapes": {"zz": (8, 8), "nn": (8, 16)},
     },
     "float32": {

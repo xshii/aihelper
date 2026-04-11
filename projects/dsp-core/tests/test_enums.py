@@ -42,8 +42,8 @@ class TestDType:
         assert DType.REAL.FLOAT64 == "float64"
 
     def test_dut(self):
-        assert DType.DUT.INT8 == "int8"
-        assert DType.DUT.INT16 == "int16"
+        assert DType.DUT.BINT8 == "bint8"
+        assert DType.DUT.BINT16 == "bint16"
 
     def test_acc(self):
         assert DType.ACC.Q12_22 == "q12.22"
@@ -51,10 +51,10 @@ class TestDType:
         assert DType.ACC.Q24_40 == "q24.40"
 
     def test_int32_is_dut(self):
-        assert DType.DUT.INT32 == "int32"
+        assert DType.DUT.BINT32 == "bint32"
 
     def test_is_str(self):
-        assert isinstance(DType.DUT.INT16, str)
+        assert isinstance(DType.DUT.BINT16, str)
         assert isinstance(DType.ACC.Q12_22, str)
         assert isinstance(DType.REAL.FLOAT32, str)
 

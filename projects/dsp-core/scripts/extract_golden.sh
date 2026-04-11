@@ -59,6 +59,15 @@ mkdir -p "$CURRENT_DIR"
 echo "解压 $(basename "$RAR_FILE") → golden_c/current/"
 unrar x -o+ "$RAR_FILE" "$CURRENT_DIR/"
 
+# --- 如果解压后有同名子目录，提升一层 ---
+# 20260326.rar 解压后可能得到 current/20260326/，把内容提到 current/
+SUBDIR="$CURRENT_DIR/$TIMESTAMP"
+if [ -d "$SUBDIR" ]; then
+    echo "发现子目录 $TIMESTAMP/，提升一层"
+    find "$SUBDIR" -mindepth 1 -maxdepth 1 -exec mv {} "$CURRENT_DIR/" \;
+    rmdir "$SUBDIR" || true
+fi
+
 # --- 创建不带时间戳的软链 ---
 echo ""
 echo "创建稳定命名软链（去除时间戳 $TIMESTAMP）:"
@@ -66,13 +75,13 @@ echo "创建稳定命名软链（去除时间戳 $TIMESTAMP）:"
 cd "$CURRENT_DIR"
 
 # .h：去时间戳建软链
-for f in *"${TIMESTAMP}"*.h 2>/dev/null; do
-    [ -e "$f" ] || continue
+for f in $(find . -maxdepth 1 -name "*${TIMESTAMP}*.h" -type f); do
+    f=$(basename "$f")
     ln -sf "$f" "$(echo "$f" | sed "s/_*${TIMESTAMP}_*/_/;s/_\./\./")"
 done
 
 # .so：选文件名最短的那个，去时间戳建软链
-SO_FILE=$(ls -1 *.so 2>/dev/null | awk '{print length, $0}' | sort -n | head -1 | cut -d' ' -f2-)
+SO_FILE=$(find . -maxdepth 1 -name "*.so" -type f -exec basename {} \; | awk '{print length, $0}' | sort -n | head -1 | cut -d' ' -f2-)
 [ -n "$SO_FILE" ] && ln -sf "$SO_FILE" "$(echo "$SO_FILE" | sed "s/_*${TIMESTAMP}_*/_/;s/_\./\./")"
 
 echo "软链:"

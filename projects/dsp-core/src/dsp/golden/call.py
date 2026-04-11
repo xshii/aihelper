@@ -50,7 +50,7 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
             f"C 函数 '{func_name}' 在 .so 中不存在。"
         )
     dst = np.empty_like(data)
-    func(data.astype(np.float32), dst, data.size)
+    func(data.astype(np.float64), dst, data.size)
     return dst
 
 
@@ -76,7 +76,7 @@ def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
     from .op_convention import require_convention
     conv = require_convention(op)
 
-    inputs_f32 = [inp.astype(np.float32) for inp in inputs]
+    inputs_f32 = [inp.astype(np.float64) for inp in inputs]
     key = info["key"]
     out_np = conv.call_c_func(func, *inputs_f32, compute_key=key)
     return {

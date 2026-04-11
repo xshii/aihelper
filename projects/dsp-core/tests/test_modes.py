@@ -36,8 +36,8 @@ class TestPseudoQuant:
     def test_pseudo_quant_changes_values(self):
         """伪量化应截断精度，使结果与纯 torch 不完全相同。"""
         import dsp
-        a = dsp.ops.randn(64, dtype=dsp.core.int16)
-        b = dsp.ops.randn(64, dtype=dsp.core.int16)
+        a = dsp.ops.randn(64, dtype=dsp.core.bint16)
+        b = dsp.ops.randn(64, dtype=dsp.core.bint16)
 
         with dsp.context.mode_context(Mode.TORCH):
             result_torch = dsp.ops.correlate(a, b)
@@ -52,8 +52,8 @@ class TestGoldenC:
     def test_golden_c_unregistered_op_raises(self):
         """manifest 中未注册的类型组合应报错。"""
         import dsp
-        a = dsp.ops.randn(16, dtype=dsp.core.float32)
-        b = dsp.ops.randn(16, dtype=dsp.core.float32)
+        a = dsp.ops.randn(16, dtype=dsp.core.double)
+        b = dsp.ops.randn(16, dtype=dsp.core.double)
         with dsp.context.mode_context(Mode.GOLDEN_C):
             from dsp.core.errors import DSPError
             with pytest.raises(DSPError):

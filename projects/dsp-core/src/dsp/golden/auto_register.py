@@ -16,10 +16,15 @@ from .manifest import ComputeKey, COMPUTE, CONVERT, _COMPUTE_BY_OP
 # 函数名里用下划线（q12_22），枚举值用点号（q12.22），两种都要能匹配
 _TYPE_TOKENS = {}
 _TYPE_TOKENS["float32"] = "float32"
+_TYPE_TOKENS["double"] = "float64"
 for _enum_cls in (DType.DUT, DType.ACC):
     for _v in _enum_cls:
-        _TYPE_TOKENS[str(_v)] = _v                    # "int16" → DType.DUT.INT16
-        _TYPE_TOKENS[str(_v).replace(".", "_")] = _v   # "q12_22" → DType.ACC.Q12_22
+        _TYPE_TOKENS[str(_v)] = _v                      # "bint16" → DType.DUT.BINT16
+        _TYPE_TOKENS[str(_v).replace(".", "_")] = _v    # "q12_22" → DType.ACC.Q12_22
+# convert 函数名里用裸 int16 不用 bint16，也要能匹配
+_TYPE_TOKENS["int8"] = DType.DUT.BINT8
+_TYPE_TOKENS["int16"] = DType.DUT.BINT16
+_TYPE_TOKENS["int32"] = DType.DUT.BINT32
 
 _ACC_MAP = {str(v): v for v in DType.ACC}
 

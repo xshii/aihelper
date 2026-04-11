@@ -24,7 +24,7 @@ class TestCorrelate:
     def test_autocorrelation(self):
         """自相关: correlate(a, a) 的零延迟 = 能量。"""
         import dsp
-        a = dsp.ops.tensor([1.0, 2.0, 3.0], dtype=dsp.core.float32)
+        a = dsp.ops.tensor([1.0, 2.0, 3.0], dtype=dsp.core.double)
         c = dsp.ops.correlate(a, a)
         # 零延迟（中心点）应等于 sum(a^2) = 14
         center = c.shape[-1] // 2
@@ -39,7 +39,7 @@ class TestOpRegistry:
 
     def test_unknown_op_raises(self):
         import dsp
-        a = dsp.ops.randn(10, dtype=dsp.core.float32)
+        a = dsp.ops.randn(10, dtype=dsp.core.double)
         from dsp.core.errors import OpNotRegistered
         with pytest.raises(OpNotRegistered):
             dsp.ops.dispatch("nonexistent_op", a, a)
@@ -51,6 +51,6 @@ class TestOpRegistry:
         def my_custom_add(a, b):
             return a + b
 
-        a = dsp.ops.randn(10, dtype=dsp.core.float32)
+        a = dsp.ops.randn(10, dtype=dsp.core.double)
         result = dsp.ops.dispatch("my_custom_add", a, a)
         assert result.shape == a.shape

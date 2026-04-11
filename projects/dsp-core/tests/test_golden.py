@@ -25,16 +25,16 @@ class TestManifest:
             assert "nn" in info["block_shapes"]
 
     def test_compute_key_named_fields(self):
-        key = ComputeKey(op="matmul", src0=D.INT16, src1=D.INT16, dst0=D.INT32, acc=A.Q12_22, compute_dtype=D.INT16)
+        key = ComputeKey(op="matmul", src0=D.BINT16, src1=D.BINT16, dst0=D.BINT32, acc=A.Q12_22, compute_dtype=D.BINT16)
         assert key.op == "matmul"
-        assert key.src0 == "int16"
-        assert key.dst0 == "int32"
+        assert key.src0 == "bint16"
+        assert key.dst0 == "bint32"
         assert key.acc == "q12.22"
-        assert key.compute_dtype == "int16"
+        assert key.compute_dtype == "bint16"
         assert key.src2 is None
 
     def test_get_type_info(self):
-        info = get_type_info("int16")
+        info = get_type_info("bint16")
         assert info is not None
         assert "block_shapes" in info
         assert get_type_info("nonexistent") is None
@@ -42,40 +42,38 @@ class TestManifest:
     def test_dtype_is_source_of_truth(self):
         """类型基础信息在 core/dtype.py，不在 manifest。"""
         from dsp.core.dtype import get_dtype
-        d = get_dtype("int16")
+        d = get_dtype("bint16")
         assert d.torch_dtype.is_signed
 
     def test_get_block_shape(self):
-        assert get_block_shape("int16", "zz") == (16, 16)
-        assert get_block_shape("int16", "nn") == (16, 32)
+        assert get_block_shape("bint16", "zz") == (16, 16)
+        assert get_block_shape("bint16", "nn") == (16, 32)
         assert get_block_shape("unknown", "zz") == (8, 8)  # fallback
 
     def test_require_convert_func(self):
-        assert require_convert_func("int16", "float32") == "dsp_convert_int16_float32"
+        assert require_convert_func("bint16", "float32") == "dsp_convert_int16_float32"
 
     def test_require_convert_func_not_found(self):
         import pytest
         with pytest.raises(Exception):
-            require_convert_func("int16", "nonexistent")
+            require_convert_func("bint16", "nonexistent")
 
     def test_get_compute_info(self):
-        info = get_compute_info(ComputeKey(op="matmul", src0="int16", src1="int16"))
+        info = get_compute_info(ComputeKey(op="matmul", src0="bint16", src1="bint16"))
         assert info is not None
-        key = info["key"]
-        assert key.acc == A.Q12_22
+        assert info["func"].startswith("dsp_matmul")
 
     def test_get_compute_info_fused_linear(self):
-        info = get_compute_info(ComputeKey(op="linear", src0="int16", src1="int16"))
+        info = get_compute_info(ComputeKey(op="linear", src0="bint16", src1="bint16"))
         assert info is not None
-        key = info["key"]
-        assert key.acc == A.Q12_22
+        assert info["func"].startswith("dsp_linear")
 
     def test_get_compute_info_not_found(self):
-        assert get_compute_info(ComputeKey(op="nonexistent", src0="int16", src1="int16")) is None
+        assert get_compute_info(ComputeKey(op="nonexistent", src0="bint16", src1="bint16")) is None
 
     def test_list_types(self):
         types = list_types()
-        assert "int16" in types
+        assert "bint16" in types
         assert "float32" in types
 
     def test_list_ops(self):
@@ -85,7 +83,7 @@ class TestManifest:
 
     def test_list_converts(self):
         convs = list_converts()
-        assert ("int16", "float32") in convs
+        assert ("bint16", "float32") in convs
 
 
 class TestConvention:

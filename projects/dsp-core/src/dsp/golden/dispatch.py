@@ -96,5 +96,5 @@ def _args_to_numpy(args):
     for a in args:
         if isinstance(a, (DSPTensor, torch.Tensor)):
             t = a.torch() if isinstance(a, DSPTensor) else a
-            result.append(t.detach().cpu().float().numpy())
+            result.append(t.detach().cpu().double().numpy())
     return result

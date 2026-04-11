@@ -1,36 +1,25 @@
-// 绑定：类型转换
+// 绑定：类型转换 — 外部只有 bint + double
 #include "bind_helpers.h"
 #include "dsp/dsp_convert.h"
 
 template<typename Src, typename Dst>
-void bind_convert(py::module& m, const char* name) {
-    auto fn = dsp_convert<Src, Dst>;
-    m.def(name, [fn](py::array_t<float> src, py::array_t<float> dst, int count) {
+void bind_cvt(py::module& m, const char* name) {
+    m.def(name, [](py::array_t<double> src, py::array_t<double> dst, int count) {
         auto s = to_typed<Src>(src);
         std::vector<Dst> d(count);
-        fn(d.data(), s.data(), count);
-        write_back(dst, d);
+        dsp_convert<Src, Dst>(d.data(), s.data(), count);
+        write_back(dst, d, count);
     });
 }
 
 void bind_convert(py::module& m) {
-    // ACC → float32
-    bind_convert<q12_22_t, float>(m, "dsp_convert_q12_22_float32");
-    bind_convert<q24_40_t, float>(m, "dsp_convert_q24_40_float32");
+    // double → bint（subblock 级别逐元素转换）
+    bind_cvt<double, bint8> (m, "dsp_convert_double_bint8");
+    bind_cvt<double, bint16>(m, "dsp_convert_double_bint16");
+    bind_cvt<double, bint32>(m, "dsp_convert_double_bint32");
 
-    // float32 → DUT
-    bind_convert<float, int8_t> (m, "dsp_convert_float32_int8");
-    bind_convert<float, int16_t>(m, "dsp_convert_float32_int16");
-    bind_convert<float, int32_t>(m, "dsp_convert_float32_int32");
-
-    // DUT → float32
-    bind_convert<int8_t,  float>(m, "dsp_convert_int8_float32");
-    bind_convert<int16_t, float>(m, "dsp_convert_int16_float32");
-    bind_convert<int32_t, float>(m, "dsp_convert_int32_float32");
-
-    // DUT → DUT
-    bind_convert<int8_t,  int16_t>(m, "dsp_convert_int8_int16");
-    bind_convert<int16_t, int8_t> (m, "dsp_convert_int16_int8");
-    bind_convert<int16_t, int32_t>(m, "dsp_convert_int16_int32");
-    bind_convert<int32_t, int16_t>(m, "dsp_convert_int32_int16");
+    // bint → double（比数用）
+    bind_cvt<bint8,  double>(m, "dsp_convert_bint8_double");
+    bind_cvt<bint16, double>(m, "dsp_convert_bint16_double");
+    bind_cvt<bint32, double>(m, "dsp_convert_bint32_double");
 }

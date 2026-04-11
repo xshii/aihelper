@@ -2,7 +2,7 @@
 
 from .dtype import (
     DType,
-    DSPDtype, int8, int16, int32, float32, float64,
+    DSPDtype, bint8, bint16, bint32, double,
     register_dtype, get_dtype, list_dtypes,
     TypeCodec, GoldenCCodec, PassthroughCodec,
     register_codec, get_codec,

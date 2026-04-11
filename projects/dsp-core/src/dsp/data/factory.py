@@ -2,7 +2,7 @@
 
 用法:
     import dsp
-    a = dsp.data.randn(4, 8, dtype=dsp.core.int16)
+    a = dsp.data.randn(4, 8, dtype=dsp.core.bint16)
     b = dsp.data.zeros(10, dtype=dsp.core.float32)
 """
 
@@ -12,7 +12,7 @@ import torch
 
 from ..core.tensor import DSPTensor
 from ..core.dtype import DSPDtype
-from ..core import float32 as _float32
+from ..core import double as _double
 
 
 # 依赖注入：context 启动时注入 randn 拦截器
@@ -38,29 +38,29 @@ def _to_int_dtype(data: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
 
 
 def tensor(data, dtype: DSPDtype = None, requires_grad: bool = False) -> DSPTensor:
-    dtype = dtype or _float32
+    dtype = dtype or _double
     return DSPTensor.create(
         torch.tensor(data, dtype=dtype.torch_dtype, requires_grad=requires_grad), dtype)
 
 
 def zeros(*size, dtype: DSPDtype = None) -> DSPTensor:
-    dtype = dtype or _float32
+    dtype = dtype or _double
     return DSPTensor.create(torch.zeros(*size, dtype=dtype.torch_dtype), dtype)
 
 
 def ones(*size, dtype: DSPDtype = None) -> DSPTensor:
-    dtype = dtype or _float32
+    dtype = dtype or _double
     return DSPTensor.create(torch.ones(*size, dtype=dtype.torch_dtype), dtype)
 
 
 def randn(*size, dtype: DSPDtype = None) -> DSPTensor:
     if _randn_interceptor is not None:
-        result = _randn_interceptor(*size, dtype=dtype or _float32)
+        result = _randn_interceptor(*size, dtype=dtype or _double)
         if result is not None:
             if result._source is None:
                 result._source = "randn"
             return result
-    dtype = dtype or _float32
+    dtype = dtype or _double
     torch_dt = dtype.torch_dtype
     if not torch_dt.is_floating_point:
         # int 类型: 先生成 float，再 round+clamp+cast
