@@ -31,7 +31,7 @@ dsp.context.run(main)
 dsp-core/
 ├── src/dsp/
 │   ├── core/       DSPDtype + DSPTensor + Enums + Errors
-│   ├── golden/     C++ 封装（manifest + call + dispatch + fake_so）
+│   ├── golden/     C++ 封装（manifest + call + dispatch + pybind11 绑定）
 │   ├── data/       DataPipe 链式 API + 工厂函数 + 比数报告
 │   ├── ops/        @register_op + correlate, linear
 │   ├── context/    模式切换 + 验证循环 + run()

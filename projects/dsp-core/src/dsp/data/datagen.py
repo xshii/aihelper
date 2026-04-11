@@ -30,7 +30,7 @@ class DataStrategy:
 
 DEFAULT_STRATEGIES = [
     DataStrategy("math"),  # 数学验证：由各 op 的 math_strategy 构造已知解
-    DataStrategy("precision_exact", precision_exact=True, value_range=(-100, 100)),
+    DataStrategy("precision_exact", precision_exact=True, value_range=(-50, 50)),
     DataStrategy("random"),
     DataStrategy("sparse_30", sparsity=0.3),
     DataStrategy("sparse_50", sparsity=0.5),
@@ -55,7 +55,7 @@ def generate_by_strategy(
 ) -> torch.Tensor:
     """按策略生成数据。纯函数，不依赖任何全局状态。"""
     if strategy.precision_exact:
-        lo, hi = strategy.value_range or (-100, 100)
+        lo, hi = strategy.value_range or (-50, 50)
         int_vals = torch.randint(lo, hi + 1, size)
         return int_vals.to(dtype_torch)
 

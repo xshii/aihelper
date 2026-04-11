@@ -120,13 +120,13 @@ class DSPTensor(torch.Tensor):
 
     def native_bytes(self) -> torch.Tensor:
         """转换为原生格式 tensor (给 C++ / 硬件消费)。"""
-        from .codec import get_codec
+        from .dtype import get_codec
         codec = get_codec(self._dsp_dtype)
         return codec.from_float(self, self._dsp_dtype)
 
     def fake_quantize(self) -> DSPTensor:
         """伪量化: 截断到原生精度但保持 float。"""
-        from .codec import get_codec
+        from .dtype import get_codec
         codec = get_codec(self._dsp_dtype)
         result = codec.fake_quantize(self, self._dsp_dtype)
         return DSPTensor.create(result, self._dsp_dtype)

@@ -5,12 +5,10 @@ import logging
 import torch
 from . import register_op
 from ..core.tensor import DSPTensor
-from ..core.enums import Format, DType
-from ..golden.manifest import ComputeKey
+from ..core.enums import Format
 
 logger = logging.getLogger("dsp.ops")
 
-D, A = DType.DUT, DType.ACC
 
 
 # ============================================================
@@ -118,14 +116,6 @@ def _wrap(data, dsp_dtype):
 @register_op(
     weight=Format.NN,
     math_strategy=_linear_math_strategy,
-    golden_c={
-        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
-            "sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22",
-        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
-            "sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22",
-        ComputeKey(op="linear", in0=A.INT32, in1=A.INT32, in2=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
-            "sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40",
-    },
 )
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
     """Linear: out = x @ weight + bias

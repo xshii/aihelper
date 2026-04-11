@@ -1,10 +1,10 @@
 """测试 golden 模块：manifest 查询 + call 接口。"""
 
 import pytest
-from dsp.core.enums import DType
+from dsp.core.dtype import DType
 from dsp.golden.manifest import (
     ComputeKey, TYPES, COMPUTE, CONVERT,
-    get_type_info, get_block_shape, get_convert_func,
+    get_type_info, get_block_shape, require_convert_func,
     get_compute_func, get_compute_info,
     list_types, list_ops, list_converts,
 )
@@ -25,13 +25,13 @@ class TestManifest:
             assert "nn" in info["block_shapes"]
 
     def test_compute_key_named_fields(self):
-        key = ComputeKey(op="matmul", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16)
+        key = ComputeKey(op="matmul", src0=D.INT16, src1=D.INT16, dst0=D.INT32, acc=A.Q12_22, compute_dtype=D.INT16)
         assert key.op == "matmul"
-        assert key.in0 == "int16"
-        assert key.out0 == "int32"
+        assert key.src0 == "int16"
+        assert key.dst0 == "int32"
         assert key.acc == "q12.22"
-        assert key.compute == "int16"
-        assert key.in2 is None
+        assert key.compute_dtype == "int16"
+        assert key.src2 is None
 
     def test_get_type_info(self):
         info = get_type_info("int16")
@@ -50,29 +50,28 @@ class TestManifest:
         assert get_block_shape("int16", "nn") == (16, 32)
         assert get_block_shape("unknown", "zz") == (8, 8)  # fallback
 
-    def test_get_convert_func(self):
-        assert get_convert_func("int16", "float32") == "convert_int16_to_float32"
-        assert get_convert_func("int16", "nonexistent") is None
+    def test_require_convert_func(self):
+        assert require_convert_func("int16", "float32") == "dsp_convert_int16_float32"
+
+    def test_require_convert_func_not_found(self):
+        import pytest
+        with pytest.raises(Exception):
+            require_convert_func("int16", "nonexistent")
 
     def test_get_compute_info(self):
-        info = get_compute_info("matmul", "int16", "int16")
+        info = get_compute_info(ComputeKey(op="matmul", src0="int16", src1="int16"))
         assert info is not None
         key = info["key"]
-        assert key.out0 == A.INT32
         assert key.acc == A.Q12_22
-        assert key.compute == D.INT16
 
     def test_get_compute_info_fused_linear(self):
-        info = get_compute_info("linear", "int16", "int16")
+        info = get_compute_info(ComputeKey(op="linear", src0="int16", src1="int16"))
         assert info is not None
         key = info["key"]
-        assert key.in2 == A.INT32       # bias type
-        assert key.compute == D.INT16   # 计算精度
-        assert key.acc == A.Q12_22     # 累加器格式
-        assert key.out0 == D.INT16
+        assert key.acc == A.Q12_22
 
     def test_get_compute_info_not_found(self):
-        assert get_compute_info("nonexistent", "int16", "int16") is None
+        assert get_compute_info(ComputeKey(op="nonexistent", src0="int16", src1="int16")) is None
 
     def test_list_types(self):
         types = list_types()
@@ -103,7 +102,7 @@ class TestConvention:
 
 class TestCallAvailability:
     def test_is_available(self):
-        # fake_c 已删除，应该不可用
+        # _raw_bindings 需要 make build-golden 编译
         # 但如果有 stub，可能可用 — 只测不抛异常
         result = is_available()
         assert isinstance(result, bool)

@@ -14,12 +14,12 @@ def eval_codec(name: str):
     checks = []
 
     # 1. codec.py 中有对应的类定义
-    codec_src = Path("src/dsp/core/codec.py").read_text()
+    codec_src = Path("src/dsp/core/dtype.py").read_text()
     class_pattern = f"class {name.upper().replace('-', '')}Codec"
     # 也尝试驼峰: Bfp16Codec
     camel = name.capitalize() + "Codec"
     found_class = class_pattern.lower() in codec_src.lower() or camel in codec_src
-    checks.append(("codec.py 有 Codec 类", found_class))
+    checks.append(("dtype.py 有 Codec 类", found_class))
 
     # 2. 继承 GoldenCCodec
     checks.append(("继承 GoldenCCodec", "GoldenCCodec" in codec_src))
@@ -27,7 +27,7 @@ def eval_codec(name: str):
     # 3. 运行时注册生效
     try:
         import dsp
-        from dsp.core.codec import get_codec
+        from dsp.core.dtype import get_codec
         dtype_obj = getattr(dsp.core, name, None)
         if dtype_obj is None:
             checks.append((f"dsp.core.{name} 存在", False))

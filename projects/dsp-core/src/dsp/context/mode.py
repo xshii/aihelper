@@ -98,7 +98,7 @@ class PseudoQuantMode(TorchDispatchMode):
     def __init__(self, codec_getter=None):
         super().__init__()
         if codec_getter is None:
-            from ..core.codec import get_codec
+            from ..core.dtype import get_codec
             codec_getter = get_codec
         self._codec_getter = codec_getter
 

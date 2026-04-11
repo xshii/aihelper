@@ -9,7 +9,15 @@ set(GOLDEN_C_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../golden_c")
 
 find_package(pybind11 REQUIRED)
 
-pybind11_add_module(_raw_bindings bindings.cpp)
+pybind11_add_module(_raw_bindings
+    bindings.cpp
+    bind_convert.cpp
+    bind_matrix.cpp
+    bind_vector.cpp
+)
+
+# 绑定文件 include bind_helpers.h（在当前目录）
+target_include_directories(_raw_bindings PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # 包含硬件头文件（.h 直接在 golden_c/ 下）
 target_include_directories(_raw_bindings PRIVATE ${GOLDEN_C_DIR})

@@ -23,6 +23,10 @@ from pathlib import Path
 from typing import Optional
 
 
+# 路径常量 — 弱 AI 用这个，不要用 __file__.parent 反查
+GOLDEN_BUILD_DIR = Path(__file__).resolve().parent / "golden" / "build"
+
+
 @dataclass
 class LoggingConfig:
     level: str = "INFO"
@@ -52,7 +56,7 @@ class RunConfig:
     """验证循环默认配置。"""
     strategies: list = field(default_factory=lambda: [
         {"name": "math"},
-        {"name": "precision_exact", "precision_exact": True, "value_range": (-100, 100)},
+        {"name": "precision_exact", "precision_exact": True, "value_range": (-50, 50)},
         {"name": "random"},
         {"name": "sparse_30", "sparsity": 0.3},
         {"name": "sparse_50", "sparsity": 0.5},

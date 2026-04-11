@@ -19,7 +19,7 @@ from __future__ import annotations
 from functools import cache
 from typing import NamedTuple
 
-from ..core.enums import DType
+from ..core.dtype import DType
 
 
 # ============================================================
@@ -42,32 +42,34 @@ from ..core.enums import DType
 #     如 DType.DUT.INT16（定点计算）
 #
 # 各算子槽位:
-#   abs:     in0=x                        out0=y
-#   add:     in0=a, in1=b                 out0=c
-#   matmul:  in0=A, in1=B                 out0=C         acc, compute
-#   linear:  in0=x, in1=weight, in2=bias  out0=y         acc, compute
+#   abs:     src0=x                        dst0=y
+#   add:     src0=a, src1=b                 dst0=c
+#   matmul:  src0=A, src1=B                 dst0=C         acc, compute
+#   linear:  src0=x, src1=weight, src2=bias  dst0=y         acc, compute
 # ============================================================
 
 class ComputeKey(NamedTuple):
     """COMPUTE 表的 key。固定 3 输入 + 3 输出，None 填空。
 
+    命名与硬件 C 接口一致: src = 输入, dst = 输出。
+
     用关键字参数 + DType 枚举:
         ComputeKey(
             op="linear",
-            in0=DType.DUT.INT16,    in1=DType.DUT.INT16,   in2=DType.ACC.INT32,
-            out0=DType.DUT.INT16,
-            acc=DType.ACC.Q12_22,  compute=DType.DUT.INT16,
+            src0=DType.DUT.INT16,   src1=DType.DUT.INT16,   src2=DType.DUT.INT32,
+            dst0=DType.DUT.INT16,
+            acc=DType.ACC.Q12_22,   compute_dtype=DType.DUT.INT16,
         )
     """
     op: str
-    in0: str | None = None         # 输入 0（DType.DUT / DType.REAL）
-    in1: str | None = None         # 输入 1
-    in2: str | None = None         # 输入 2
-    out0: str | None = None        # 输出 0
-    out1: str | None = None        # 输出 1
-    out2: str | None = None        # 输出 2
-    acc: str | None = None         # 累加器格式（DType.ACC）
-    compute: str | None = None     # 计算精度（DType.DUT / DType.REAL）
+    src0: str | None = None         # 输入 0（DType.DUT / DType.REAL）
+    src1: str | None = None         # 输入 1
+    src2: str | None = None         # 输入 2
+    dst0: str | None = None         # 输出 0
+    dst1: str | None = None         # 输出 1
+    dst2: str | None = None         # 输出 2
+    acc: str | None = None          # 累加器格式（DType.ACC）
+    compute_dtype: str | None = None # 计算精度（DType.DUT / DType.REAL）
 
 
 # ============================================================
@@ -105,18 +107,7 @@ TYPES = {
 # CONVERT — 类型转换
 # ============================================================
 
-CONVERT = {
-    ("int8",    "float32"): "convert_int8_to_float32",
-    ("float32", "int8"):    "convert_float32_to_int8",
-    ("int16",   "float32"): "convert_int16_to_float32",
-    ("float32", "int16"):   "convert_float32_to_int16",
-    ("int32",   "float32"): "convert_int32_to_float32",
-    ("float32", "int32"):   "convert_float32_to_int32",
-    ("int8",    "int16"):   "convert_int8_to_int16",
-    ("int16",   "int32"):   "convert_int16_to_int32",
-    ("int32",   "int16"):   "convert_int32_to_int16",
-    ("int16",   "int8"):    "convert_int16_to_int8",
-}
+CONVERT = {}  # auto_register 自动填充
 
 
 # ============================================================
@@ -130,45 +121,12 @@ CONVERT = {
 #     → +in2(bias) → ×scale → out0(OUT)
 # ============================================================
 
-D = DType.DUT
-R = DType.REAL
-A = DType.ACC
+COMPUTE = {}  # auto_register 自动填充
 
-COMPUTE = {
-    # --- abs: 一元 ---
-    ComputeKey(op="abs", in0=D.INT16, out0=D.INT16):
-        "sp_abs_int16",
-    ComputeKey(op="abs", in0=A.INT32, out0=A.INT32):
-        "sp_abs_int32",
-
-    # --- add: 二元逐元素 ---
-    ComputeKey(op="add", in0=D.INT16, in1=D.INT16, out0=D.INT16):
-        "sp_vadd_int16",
-    ComputeKey(op="add", in0=A.INT32, in1=A.INT32, out0=A.INT32):
-        "sp_vadd_int32",
-
-    # --- mul: 二元逐元素，输出比输入宽 ---
-    ComputeKey(op="mul", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
-        "sp_vmul_int16_int16_oint32_acc_q12_22",
-
-    # --- matmul: 二元矩阵乘 ---
-    ComputeKey(op="matmul", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
-        "sp_gemm_int16_int16_oint32_acc_q12_22",
-    ComputeKey(op="matmul", in0=D.INT16, in1=D.INT16, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
-        "sp_gemm_int16_int16_oint16_acc_q12_22",
-    ComputeKey(op="matmul", in0=A.INT32, in1=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
-        "sp_gemm_int32_int32_oint32_acc_q24_40",
-
-    # --- linear: 三元 fused（matmul + bias + scale）---
-    ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=D.INT16, acc=A.Q12_22, compute=D.INT16):
-        "sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22",
-    ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=A.INT32, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
-        "sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22",
-    ComputeKey(op="linear", in0=A.INT32, in1=A.INT32, in2=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
-        "sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40",
-}
-
-del D, R, A  # 清理临时别名
+# 按 op 分组索引（避免每次查询遍历整个 COMPUTE 表）
+_COMPUTE_BY_OP: dict[str, list] = {}
+for _key, _func in COMPUTE.items():
+    _COMPUTE_BY_OP.setdefault(_key.op, []).append((_key, _func))
 
 
 # ============================================================
@@ -188,37 +146,60 @@ def get_block_shape(dtype_name: str, fmt: str) -> tuple:
     return (8, 8)
 
 
-def get_convert_func(src: str, dst: str) -> str | None:
-    return CONVERT.get((src, dst))
+def require_convert_func(src: str, dst: str) -> str:
+    """查转换函数，找不到直接 raise 并给出诊断信息。"""
+    func = CONVERT.get((src, dst))
+    if func is not None:
+        return func
+    existing = [f"  {s} → {d}" for s, d in CONVERT]
+    hint = "\n".join(existing) if existing else "  （无）"
+    from ..core.errors import ManifestNotFound
+    raise ManifestNotFound(
+        f"convert({src} → {dst}) 未在 CONVERT 表中注册。\n"
+        f"已注册的转换:\n{hint}\n"
+        f"修复: 在 manifest.py CONVERT 表中添加 (\"{src}\", \"{dst}\"): \"convert_{src}_to_{dst}\"。"
+    )
 
 
-def get_compute_info(op: str, in0: str, in1: str = None,
-                     out0: str = None, compute: str = None) -> dict | None:
-    """查计算函数的完整信息。
+_MATCH_FIELDS = ("src0", "src1", "src2", "dst0", "dst1", "dst2", "acc", "compute_dtype")
 
-    Args:
-        op, in0, in1: 必须匹配
-        out0: 可选过滤，None = 不过滤
-        compute: 可选过滤，None = 不过滤
+
+def get_compute_info(query: ComputeKey) -> dict | None:
+    """用 ComputeKey 查计算函数。query 中 None 字段不过滤。
 
     Returns:
         {"func": str, "key": ComputeKey} or None
     """
-    for key, func_name in COMPUTE.items():
-        if key.op != op or key.in0 != in0 or key.in1 != in1:
-            continue
-        if out0 is not None and key.out0 != out0:
-            continue
-        if compute is not None and key.compute != compute:
-            continue
-        return {"func": func_name, "key": key}
+    for key, func_name in _COMPUTE_BY_OP.get(query.op, []):
+        if all(
+            getattr(query, f) is None or getattr(query, f) == getattr(key, f)
+            for f in _MATCH_FIELDS
+        ):
+            return {"func": func_name, "key": key}
     return None
 
 
-def get_compute_func(op: str, in0: str, in1: str = None,
-                     out0: str = None, compute: str = None) -> str | None:
+def require_compute_info(query: ComputeKey) -> dict:
+    """查计算函数，找不到直接 raise 并给出诊断信息。"""
+    info = get_compute_info(query)
+    if info is not None:
+        return info
+    existing = [
+        f"  ({k.src0}, {k.src1}) → dst0={k.dst0}"
+        for k, _ in _COMPUTE_BY_OP.get(query.op, [])
+    ]
+    hint = "\n".join(existing) if existing else "  （无）"
+    from ..core.errors import ManifestNotFound
+    raise ManifestNotFound(
+        f"compute({query.op}, src0={query.src0}, src1={query.src1}, dst0={query.dst0}) 未匹配。\n"
+        f"该 op 已注册的组合:\n{hint}\n"
+        f"修复: 在 manifest.py COMPUTE 表或 @register_op(golden_c={{...}}) 中添加 ComputeKey。"
+    )
+
+
+def get_compute_func(query: ComputeKey) -> str | None:
     """查计算函数的 C 函数名。"""
-    info = get_compute_info(op, in0, in1, out0=out0, compute=compute)
+    info = get_compute_info(query)
     return info["func"] if info else None
 
 

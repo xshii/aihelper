@@ -4,129 +4,92 @@
 你是一个 Python 工程师，负责告诉框架一个新算子的 C 函数如何调用。
 
 ## 任务
-当 C 函数的参数模式和已有的不同时，注册一个新的 OpConvention。
-
-## 背景
-
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
-
-OpConvention 声明两件事：
-1. `output_shape(*inputs)` — 输出 shape 怎么从输入推算
-2. `call_c_func(func, *inputs_np, **params)` — 怎么调 C 函数
-
-用 `__init_subclass__` 自动注册：
-
-```python
-class FFTConvention(OpConvention, op="fft"):  # 定义即注册
-    ...
-```
+当 C 函数的参数模式和已有的 Convention 不同时，注册一个新的 OpConvention。
 
 ## 已有 Convention
 
-| Convention | 适用的 op | 参数模式 |
-|-----------|-----------|---------|
-| `UnaryConvention` | abs | func(x, out, count) |
-| `ElementwiseConvention` | add, mul, sub | func(a, b, out, count) |
-| `MatmulConvention` | matmul | func(A, B, C, M, K, N) |
-| `LinearConvention` | linear | func(x, w, bias, out, scale, M, K, N) |
-| `CorrelateConvention` | correlate | func(a, b, out, signal_len) |
+| Convention | 适用 | C 签名 | 分型 |
+|-----------|------|--------|------|
+| UnaryConvention | abs | func(dst, src0, count) | ND |
+| ElementwiseConvention | add, mul, sub | func(dst, src0, src1, count) | ND |
+| MatmulConvention | matmul | func(dst_zz, input_zz, weight_nn, M, K, N) | ZZ+NN |
+| LinearConvention | linear | func(dst_zz, input_zz, weight_nn, bias_nd, scale, M, K, N) | ZZ+NN+ND |
+| CorrelateConvention | correlate | func(dst, signal, template, signal_len) | ND |
 
 **何时需要新 Convention？**
-- 先看上表，如果新 op 的 C 函数参数模式和某个已有 Convention 一样 → 直接复用（在 `__init_subclass__` 的 `op=` 加名字即可）
-- 如果参数个数、顺序或 reshape 逻辑不同 → 需要新建
-- 如果不确定 → 先用已有 Convention 跑测试，如果报参数数量错误再新建
+- 先看上表，参数模式一样 → 直接在 `op=` 列表加名字
+- 参数个数/顺序/分型不同 → 新建
+
+## Convention 职责
+
+Convention 处理完整的输入输出流程:
+```
+输入: float → pad → 分型(ZZ/NN) → flatten → [传给 binding]
+输出: [binding 返回] → 去分型 → 去 padding → 返回
+```
+
+binding 层处理 float↔DUT 类型转换，convention 不用管。
 
 ## 规则
-1. MUST: 继承 `OpConvention`
-2. MUST: 用 `op="name"` 或 `op=["name1","name2"]` 自动注册
-3. MUST: `call_c_func` 用 `*inputs_np`（可变参数）
-4. NEVER: 在 Convention 里调 quantize/dequantize（精度转换由 codec 层处理）
-5. NEVER: 手动调 `register_convention()`
+1. DO: 变量名用 `dst, src0, src1, src2`（与硬件 C 接口一致）
+2. DO: `dst` 放第一个参数传给 C 函数
+3. DO: 矩阵运算需要 pad + 分型（复用 `_pad_2d`, `_to_blocked`, `_from_blocked`）
+4. DON'T: 在 Convention 里做类型转换（binding 层做）
 
-## 输出格式
+## 模板
 
 ```python
-# 在 src/dsp/golden/op_convention.py 底部添加:
-
-class FFTConvention(OpConvention, op="fft"):
-    """FFT: 输入输出同 shape，C 函数: func(input, output, N)"""
+class MyConvention(OpConvention, op="my_op"):
+    """func(dst, src0, src1, N)"""
 
     def output_shape(self, *inputs):
         return inputs[0].shape
 
     def call_c_func(self, func, *inputs_np, **params):
-        x = inputs_np[0]
-        N = x.shape[-1]
-        out = np.zeros_like(x)
-        func(x.flatten(), out.flatten(), N)
-        return out
+        src0 = inputs_np[0].flatten()
+        src1 = inputs_np[1].flatten()
+        N = src0.size
+        dst = np.zeros(N, dtype=np.float32)
+        func(dst, src0, src1, N)
+        return dst
 ```
 
-## Examples
-
-### Example 1: 复用已有 Convention（新 op `dot_product`）
-
-**场景：** 新增 `dot_product` 算子，C 函数签名为 `func(a, b, out, count)`，和 `ElementwiseConvention` 一样。
-
-**做法：** 不需要新建 Convention，只需把 `dot_product` 加到已有的 `op=` 列表：
+矩阵运算模板（需要分型）:
 
 ```python
-# 修改前
-class ElementwiseConvention(OpConvention, op=["add", "mul", "sub"]):
-    def output_shape(self, *inputs):
-        return inputs[0].shape
-
-    def call_c_func(self, func, *inputs_np, **params):
-        a, b = inputs_np[0].flatten(), inputs_np[1].flatten()
-        out = np.zeros_like(a)
-        func(a, b, out, len(a))
-        return out
-
-# 修改后（只改 op= 这一行）
-class ElementwiseConvention(OpConvention, op=["add", "mul", "sub", "dot_product"]):
-    ...  # 其余不变
-```
-
-**为什么不新建？** 参数模式完全一致：两个输入 flatten → 一个输出 → count。
-
-### Example 2: 新建 Convention（新 op `fft`）
-
-**场景：** 新增 `fft` 算子，C 函数签名为 `func(input, output, N)`，只有一个输入，且需要传 shape 维度 N。和已有 Convention 都不同。
-
-**做法：** 新建 FFTConvention：
-
-```python
-class FFTConvention(OpConvention, op="fft"):
-    """FFT: 输入输出同 shape，C 函数: func(input, output, N)"""
+class MyMatrixConvention(OpConvention, op="my_matrix_op"):
+    """func(dst_zz, input_zz, weight_nn, M, K, N)"""
 
     def output_shape(self, *inputs):
-        return inputs[0].shape
+        return (*inputs[0].shape[:-1], inputs[1].shape[-1])
 
     def call_c_func(self, func, *inputs_np, **params):
-        x = inputs_np[0]
-        N = x.shape[-1]
-        out = np.zeros_like(x)
-        func(x.flatten(), out.flatten(), N)
-        return out
+        src0, src1 = inputs_np[0], inputs_np[1]
+        orig_M, K, orig_N = src0.shape[-2], src0.shape[-1], src1.shape[-1]
+
+        key = params.get("compute_key")
+        dtype_name = str(key.src0) if key else "int16"
+        bh, bw = _get_block_shape(dtype_name, "zz")
+
+        # float → pad → 分型 → flatten
+        src0_blocked = _to_blocked(_pad_2d(src0, bh, bw), bh, bw)
+        src1_blocked = _to_blocked(_pad_2d(src1, bh, bw), bh, bw)
+
+        M = _pad_dim(orig_M, bh)
+        K_padded = _pad_dim(K, bw)
+        N = _pad_dim(orig_N, bw)
+        dst_flat = np.zeros(M * N, dtype=np.float32)
+
+        func(dst_flat, src0_blocked, src1_blocked, M, K_padded, N)
+
+        # → 去分型 → 去 padding
+        dst_2d = _from_blocked(dst_flat, bh, bw, M, N)
+        return _unpad_2d(dst_2d, orig_M, orig_N)
 ```
-
-**为什么不复用？** UnaryConvention 的签名是 `func(x, out, count)`，但 FFT 需要的 N 是最后一维的 shape 而不是元素总数 count，语义不同。
-
-完整样例见 `src/dsp/golden/op_convention.py`。
 
 ## 自检清单
-- [ ] `op="name"` 在类定义处（`__init_subclass__` 自动注册）
-- [ ] `call_c_func` 用 `*inputs_np`
-- [ ] `output_shape` 用 `*inputs`
-- [ ] 没有 quantize/dequantize 调用
+- [ ] 变量名用 `dst, src0, src1, src2`
+- [ ] `func(dst, ...)` — dst 第一位
+- [ ] 矩阵运算: pad → 分型 → C → 去分型 → unpad
+- [ ] `op="name"` 在类定义处（自动注册）
 - [ ] `make test` 通过
-- [ ] 验证: `.venv/bin/python -c "from dsp.golden.op_convention import get_convention; print(get_convention('YOUR_OP'))"`
-
-## 边界情况
-- 如果 output shape 依赖运行时参数（如 FFT 的 N）：在 call_c_func 中处理，output_shape 只负责静态推断
-- 如果 C 函数返回多个输出：call_c_func 返回 tuple of ndarray，框架会自动拆分
-- 如果参数数量报错（TypeError: func() takes N args）：说明 Convention 的 call_c_func 传参不对，检查 flatten/reshape
-- 禁止在 Convention 里调 quantize/dequantize 的原因：精度转换由 codec 层统一处理，Convention 只管 numpy ↔ C 的桥接
-
----
-[操作员：在此行下方提供新算子的 C 函数签名。]

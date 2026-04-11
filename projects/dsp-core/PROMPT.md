@@ -2,78 +2,174 @@
 
 ## 这是什么
 
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。
 
 DSP 芯片验证框架。torch-like API，多模式验证（torch / pseudo_quant / golden_c）。
-
-**当前状态：golden C 接口是 fake 的（纯 Python 模拟定点截断）。**
-弱 AI 的核心任务：按 SDD（规格驱动开发）模式，逐步用真实 C++ 实现替换 fake 接口。
 
 ## 架构
 
 ```
+golden_c/                    # 纯 C/C++（无 Python 依赖）
+├── include/                 #   硬件原始函数（不改）
+│   ├── golden_convert.h
+│   ├── golden_matrix.h
+│   └── golden_vector.h
+├── dsp/                     #   模板 wrapper（清晰命名 + 类型安全）
+│   ├── dsp_types.h          #     QFormat / q12_22_t / q24_40_t
+│   ├── dsp_convert.h        #     → golden_convert.h
+│   ├── dsp_matrix.h         #     → golden_matrix.h
+│   └── dsp_vector.h         #     → golden_vector.h
+└── current/                 #   extract_golden.sh 解压目标
+
 src/dsp/
-├── core/       类型系统（DSPDtype + DSPTensor + Enums）
-├── golden/     C++ 封装（manifest 声明表 + fake_so 模拟 + pybind11 绑定）
-├── data/       数据管线（DataPipe 链式 API + 工厂函数）
-├── ops/        算子（@register_op + torch 实现 + golden_c 映射）
-├── context/    上下文（模式切换 + 验证循环 + compute config）
-└── config.py   全局配置
+├── core/
+│   ├── dtype.py             # DType 枚举 + DSPDtype + TypeCodec（统一在此文件）
+│   ├── enums.py             # Mode / Format / RunMode
+│   ├── tensor.py            # DSPTensor
+│   └── errors.py            # 自定义异常（带诊断信息）
+├── golden/
+│   ├── bind_helpers.h       # to_typed/write_back traits（pybind11 桥接）
+│   ├── bind_convert.cpp     # → dsp_convert.h
+│   ├── bind_matrix.cpp      # → dsp_matrix.h
+│   ├── bind_vector.cpp      # → dsp_vector.h
+│   ├── auto_register.py     # 从 _raw_bindings 扫描 dsp_* 函数，自动注册 manifest
+│   ├── manifest.py          # ComputeKey + COMPUTE/CONVERT 表（auto_register 自动填充）
+│   ├── call.py              # Python → C++ 调用
+│   ├── dispatch.py          # batch 处理 + 模式分发
+│   └── op_convention.py     # 参数映射约定（dst/src0/src1/src2 命名）
+├── data/                    # DataPipe 链式 API + 工厂函数
+├── ops/                     # @register_op + torch 实现（直接 re-export，无字符串注册表）
+└── config.py                # 全局配置
 ```
 
-## SDD 开发流程
-
-弱 AI 按以下顺序，每步有明确的验收标准：
-
-### 阶段 1: 替换 fake golden C（优先级最高）
-
-当前 `golden/fake_so/` 是 Python 模拟。硬件团队提供 `.h` + `.so` 后：
+## 调用链路
 
 ```
-步骤 1: 运行 ./scripts/extract_golden.sh path/to/golden_release.rar（解压 .h + .so 到 golden_c/）
-步骤 2: 用 prompt 03 在 manifest.py 注册 C 函数名
-步骤 3: make build-golden 编译 pybind11 绑定
-步骤 4: make test（真 .so 自动替换 fake_so）
-步骤 5: make smoke — E2E 比数报告应显示 torch vs pseudo_quant 精度差异
+dsp.ops.linear(x, w, b)
+  → @register_op wrapper
+    → mode == GOLDEN_C → dispatch_golden_c()
+      → ComputeKey 查 manifest（auto_register 自动填充）
+      → convention.call_c_func(func, ...)
+        → _raw_bindings.dsp_linear_int16_int16_int32_int16_q12_22(dst, src0, src1, src2, ...)
+          → dsp_matrix.h: dsp_linear<int16_t, int16_t, int32_t, int16_t, Q12_22>
+            → golden_matrix.h: sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22
 ```
 
-验收：比数报告中 `max_diff > 0` 说明伪量化在工作。
+## Golden C 模式运行流程
 
-### 阶段 2: 添加新算子
-
-```
-步骤 1: 用 prompt 02 写 torch 实现（@register_op，零配置即可运行）
-步骤 2: 用 prompt 03 在 @register_op 的 golden_c 参数中添加 ComputeKey
-步骤 3: 如果 C 函数参数模式不同，用 prompt 06 注册 OpConvention
-步骤 4: 用 prompt 04 写测试
-步骤 5: （最后适配）为算子添加 math_strategy — 见 prompt 02 "阶段 4" 说明
-步骤 6: make ci
-```
-
-验收：`make ci` 全绿。
-
-### 阶段 3: 添加新硬件类型
+以 `dsp.ops.linear(x, w, b)` 在 golden_c 模式下为例：
 
 ```
-步骤 1: 用 prompt 05 在 core/dtype.py 定义 DSPDtype
-步骤 2: 用 prompt 01 在 core/codec.py 添加 Codec（__init_subclass__ 自动注册）
-步骤 3: 用 prompt 03 在 manifest 添加 CONVERT + COMPUTE 条目
-步骤 4: 用 prompt 04 写测试
-步骤 5: make ci
+① ops/linear.py — @register_op wrapper
+   mode == GOLDEN_C → 进入 golden_c 路径
+
+② golden/dispatch.py — 提取类型 + batch 处理
+   从 DSPTensor 提取 src0_type="int16", src1_type="int16"
+   x=[2,14,12] → batch=2，按 batch 循环调用
+
+③ golden/call.py — manifest 查表
+   ComputeKey(op="linear", src0="int16", src1="int16") -> 查 COMPUTE 表
+   命中 "dsp_linear_int16_int16_int32_int16_q12_22"
+   查 LinearConvention
+
+④ golden/op_convention.py — 分型转换 + 拆参数 + 分配 dst
+   float input [14,12] -> pad [16,16] -> ZZ block -> flatten
+   float weight [12,8] -> pad [16,16] -> NN block -> flatten
+   dst = np.zeros(M*N, dtype=float32)
+   func(dst, src0, src1, src2, scale_exp, M, K, N)
+   dst flat -> 去分型 -> 去 padding [14,8]
+
+⑤ bind_matrix.cpp — float32 <-> typed int 转换（通过 trait 自动选 gc convert）
+   to_typed<int16_t>(src0)  -> convert_float32_to_int16
+   to_typed<int32_t>(src2)  -> convert_float32_to_int32
+   调用 C 模板 -> 结果写入 vector<int16_t>
+   write_back(dst, d)       -> convert_int16_to_float32
+
+⑥ dsp_matrix.h — 模板 wrapper
+   dsp_linear<int16_t, int16_t, int32_t, int16_t, Q12_22>(
+       out_zz, input_zz, weight_nn, bias_nd, ...)
+   转发给硬件原始函数 ↓
+
+⑦ golden_matrix.h — 硬件 C 计算
+   sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22(...)
+   int64 累加 + clamp → 写入 dst
 ```
 
-验收：`make ci` 全绿。
+**分型转换在第4步（convention 层）**：调 C 前把 float ND 数据 pad + 分型(ZZ/NN)，调 C 后去分型 + 去 padding。已实现。
 
-## Prompt 列表
+## 新增类型组合（零手动注册）
 
-| # | 文件 | 一句话 |
-|---|------|--------|
-| 01 | [01-add-codec.md](prompts/01-add-codec.md) | 添加 Codec（__init_subclass__ 自动注册，无 Python fallback） |
-| 02 | [02-add-op.md](prompts/02-add-op.md) | 添加算子（@register_op + golden_c ComputeKey 映射） |
-| 03 | [03-bridge-golden-c.md](prompts/03-bridge-golden-c.md) | 注册 C 函数到 manifest（ComputeKey 固定槽位 + DType 枚举） |
-| 04 | [04-write-tests.md](prompts/04-write-tests.md) | 写测试（UT/IT/ST 分级，pytest markers） |
-| 05 | [05-add-dtype.md](prompts/05-add-dtype.md) | 定义 DSPDtype（name + torch_dtype） |
-| 06 | [06-add-op-convention.md](prompts/06-add-op-convention.md) | 注册 OpConvention（__init_subclass__ 自动注册） |
+只需 2 步，manifest 自动注册：
+
+```
+步骤 1: golden_c/dsp/dsp_matrix.h — 加一行模板特化
+        template<> inline void dsp_linear<int8_t, int8_t, int16_t, int8_t, Q12_22>(...) 
+        { sp_fused_linear_int8_int8_bint16_oint8_acc_q12_22(...); }
+
+步骤 2: src/dsp/golden/bind_matrix.cpp — 加一行绑定注册
+        bind_linear<int8_t, int8_t, int16_t, int8_t, Q12_22>(
+            m, "dsp_linear_int8_int8_int16_int8_q12_22");
+
+步骤 3: make build-golden && make test
+```
+
+manifest.py 不用改（auto_register 从函数名自动解析 ComputeKey）。
+@register_op 不用改（不需要 golden_c={...} 参数）。
+
+## Golden C 接口约定
+
+### 参数命名（dsp_*.h 模板 wrapper）
+
+参数名带角色 + 分型后缀，看签名就知道传什么：
+
+```cpp
+template<> inline void dsp_linear<int16_t, int16_t, int32_t, int16_t, Q12_22>(
+    int16_t*       out_zz,      // 输出, ZZ 分块
+    const int16_t* input_zz,    // 输入, ZZ 分块
+    const int16_t* weight_nn,   // 权重, NN 分块
+    const int32_t* bias_nd,     // 偏置, 不分块
+    int scale_exp, int M, int K, int N)
+```
+
+分型后缀：
+- `_zz` — Z 序分块（左矩阵/输出）
+- `_nn` — 行优先分块（右矩阵/权重）
+- `_nd` — 不分块（向量/bias）
+
+### ACC 类型
+
+`q12_22_t` / `q24_40_t` 是独立的 C++ 类型（底层 int32，但与 DUT int32 不同类型）。
+binding 层的 `gc_to_float32` trait 根据类型自动选正确的转换函数：
+- `q12_22_t` → `convert_q12_22_to_float32`（ACC 定点解码）
+- `int16_t` → `convert_int16_to_float32`（DUT 直接转）
+
+### Block Padding（待适配）
+
+当前 demo 直接操作 ND 数据。真实硬件接入时需在 convention 层做 block 转换：
+
+```
+调 C 前: input ND → _to_block(ZZ), weight ND → _to_block(NN)
+调 C 后: output ZZ → _from_block(ND)
+```
+
+### ACC 比数
+
+golden C 的输出是 ACC 格式，不能直接比数：
+
+```
+golden C 输出(ACC, block 格式)
+  → 步骤 1: unpad（挤掉 block 填充）
+  → 步骤 2: ACC → float32（调 dsp_q12_22_to_float32）
+  → 步骤 3: 与 torch 结果比较
+```
+
+规则：
+1. DO: ACC → float 必须调 golden C 提供的 `dsp_q*_to_float32`
+   DON'T: 自己写 `raw / (1 << frac_bits)`
+2. DO: 比数前先挤掉 block 对齐填充
+   DON'T: 拿 padded 数据直接比
+3. DO: 比数对象是 `dsp_q*_to_float32` 的输出 vs torch 结果
+   DON'T: 拿 ACC 的 int32 和 torch 的 float32 直接比
 
 ## 最简用法
 
@@ -81,64 +177,36 @@ src/dsp/
 import dsp
 
 def main():
-    x = dsp.data.randn(4, 8, dtype=dsp.core.int16)
-    w = dsp.data.randn(8, 4, dtype=dsp.core.int16)
-    b = dsp.data.randn(1, 4, dtype=dsp.core.int16)
+    x = dsp.data.randn(2, 14, 12, dtype=dsp.core.int16)
+    w = dsp.data.randn(12, 8, dtype=dsp.core.int16)
+    b = dsp.data.randn(1, 8, dtype=dsp.core.int16)
     return dsp.ops.linear(x, w, b)
 
 dsp.context.run(main)
 ```
 
-```bash
-python my_test.py                      # 默认 generate_input（8 种策略含 math）
-python my_test.py use_input            # 比数 → 终端摘要 + run_log.json + HTML 报告
-```
-
-## 比数报告
-
-`use_input` 完成后自动生成三种输出：
-
-| 输出 | 位置 | 说明 |
-|------|------|------|
-| 终端摘要 | stdout | PASS/WARN/FAIL + max_diff + cosine |
-| run_log.json | case 目录内 | 机读，含所有轮次 + diff 统计 |
-| compare_*.html | output 根目录 | 交互式 Plotly 报告，自动打开浏览器 |
-
-HTML 报告结构（渐进式披露）：
-1. **汇总表** — 默认展开，10 秒定性
-2. **策略对比柱状图** — 默认展开，哪种数据模式误差最大
-3. **详情（折叠）** — 点击展开，每个策略/输出文件：
-   - 误差 CDF（"99% 元素误差 < 阈值？"）
-   - Bland-Altman（"误差和信号幅度有关吗？"）
-   - 信号+误差叠加（逐元素定位）
-
-依赖: `pip install plotly`（可选，未安装时跳过 HTML 报告）
-
-## 关键枚举
+## 关键类型（统一在 core/dtype.py）
 
 ```python
-from dsp.core.enums import DType, Mode, Format
+from dsp.core.dtype import DType
 
-DType.DUT.INT16        # 芯片原生定点
-DType.REAL.FLOAT32    # 标准浮点
-DType.ACC.Q12_22      # 累加器格式
-
-Mode.TORCH            # 纯 torch
-Mode.PSEUDO_QUANT     # 伪量化
-Mode.GOLDEN_C         # C++ 实现
-
-Format.ZZ             # Z 序分块
-Format.NN             # 行优先分块
-Format.ND             # 不分块
+# DUT — 芯片原生（数据存储）     ACC — 累加器（只有 Q 格式）
+DType.DUT.INT8                    DType.ACC.Q12_22
+DType.DUT.INT16                   DType.ACC.Q24_40
+DType.DUT.INT32
 ```
 
-## 自定义异常
+```python
+from dsp.core.enums import Mode, Format
+
+Mode.TORCH / Mode.PSEUDO_QUANT / Mode.GOLDEN_C
+Format.ZZ / Format.NN / Format.ND
+```
+
+## 自定义异常（带诊断信息）
 
 ```python
-from dsp.core.errors import (
-    GoldenNotAvailable,    # golden C 未接入 → make build-golden
-    ManifestNotFound,      # COMPUTE 表无匹配 → 在 @register_op golden_c 加 ComputeKey
-    ConventionNotFound,    # 无 OpConvention → 在 op_convention.py 加类
-    OpNotRegistered,       # 算子未注册 → 确认 @register_op 和 import
-)
+GoldenNotAvailable    # → make build-golden
+ManifestNotFound      # → 显示已注册的类型组合 + 修复指导
+ConventionNotFound    # → 显示已注册的 convention 列表 + 修复指导
 ```

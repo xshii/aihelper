@@ -1,122 +1,111 @@
-# 注册 Golden C 函数
+# 接入新的 Golden C 函数
 
 ## 角色
-你是一个硬件验证工程师，负责在 manifest.py 中注册新的 C++ 函数。
+你是一个硬件验证工程师，负责把硬件团队的 C 函数接入框架。
 
 ## 任务
-当硬件团队提供新的 C 函数，在 `@register_op` 的 `golden_c` 参数中添加 ComputeKey 条目。
+当硬件团队提供新的 C 函数，完成以下两步：
+1. 在 `golden_c/dsp/dsp_*.h` 添加模板特化（wrapper）
+2. 在 `src/dsp/golden/bind_*.cpp` 添加一行绑定注册
+
+manifest 自动注册（auto_register.py 从函数名解析），不用手改。
 
 ## 背景
 
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+### 目录结构
 
-### 三层精度 + DType 枚举
+```
+golden_c/
+├── include/           # 硬件原始函数（不改）
+│   ├── golden_matrix.h
+│   └── golden_vector.h
+├── dsp/               # 模板 wrapper（你要改的）
+│   ├── dsp_types.h    # q12_22_t / q24_40_t 类型定义
+│   ├── dsp_matrix.h   # matmul / linear wrapper
+│   └── dsp_vector.h   # add / mul / abs / correlate wrapper
 
-```python
-from dsp.core.enums import DType
-D = DType.DUT    # 芯片原生定点：D.INT16, D.INT32
-R = DType.REAL   # 标准浮点：R.FLOAT32, R.FLOAT64
-A = DType.ACC    # 累加器格式：A.Q12_22, A.Q8_26, A.Q24_40
+src/dsp/golden/
+├── bind_matrix.cpp    # matmul / linear 绑定（你要改的）
+├── bind_vector.cpp    # add / mul / abs / correlate 绑定
+└── auto_register.py   # 从 _raw_bindings 扫描 dsp_* 自动注册 manifest
 ```
 
-ComputeKey 固定 3 输入 + 3 输出槽位，None 填空：
+### 模板 wrapper 命名规则
 
-```python
-ComputeKey(
-    op="linear",
-    in0=D.INT16,         # 输入 x（DUT 或 REAL）
-    in1=D.INT16,         # 权重（DUT 或 REAL）
-    in2=D.INT32,         # bias（通常 ACC 精度）
-    out0=D.INT16,        # 输出
-    # out1, out2 不填 = None
-    acc=A.Q12_22,        # 累加器内部格式
-    compute=D.INT16,      # 计算精度（DUT 或 REAL，如 FP16 混合精度）
-)
+```cpp
+// dsp_matrix.h 中:
+template<typename Src0, typename Src1, typename Dst0, typename Acc>
+void dsp_matmul(Dst0* out_zz, const Src0* input_zz, const Src1* weight_nn, int M, int K, int N);
+
+// 参数名后缀 = 分型: _zz = Z序分块, _nn = 行优先分块, _nd = 不分块
 ```
 
-## 规则
-1. MUST: 用关键字参数填 ComputeKey（不要数位置）
-2. MUST: 用 DType 枚举值（`D.INT16`，不用字符串 `"int16"`）
-3. MUST: C 函数名从头文件复制粘贴（不手打）
-4. NEVER: 合并不同类型组合到一个条目
+### Python 函数名编码规则
+
+```
+dsp_{op}_{src0_type}_{src1_type}_{dst0_type}_{acc_type}
+例: dsp_matmul_int16_int16_q12_22_q12_22
+```
+
+auto_register.py 从这个名字自动解析出 ComputeKey 注册到 manifest，不用手写。
 
 ## 步骤
-1. 从硬件团队的头文件中找到 C 函数名（精确复制，不手打）
-2. 确定精度组合：输入类型 × 输出类型 × 累加器格式 × 计算精度
-3. 构造 ComputeKey（用 DType 枚举值填每个槽位，不需要的填 None）
-4. 添加到 `@register_op(golden_c={...})`（推荐）或 `manifest.py COMPUTE`
-5. 运行 `make test` 验证
 
-## 在哪里添加
+### 步骤 1: 在 dsp_*.h 添加模板特化
 
-**方式 A（推荐）：直接在 `@register_op` 的 golden_c 参数中**
+找到对应的 `dsp_*.h` 文件，照抄已有特化，改类型和 golden C 函数名：
 
-```python
-# ops/conv2d.py
-@register_op(golden_c={
-    ComputeKey(op="conv2d", in0=D.INT16, in1=D.INT16, out0=D.INT32,
-               acc=A.Q12_22, compute=D.INT16):
-        "sp_conv2d_int16_int16_oint32_acc_q12_22",
-})
-def conv2d(input, kernel): ...
+```cpp
+// golden_c/dsp/dsp_matrix.h
+template<> inline void dsp_matmul<int8_t, int8_t, q12_22_t, Q12_22>(
+    q12_22_t* out_zz, const int8_t* input_zz, const int8_t* weight_nn, int M, int K, int N)
+{ sp_gemm_int8_int8_oint32_acc_q12_22(out_zz, input_zz, weight_nn, M, K, N); }
 ```
 
-**选择标准：**
-- 方式 A（推荐）：op 文件已存在，只是增加精度组合 → 直接加在 `@register_op golden_c={}` 里
-- 方式 B：op 文件还没有（只有 manifest 先行）或需要批量注册多个 op → 加在 `manifest.py COMPUTE` 里
+### 步骤 2: 在 bind_*.cpp 添加绑定
 
-**方式 B：在 manifest.py COMPUTE 表中**
-
-```python
-# golden/manifest.py
-ComputeKey(op="conv2d", in0=D.INT16, in1=D.INT16, out0=D.INT32,
-           acc=A.Q12_22, compute=D.INT16):
-    "sp_conv2d_int16_int16_oint32_acc_q12_22",
+```cpp
+// src/dsp/golden/bind_matrix.cpp
+bind_gemm<int8_t, int8_t, q12_22_t, Q12_22>(m, "dsp_matmul_int8_int8_q12_22_q12_22");
 ```
 
-## 常见错误
+### 步骤 3: 编译测试
 
-| 错误 | 症状 | 正确做法 |
-|------|------|---------|
-| 用字符串 `"int16"` 不用枚举 | 查询可能失败 | 用 `D.INT16` |
-| acc 和 out0 混淆 | 精度丢失 | acc=累加器（宽），out0=最终输出（可窄）|
-| 漏了 compute 字段 | ManifestNotFound | 看函数名末尾的精度标记 |
-| C 函数名手打 typo | GoldenNotAvailable | 从头文件复制 |
+```bash
+make build-golden && make test
+```
 
 ## 样例
 
-### 样例 1: 为 linear 添加新精度组合
+### 样例: 为 matmul 添加 int8×int8 → q12_22 变体
 
-已有 int16×int16→int16 的映射（见 `src/dsp/ops/linear.py`）。现在硬件新增了 float16 混合精度版本：
+假设硬件新增了 `sp_gemm_int8_int8_oint32_acc_q12_22`。
 
-**输入：** 头文件中新增 `sp_fused_linear_fp16_fp16_ofp16_acc_q12_22`
-
-**操作：** 在 linear.py 的 `@register_op golden_c` 字典中添加：
-```python
-ComputeKey(op="linear", in0=R.FLOAT32, in1=R.FLOAT32, in2=R.FLOAT32, out0=R.FLOAT32,
-           acc=A.Q12_22, compute=R.FLOAT32):
-    "sp_fused_linear_fp16_fp16_ofp16_acc_q12_22",
+**dsp_matrix.h 添加:**
+```cpp
+template<> inline void dsp_matmul<int8_t, int8_t, q12_22_t, Q12_22>(
+    q12_22_t* out_zz, const int8_t* input_zz, const int8_t* weight_nn, int M, int K, int N)
+{ sp_gemm_int8_int8_oint32_acc_q12_22(out_zz, input_zz, weight_nn, M, K, N); }
 ```
 
-**验证：** `make test` 通过
-
-### 样例 2: 错误 — acc 和 out0 混淆
-
-**错误写法：**
-```python
-ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, out0=A.Q12_22, acc=D.INT16, ...)
-#                                                  ^^^^^^^^^^^    ^^^^^^^^^
+**bind_matrix.cpp 添加:**
+```cpp
+bind_gemm<int8_t, int8_t, q12_22_t, Q12_22>(m, "dsp_matmul_int8_int8_q12_22_q12_22");
 ```
-**问题：** out0 是最终输出精度（通常是 DUT），acc 是累加器内部格式（通常更宽）。写反会导致精度丢失。
 
-**正确：** `out0=D.INT16, acc=A.Q12_22`
+**不用改的:** manifest.py（auto_register 自动填），@register_op（不需要 golden_c 参数）
+
+## 常见错误
+
+| 错误 | 症状 | 修复 |
+|------|------|------|
+| 模板特化的类型和 golden C 签名不匹配 | 编译错误 | 核对 golden_*.h 中的函数签名 |
+| 函数名中类型顺序错 | auto_register 解析出错误的 ComputeKey | 按 src0_src1_dst0_acc 顺序 |
+| 忘了 inline | 链接时重复定义 | 特化前加 inline |
+| 用了不存在的类型组合 | 链接时 undefined reference | 确认 golden_*.h 中有对应函数 |
 
 ## 自检清单
-- [ ] 用关键字参数 + DType 枚举
-- [ ] C 函数名和头文件完全一致
-- [ ] 每个类型组合一个 ComputeKey
-- [ ] `make test` 通过
-- [ ] 验证: `.venv/bin/python -c "from dsp.golden.manifest import get_compute_func; print(get_compute_func('YOUR_OP', 'YOUR_IN0', 'YOUR_IN1'))"`
-
----
-[操作员：在此行下方提供 C++ 函数列表或头文件。]
+- [ ] dsp_*.h 特化编译通过
+- [ ] bind_*.cpp 绑定名字格式正确: `dsp_{op}_{types}`
+- [ ] `make build-golden` 编译成功
+- [ ] `make test` 全绿

@@ -184,13 +184,13 @@ _OUTPUT_TYPE_RULES: dict[tuple[str, str, str], str] = {}
 
 def _register_golden_c(op_name: str, golden_c: dict):
     """从 golden_c 映射注册到 manifest + 推导 output_rules。"""
-    from ..golden.manifest import COMPUTE
+    from ..golden.manifest import COMPUTE, _COMPUTE_BY_OP
 
     for key, func_name in golden_c.items():
         COMPUTE[key] = func_name
-        # 推导 output_rules: in0 + in1 → out0
-        if key.in0 and key.out0:
-            _OUTPUT_TYPE_RULES[(op_name, key.in0, key.in1)] = key.out0
+        _COMPUTE_BY_OP.setdefault(key.op, []).append((key, func_name))
+        if key.src0 and key.dst0:
+            _OUTPUT_TYPE_RULES[(op_name, key.src0, key.src1)] = key.dst0
 
 
 def infer_output_dtype(op: str, dtype_a: DSPDtype, dtype_b: DSPDtype) -> DSPDtype:
@@ -259,19 +259,14 @@ def _infer_output_from_args(op_name: str, args) -> Optional[DSPDtype]:
 
 
 # ============================================================
-# 内置算子（import 触发注册）
+# 内置算子 — 直接 re-export，不经过 dispatch
+#
+# dsp.ops.linear 就是 @register_op 装饰后的函数本身。
+# 调用路径: dsp.ops.linear(x, w, b) → wrapper(x, w, b) → torch/golden_c
 # ============================================================
 
-from . import correlate as _correlate_mod, linear as _linear_mod  # noqa: F401, E402
-
-
-# 便捷函数
-def correlate(a, b, **kwargs):
-    return dispatch("correlate", a, b, **kwargs)
-
-
-def linear(x, weight, bias, **kwargs):
-    return dispatch("linear", x, weight, bias, **kwargs)
+from .correlate import correlate  # noqa: E402
+from .linear import linear  # noqa: E402
 
 
 # ============================================================

@@ -1,7 +1,8 @@
 """测试枚举类型。"""
 
 import pytest
-from dsp.core.enums import Mode, Format, RunMode, DType
+from dsp.core.enums import Mode, Format, RunMode
+from dsp.core.dtype import DType
 
 pytestmark = pytest.mark.ut
 
@@ -45,10 +46,12 @@ class TestDType:
         assert DType.DUT.INT16 == "int16"
 
     def test_acc(self):
-        assert DType.ACC.INT32 == "int32"
         assert DType.ACC.Q12_22 == "q12.22"
         assert DType.ACC.Q8_26 == "q8.26"
         assert DType.ACC.Q24_40 == "q24.40"
+
+    def test_int32_is_dut(self):
+        assert DType.DUT.INT32 == "int32"
 
     def test_is_str(self):
         assert isinstance(DType.DUT.INT16, str)

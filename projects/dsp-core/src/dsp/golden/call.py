@@ -13,12 +13,17 @@ from __future__ import annotations
 
 import numpy as np
 
-from .manifest import get_convert_func, get_compute_info
-from ..core.errors import GoldenNotAvailable, ManifestNotFound, ConventionNotFound
+from .manifest import require_convert_func, require_compute_info, ComputeKey
+from ..core.errors import GoldenNotAvailable
 
 
 def is_available() -> bool:
-    """C++ 绑定是否可用。"""
+    """C++ 绑定是否可用。
+
+    返回 False 时说明 _raw_bindings.so 未编译。
+    修复: make build-golden（需要先 pip install pybind11）。
+    如果编译后仍不可用，检查 src/dsp/golden/build/ 下是否有 _raw_bindings*.so 文件。
+    """
     try:
         _get_lib()
         return True
@@ -37,11 +42,7 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
     Returns:
         flat float32 numpy array
     """
-    func_name = get_convert_func(src_type, dst_type)
-    if func_name is None:
-        raise ManifestNotFound(
-            f"convert({src_type} → {dst_type}) 未在 CONVERT 表中注册。"
-        )
+    func_name = require_convert_func(src_type, dst_type)
     lib = _get_lib()
     func = getattr(lib, func_name, None)
     if func is None:
@@ -53,26 +54,18 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
     return dst
 
 
-def compute(op: str, *inputs: np.ndarray,
-            type_a: str, type_b: str = None,
-            out0: str = None, compute: str = None) -> dict:
+def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
     """计算。
 
     Args:
-        op: 操作名
         *inputs: flat float32 numpy arrays（个数由算子决定）
-        type_a, type_b: 前两个输入的类型名
-        out0: 输出类型过滤
-        compute: 计算精度过滤
+        query: ComputeKey 查询条件（部分填写，None 字段不过滤）
 
     Returns:
         {"result": np.ndarray, "key": ComputeKey}
     """
-    info = get_compute_info(op, type_a, type_b, out0=out0, compute=compute)
-    if info is None:
-        raise ManifestNotFound(
-            f"compute({op}, {type_a}, {type_b}) 未在 COMPUTE 表中注册。"
-        )
+    info = require_compute_info(query)
+    op = query.op
     func_name = info["func"]
     lib = _get_lib()
     func = getattr(lib, func_name, None)
@@ -80,16 +73,15 @@ def compute(op: str, *inputs: np.ndarray,
         raise GoldenNotAvailable(
             f"C 函数 '{func_name}' 在 .so 中不存在。"
         )
-    from .op_convention import get_convention
-    conv = get_convention(op)
-    if conv is None:
-        raise ConventionNotFound(f"算子 '{op}' 无 OpConvention。")
+    from .op_convention import require_convention
+    conv = require_convention(op)
 
     inputs_f32 = [inp.astype(np.float32) for inp in inputs]
-    out_np = conv.call_c_func(func, *inputs_f32)
+    key = info["key"]
+    out_np = conv.call_c_func(func, *inputs_f32, compute_key=key)
     return {
         "result": out_np,
-        "key": info["key"],
+        "key": key,
     }
 
 
@@ -100,44 +92,21 @@ def compute(op: str, *inputs: np.ndarray,
 _lib_cache = None
 
 def _get_lib():
-    """懒加载 C++ 绑定模块。
-
-    加载顺序:
-      1. sys.path 上的 _raw_bindings（用户自行安装的真 .so）
-      2. golden_c/build/ 下的编译产物
-      3. fake_so（纯 Python 模拟，开发/测试用）
-    """
+    """加载 C++ 绑定模块（make build-golden 编译产物在 build/ 目录）。"""
     global _lib_cache
     if _lib_cache is not None:
         return _lib_cache
 
-    # 1. sys.path 上直接 import
+    import sys
+    from ..config import GOLDEN_BUILD_DIR
+    build_dir = str(GOLDEN_BUILD_DIR)
+    if GOLDEN_BUILD_DIR.exists() and build_dir not in sys.path:
+        sys.path.insert(0, build_dir)
     try:
         import _raw_bindings
         _lib_cache = _raw_bindings
         return _lib_cache
     except ImportError:
-        pass
-
-    # 2. src/dsp/golden/build/ 目录（bindings.cpp 编译产物）
-    import sys
-    from pathlib import Path
-    build_dir = Path(__file__).resolve().parent / "build"
-    if build_dir.exists() and str(build_dir) not in sys.path:
-        sys.path.insert(0, str(build_dir))
-        try:
-            import _raw_bindings
-            _lib_cache = _raw_bindings
-            return _lib_cache
-        except ImportError:
-            pass
-
-    # 3. fake_so（纯 Python 模拟）
-    try:
-        from . import fake_so
-        _lib_cache = fake_so
-        return _lib_cache
-    except ImportError:
-        pass
-
-    raise ImportError("golden: 未找到 _raw_bindings 或 fake_so")
+        raise ImportError(
+            "golden: 未找到 _raw_bindings。请运行 make build-golden 编译 C++ 绑定。"
+        )

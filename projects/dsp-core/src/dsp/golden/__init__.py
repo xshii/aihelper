@@ -19,5 +19,9 @@ from .manifest import (
 from .call import convert, compute, is_available
 
 # 注入 golden.convert 到 core.codec（解除 core→golden 依赖）
-from ..core.codec import GoldenCCodec
+from ..core.dtype import GoldenCCodec
 GoldenCCodec.set_golden_converter(convert, is_available)
+
+# 自动扫描 _raw_bindings 的 dsp_* 函数，注册到 manifest
+from .auto_register import auto_register
+auto_register()

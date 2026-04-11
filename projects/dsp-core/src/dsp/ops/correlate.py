@@ -2,18 +2,9 @@
 
 import torch
 from . import register_op
-from ..core.enums import DType
-from ..golden.manifest import ComputeKey
-
-D, A = DType.DUT, DType.ACC
 
 
-@register_op(golden_c={
-    ComputeKey(op="correlate", in0=D.INT16, in1=D.INT16, out0=A.INT32, acc=A.Q12_22, compute=D.INT16):
-        "sp_xcorr_int16_int16_oint32_acc_q12_22",
-    ComputeKey(op="correlate", in0=A.INT32, in1=A.INT32, out0=A.INT32, acc=A.Q24_40, compute=A.INT32):
-        "sp_xcorr_int32_int32_oint32_acc_q24_40",
-})
+@register_op
 def correlate(signal: torch.Tensor, template: torch.Tensor) -> torch.Tensor:
     """互相关。用 conv1d 实现（conv1d 本身就是互相关，不翻转 kernel）。
 
