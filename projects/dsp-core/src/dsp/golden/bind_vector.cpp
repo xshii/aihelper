@@ -6,7 +6,7 @@ template<typename T>
 void bind_add(py::module& m, const char* name) {
     m.def(name, [](py::array_t<double> dst, py::array_t<double> src0, py::array_t<double> src1, int count) {
         auto s0 = to_typed<T>(src0); auto s1 = to_typed<T>(src1);
-        std::vector<T> d(s0.size());
+        std::vector<T> d(num_blocks<T>(count));
         dsp_add<T>(d.data(), s0.data(), s1.data(), count);
         write_back(dst, d, count);
     });
@@ -16,7 +16,7 @@ template<typename T>
 void bind_abs(py::module& m, const char* name) {
     m.def(name, [](py::array_t<double> dst, py::array_t<double> src0, int count) {
         auto s0 = to_typed<T>(src0);
-        std::vector<T> d(s0.size());
+        std::vector<T> d(num_blocks<T>(count));
         dsp_abs<T>(d.data(), s0.data(), count);
         write_back(dst, d, count);
     });
@@ -27,7 +27,7 @@ template<typename Src0, typename Src1, typename Dst0,
 void bind_binary(py::module& m, const char* name) {
     m.def(name, [](py::array_t<double> dst, py::array_t<double> src0, py::array_t<double> src1, int count) {
         auto s0 = to_typed<Src0>(src0); auto s1 = to_typed<Src1>(src1);
-        std::vector<Dst0> d(count);
+        std::vector<Dst0> d(num_blocks<Dst0>(count));
         Fn(d.data(), s0.data(), s1.data(), count);
         write_back(dst, d, count);
     });

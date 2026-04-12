@@ -92,12 +92,8 @@ TYPES = {
         "c_names": ["BINT32", "int32_t", "int32"],
         "block_shapes": {"zz": (8, 8), "nn": (8, 16)},
     },
-    "float32": {
-        "c_names": ["f32", "Float32", "float32", "fp32", "float"],
-        "block_shapes": {"zz": (8, 8), "nn": (8, 8)},
-    },
-    "float64": {
-        "c_names": ["f64", "Float64", "float64", "fp64", "double"],
+    "double": {
+        "c_names": ["double", "f64", "float64"],
         "block_shapes": {"zz": (4, 4), "nn": (4, 4)},
     },
 }

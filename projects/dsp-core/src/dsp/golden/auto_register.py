@@ -15,9 +15,8 @@ from .manifest import ComputeKey, COMPUTE, CONVERT, _COMPUTE_BY_OP
 # 从枚举自动生成类型 token 映射
 # 函数名里用下划线（q12_22），枚举值用点号（q12.22），两种都要能匹配
 _TYPE_TOKENS = {}
-_TYPE_TOKENS["float32"] = "float32"
-_TYPE_TOKENS["double"] = "float64"
-for _enum_cls in (DType.DUT, DType.ACC):
+_TYPE_TOKENS["double"] = "double"
+for _enum_cls in (DType.DUT, DType.REAL, DType.ACC):
     for _v in _enum_cls:
         _TYPE_TOKENS[str(_v)] = _v                      # "bint16" → DType.DUT.BINT16
         _TYPE_TOKENS[str(_v).replace(".", "_")] = _v    # "q12_22" → DType.ACC.Q12_22

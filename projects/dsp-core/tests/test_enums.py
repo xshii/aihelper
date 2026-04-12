@@ -38,8 +38,7 @@ class TestRunMode:
 
 class TestDType:
     def test_real(self):
-        assert DType.REAL.FLOAT32 == "float32"
-        assert DType.REAL.FLOAT64 == "float64"
+        assert DType.REAL.DOUBLE == "double"
 
     def test_dut(self):
         assert DType.DUT.BINT8 == "bint8"
@@ -56,7 +55,7 @@ class TestDType:
     def test_is_str(self):
         assert isinstance(DType.DUT.BINT16, str)
         assert isinstance(DType.ACC.Q12_22, str)
-        assert isinstance(DType.REAL.FLOAT32, str)
+        assert isinstance(DType.REAL.DOUBLE, str)
 
     def test_hierarchy(self):
         """三级分类互不冲突。"""

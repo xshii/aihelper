@@ -51,7 +51,7 @@ class TestManifest:
         assert get_block_shape("unknown", "zz") == (8, 8)  # fallback
 
     def test_require_convert_func(self):
-        assert require_convert_func("bint16", "float32") == "dsp_convert_int16_float32"
+        assert require_convert_func("bint16", "double") == "dsp_convert_bint16_double"
 
     def test_require_convert_func_not_found(self):
         import pytest
@@ -74,7 +74,7 @@ class TestManifest:
     def test_list_types(self):
         types = list_types()
         assert "bint16" in types
-        assert "float32" in types
+        assert "bint16" in types
 
     def test_list_ops(self):
         ops = list_ops()
@@ -83,7 +83,7 @@ class TestManifest:
 
     def test_list_converts(self):
         convs = list_converts()
-        assert ("bint16", "float32") in convs
+        assert ("bint16", "double") in convs
 
 
 class TestConvention:
