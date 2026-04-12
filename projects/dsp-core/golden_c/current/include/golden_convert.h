@@ -1,155 +1,96 @@
 #pragma once
+#include <cstdint>
 #include "dsp/dsp_types.h"
 
 // ============================================================
-// 硬件转换接口（参考实现）
-//
-// 三类接口，签名各不相同：
-//
-// 1. double_to_dut: 返回 DUT 值，double 入参，逐元素，无 count
-//    调用方按 block size 计算 DUT 内存偏移
-//    int16_t gc_double_to_int16(double val);
-//
-// 2. dut_to_double: DUT 值入参，double 指针出参
-//    void gc_int16_to_double(int16_t val, double* out);
-//
-// 3. acc_to_dut: ACC 指针 + DUT 指针 + 附加参数
-//    void gc_q12_22_to_int16(int16_t* dst_zz, const int32_t* src_acc, int M, int N);
-//
-// ACC 和 double 都是非 block 型（flat ND）
-// DUT 是 block 型（ZZ/NN）
+// 硬件类型定义（纯 C 风格，平铺）
 // ============================================================
+
+typedef struct { int32_t raw; } Q12_22;
+typedef struct { int32_t raw; } Q24_40;
+
+typedef struct { int8_t  val[DSP_BLOCK_BYTES / sizeof(int8_t)];  } BINT8;   // 16 元素
+typedef struct { int16_t val[DSP_BLOCK_BYTES / sizeof(int16_t)]; } BINT16;  // 8 元素
+typedef struct { int32_t val[DSP_BLOCK_BYTES / sizeof(int32_t)]; } BINT32;  // 4 元素
+
+// ============================================================
+// 硬件转换接口 — 每次操作一个 subblock（一个 BINT = 128 bits）
+// ============================================================
+
+// DUT → double
+void BINT8ToDouble(BINT8 value, double *dst);
+void BINT16ToDouble(BINT16 value, double *dst);
+void BINT32ToDouble(BINT32 value, double *dst);
+
+// double → DUT
+BINT8  DoubleToBINT8(double *src);
+BINT16 DoubleToBINT16(double *src);
+BINT32 DoubleToBINT32(double *src);
+
+// ACC → DUT（一个 subblock）
+void acc_q12_22_to_bint8(Q12_22 *src, BINT8 *dst);
+void acc_q12_22_to_bint16(Q12_22 *src, BINT16 *dst);
+void acc_q12_22_to_bint32(Q12_22 *src, BINT32 *dst);
+void acc_q24_40_to_bint32(Q24_40 *src, BINT32 *dst);
 
 
 // ============================================================
-// double_to_dut — 逐元素，返回 DUT 值
+// 参考实现（demo 用，真实硬件替换）
 // ============================================================
 
-inline int8_t gc_double_to_int8(double val) {
-    if (val > 127.0) return 127;
-    if (val < -128.0) return -128;
-    return static_cast<int8_t>(val > 0 ? val + 0.5 : val - 0.5);
+inline void BINT8ToDouble(BINT8 value, double *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++)
+        dst[i] = (double)value.val[i];
+}
+inline void BINT16ToDouble(BINT16 value, double *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++)
+        dst[i] = (double)value.val[i];
+}
+inline void BINT32ToDouble(BINT32 value, double *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++)
+        dst[i] = (double)value.val[i];
 }
 
-inline int16_t gc_double_to_int16(double val) {
-    if (val > 32767.0) return 32767;
-    if (val < -32768.0) return -32768;
-    return static_cast<int16_t>(val > 0 ? val + 0.5 : val - 0.5);
+inline BINT8 DoubleToBINT8(double *src) {
+    BINT8 r;
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++)
+        r.val[i] = (src[i] > 127) ? 127 : (src[i] < -128) ? -128 : (int8_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
+    return r;
+}
+inline BINT16 DoubleToBINT16(double *src) {
+    BINT16 r;
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++)
+        r.val[i] = (src[i] > 32767) ? 32767 : (src[i] < -32768) ? -32768 : (int16_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
+    return r;
+}
+inline BINT32 DoubleToBINT32(double *src) {
+    BINT32 r;
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++)
+        r.val[i] = (src[i] > 2147483647.0) ? 2147483647 : (src[i] < -2147483648.0) ? -2147483648 : (int32_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
+    return r;
 }
 
-inline int32_t gc_double_to_int32(double val) {
-    if (val > 2147483647.0) return 2147483647;
-    if (val < -2147483648.0) return -2147483648;
-    return static_cast<int32_t>(val > 0 ? val + 0.5 : val - 0.5);
-}
-
-
-// ============================================================
-// dut_to_double — DUT 值入参，double 指针出参
-// ============================================================
-
-inline void gc_int8_to_double(int8_t val, double* out) {
-    *out = static_cast<double>(val);
-}
-
-inline void gc_int16_to_double(int16_t val, double* out) {
-    *out = static_cast<double>(val);
-}
-
-inline void gc_int32_to_double(int32_t val, double* out) {
-    *out = static_cast<double>(val);
-}
-
-
-// ============================================================
-// acc_to_dut — ACC 指针 → DUT 指针
-//   ACC 是 flat（ND），DUT 输出也是 flat（block 排列由调用方处理）
-// ============================================================
-
-inline void gc_q12_22_to_int16(int16_t* dst, const q12_22_t* src, int count) {
-    for (int i = 0; i < count; i++) {
-        Q12_22 acc(static_cast<int64_t>(src[i].raw));
-        dst[i] = acc.to_int16();
+inline void acc_q12_22_to_bint8(Q12_22 *src, BINT8 *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++) {
+        int64_t s = (int64_t)src[i].raw >> 22;
+        dst->val[i] = (s > 127) ? 127 : (s < -128) ? -128 : (int8_t)s;
     }
 }
-
-inline void gc_q12_22_to_int32(int32_t* dst, const q12_22_t* src, int count) {
-    for (int i = 0; i < count; i++) {
-        Q12_22 acc(static_cast<int64_t>(src[i].raw));
-        dst[i] = acc.to_int32();
+inline void acc_q12_22_to_bint16(Q12_22 *src, BINT16 *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++) {
+        int64_t s = (int64_t)src[i].raw >> 22;
+        dst->val[i] = (s > 32767) ? 32767 : (s < -32768) ? -32768 : (int16_t)s;
     }
 }
-
-inline void gc_q24_40_to_int32(int32_t* dst, const q24_40_t* src, int count) {
-    for (int i = 0; i < count; i++) {
-        Q24_40 acc(static_cast<int64_t>(src[i].raw));
-        dst[i] = acc.to_int32();
+inline void acc_q12_22_to_bint32(Q12_22 *src, BINT32 *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++) {
+        int64_t s = (int64_t)src[i].raw >> 22;
+        dst->val[i] = (s > 2147483647LL) ? 2147483647 : (s < -2147483648LL) ? -2147483648 : (int32_t)s;
     }
 }
-
-
-
-// ============================================================
-// acc_to_float32 — ACC → float32（比数用）
-// ============================================================
-
-inline void gc_q12_22_to_double(double* dst, const q12_22_t* src, int count) {
-    for (int i = 0; i < count; i++) {
-        Q12_22 acc(static_cast<int64_t>(src[i].raw));
-        dst[i] = acc.to_double();
+inline void acc_q24_40_to_bint32(Q24_40 *src, BINT32 *dst) {
+    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++) {
+        int64_t s = (int64_t)src[i].raw >> 40;
+        dst->val[i] = (s > 2147483647LL) ? 2147483647 : (s < -2147483648LL) ? -2147483648 : (int32_t)s;
     }
-}
-
-inline void gc_q24_40_to_double(double* dst, const q24_40_t* src, int count) {
-    for (int i = 0; i < count; i++) {
-        Q24_40 acc(static_cast<int64_t>(src[i].raw));
-        dst[i] = acc.to_double();
-    }
-}
-
-
-// ============================================================
-// 批量便捷函数 — 内部循环调用逐元素接口
-// 供 binding 层 to_typed / write_back 使用
-// ============================================================
-
-inline void convert_double_to_int8(int8_t* dst, const double* src, int count) {
-    for (int i = 0; i < count; i++) dst[i] = gc_double_to_int8(static_cast<double>(src[i]));
-}
-inline void convert_double_to_int16(int16_t* dst, const double* src, int count) {
-    for (int i = 0; i < count; i++) dst[i] = gc_double_to_int16(static_cast<double>(src[i]));
-}
-inline void convert_double_to_int32(int32_t* dst, const double* src, int count) {
-    for (int i = 0; i < count; i++) dst[i] = gc_double_to_int32(static_cast<double>(src[i]));
-}
-
-inline void convert_int8_to_double(double* dst, const int8_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int8_to_double(src[i], &d); dst[i] = static_cast<double>(d); }
-}
-inline void convert_int16_to_double(double* dst, const int16_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int16_to_double(src[i], &d); dst[i] = static_cast<double>(d); }
-}
-inline void convert_int32_to_double(double* dst, const int32_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int32_to_double(src[i], &d); dst[i] = static_cast<double>(d); }
-}
-
-inline void convert_q12_22_to_double(double* dst, const q12_22_t* src, int count) {
-    gc_q12_22_to_double(dst, src, count);
-}
-inline void convert_q24_40_to_double(double* dst, const q24_40_t* src, int count) {
-    gc_q24_40_to_double(dst, src, count);
-}
-
-// DUT ↔ DUT
-inline void convert_int8_to_int16(int16_t* dst, const int8_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int8_to_double(src[i], &d); dst[i] = gc_double_to_int16(d); }
-}
-inline void convert_int16_to_int8(int8_t* dst, const int16_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int16_to_double(src[i], &d); dst[i] = gc_double_to_int8(d); }
-}
-inline void convert_int16_to_int32(int32_t* dst, const int16_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int16_to_double(src[i], &d); dst[i] = gc_double_to_int32(d); }
-}
-inline void convert_int32_to_int16(int16_t* dst, const int32_t* src, int count) {
-    for (int i = 0; i < count; i++) { double d; gc_int32_to_double(src[i], &d); dst[i] = gc_double_to_int16(d); }
 }

@@ -16,21 +16,21 @@ void dsp_matmul(Dst0* out_zz, const Src0* input_zz, const Src1* weight_nn, int M
 template<> inline void dsp_matmul<bint16, bint16, bint32>(
     bint32* out_zz, const bint16* input_zz, const bint16* weight_nn, int M, int K, int N) {
     std::vector<q12_22_t> acc(M * N);
-    sp_gemm_int16_int16_oint32_acc_q12_22(acc.data(), CC(int16_t, input_zz), CC(int16_t, weight_nn), M, K, N);
-    gc_q12_22_to_int32(reinterpret_cast<int32_t*>(out_zz), acc.data(), M * N);
+    sp_gemm_int16_int16_oint32_acc_q12_22(acc.data(), reinterpret_cast<const BINT16*>(input_zz), reinterpret_cast<const BINT16*>(weight_nn), M, K, N);
+    GC_Q12_22_TO_INT32(reinterpret_cast<BINT32*>(out_zz), acc.data(), M * N);
 }
 
 template<> inline void dsp_matmul<bint16, bint16, bint16>(
     bint16* out_zz, const bint16* input_zz, const bint16* weight_nn, int M, int K, int N) {
-    sp_gemm_int16_int16_oint16_acc_q12_22(reinterpret_cast<int16_t*>(out_zz),
-        CC(int16_t, input_zz), CC(int16_t, weight_nn), M, K, N);
+    sp_gemm_int16_int16_oint16_acc_q12_22(reinterpret_cast<BINT16*>(out_zz),
+        reinterpret_cast<const BINT16*>(input_zz), reinterpret_cast<const BINT16*>(weight_nn), M, K, N);
 }
 
 template<> inline void dsp_matmul<bint32, bint32, bint32>(
     bint32* out_zz, const bint32* input_zz, const bint32* weight_nn, int M, int K, int N) {
     std::vector<q24_40_t> acc(M * N);
-    sp_gemm_int32_int32_oint32_acc_q24_40(acc.data(), CC(int32_t, input_zz), CC(int32_t, weight_nn), M, K, N);
-    gc_q24_40_to_int32(reinterpret_cast<int32_t*>(out_zz), acc.data(), M * N);
+    sp_gemm_int32_int32_oint32_acc_q24_40(acc.data(), reinterpret_cast<const BINT32*>(input_zz), reinterpret_cast<const BINT32*>(weight_nn), M, K, N);
+    GC_Q24_40_TO_INT32(reinterpret_cast<BINT32*>(out_zz), acc.data(), M * N);
 }
 
 
@@ -42,7 +42,7 @@ template<> inline void dsp_linear<bint16, bint16, int32_t, bint16>(
     bint16* out_zz, const bint16* input_zz, const bint16* weight_nn,
     const int32_t* bias_nd, int scale_exp, int M, int K, int N) {
     sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22(
-        reinterpret_cast<int16_t*>(out_zz), CC(int16_t, input_zz), CC(int16_t, weight_nn),
+        reinterpret_cast<BINT16*>(out_zz), reinterpret_cast<const BINT16*>(input_zz), reinterpret_cast<const BINT16*>(weight_nn),
         const_cast<int32_t*>(bias_nd), scale_exp, M, K, N);
 }
 
@@ -51,9 +51,9 @@ template<> inline void dsp_linear<bint16, bint16, int32_t, bint32>(
     const int32_t* bias_nd, int scale_exp, int M, int K, int N) {
     std::vector<q12_22_t> acc(M * N);
     sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22(
-        acc.data(), CC(int16_t, input_zz), CC(int16_t, weight_nn),
+        acc.data(), reinterpret_cast<const BINT16*>(input_zz), reinterpret_cast<const BINT16*>(weight_nn),
         const_cast<int32_t*>(bias_nd), scale_exp, M, K, N);
-    gc_q12_22_to_int32(reinterpret_cast<int32_t*>(out_zz), acc.data(), M * N);
+    GC_Q12_22_TO_INT32(reinterpret_cast<BINT32*>(out_zz), acc.data(), M * N);
 }
 
 template<> inline void dsp_linear<bint32, bint32, int32_t, bint32>(
@@ -61,9 +61,9 @@ template<> inline void dsp_linear<bint32, bint32, int32_t, bint32>(
     const int32_t* bias_nd, int scale_exp, int M, int K, int N) {
     std::vector<q24_40_t> acc(M * N);
     sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40(
-        acc.data(), CC(int32_t, input_zz), CC(int32_t, weight_nn),
+        acc.data(), reinterpret_cast<const BINT32*>(input_zz), reinterpret_cast<const BINT32*>(weight_nn),
         const_cast<int32_t*>(bias_nd), scale_exp, M, K, N);
-    gc_q24_40_to_int32(reinterpret_cast<int32_t*>(out_zz), acc.data(), M * N);
+    GC_Q24_40_TO_INT32(reinterpret_cast<BINT32*>(out_zz), acc.data(), M * N);
 }
 
 #undef CC

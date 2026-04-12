@@ -23,7 +23,7 @@ template<> inline void dsp_mul<bint16, bint16, bint32>(
     bint32* out_nd, const bint16* src0_nd, const bint16* src1_nd, int count) {
     std::vector<q12_22_t> acc(count);
     sp_vmul_int16_int16_oint32_acc_q12_22(acc.data(), CC(int16_t, src0_nd), CC(int16_t, src1_nd), count);
-    gc_q12_22_to_int32(reinterpret_cast<int32_t*>(out_nd), acc.data(), count);
+    GC_Q12_22_TO_INT32(reinterpret_cast<int32_t*>(out_nd), acc.data(), count);
 }
 
 // --- abs ---
@@ -44,14 +44,14 @@ template<> inline void dsp_xcorr<bint16, bint16, bint32>(
     bint32* out_nd, const bint16* signal_nd, const bint16* template_nd, int signal_len) {
     std::vector<q12_22_t> acc(signal_len);
     sp_xcorr_int16_int16_oint32_acc_q12_22(acc.data(), CC(int16_t, signal_nd), CC(int16_t, template_nd), signal_len);
-    gc_q12_22_to_int32(reinterpret_cast<int32_t*>(out_nd), acc.data(), signal_len);
+    GC_Q12_22_TO_INT32(reinterpret_cast<int32_t*>(out_nd), acc.data(), signal_len);
 }
 
 template<> inline void dsp_xcorr<bint32, bint32, bint32>(
     bint32* out_nd, const bint32* signal_nd, const bint32* template_nd, int signal_len) {
     std::vector<q24_40_t> acc(signal_len);
     sp_xcorr_int32_int32_oint32_acc_q24_40(acc.data(), CC(int32_t, signal_nd), CC(int32_t, template_nd), signal_len);
-    gc_q24_40_to_int32(reinterpret_cast<int32_t*>(out_nd), acc.data(), signal_len);
+    GC_Q24_40_TO_INT32(reinterpret_cast<int32_t*>(out_nd), acc.data(), signal_len);
 }
 
 // ============================================================
