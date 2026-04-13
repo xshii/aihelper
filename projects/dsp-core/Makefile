@@ -45,11 +45,12 @@ dev: install
 	@echo "  make quality   — 复杂度 + 死代码"
 	@echo "  make ci        — 全量 CI"
 
+# 完整测试 — 读 pyproject.toml 的 testpaths（tests/ + src/dsp/ops/）
 test:
-	$(PYTEST) tests/ -v
+	$(PYTEST) -v
 
 test-ut:
-	$(PYTEST) tests/ut -v
+	$(PYTEST) tests/ut src/dsp/ops -v
 
 test-it:
 	$(PYTEST) tests/it -v
@@ -58,7 +59,7 @@ test-st:
 	$(PYTEST) tests/st -v
 
 test-cov:
-	$(PYTEST) tests/ -v --cov=dsp --cov-report=term-missing
+	$(PYTEST) -v --cov=dsp --cov-report=term-missing
 
 # E2E smoke — 直接跑 attention example
 smoke:

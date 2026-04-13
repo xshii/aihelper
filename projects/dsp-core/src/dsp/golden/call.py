@@ -11,10 +11,14 @@ block 格式是上层（data 模块）的事。
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from .manifest import require_convert_func, require_compute_info, ComputeKey
 from ..core.errors import GoldenNotAvailable
+
+logger = logging.getLogger("dsp.golden")
 
 
 def is_available() -> bool:
