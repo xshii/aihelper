@@ -151,29 +151,63 @@ def _auto_build() -> bool:
 
 
 def _get_lib():
-    """加载 C++ 绑定模块。找不到时自动触发一次编译。"""
+    """加载 C++ 绑定模块。找不到时自动触发一次编译。
+
+    加载策略（绕开 sys.path + ABI tag 匹配的陷阱）:
+      1. 优先找当前 Python ABI tag 的 .so（sysconfig.EXT_SUFFIX）
+      2. 其次找任意 _raw_bindings*.so（可能是别的 Python 编的，会报清晰错误）
+      3. 用 importlib.util.spec_from_file_location 按绝对路径加载
+    """
     global _lib_cache
     if _lib_cache is not None:
         return _lib_cache
 
-    import sys
     from ..config import GOLDEN_BUILD_DIR
-    build_dir = str(GOLDEN_BUILD_DIR)
 
     for attempt in range(2):
-        if GOLDEN_BUILD_DIR.exists() and build_dir not in sys.path:
-            sys.path.insert(0, build_dir)
-        try:
-            import _raw_bindings
-            _lib_cache = _raw_bindings
+        mod = _load_by_path(GOLDEN_BUILD_DIR)
+        if mod is not None:
+            _lib_cache = mod
             return _lib_cache
-        except ImportError:
-            if attempt == 0 and _auto_build():
-                # 编译成功，重新 import（清除之前的失败缓存）
-                if "_raw_bindings" in sys.modules:
-                    del sys.modules["_raw_bindings"]
+        if attempt == 0 and _auto_build():
+            continue
+        raise ImportError(
+            "golden: 未找到 _raw_bindings。自动编译失败或 .so 与当前 Python ABI 不匹配。\n"
+            f"当前 Python: EXT_SUFFIX={_ext_suffix()}\n"
+            f"build_dir:   {GOLDEN_BUILD_DIR}\n"
+            "手动修复: 删掉 build 目录重新 make build-golden（确认用同一个 Python）。"
+        )
+
+
+def _ext_suffix() -> str:
+    import sysconfig
+    return sysconfig.get_config_var("EXT_SUFFIX") or ".so"
+
+
+def _load_by_path(build_dir):
+    """扫 build_dir 里的 _raw_bindings*.so，按路径加载。找不到/不匹配返回 None。"""
+    import importlib.util
+    from pathlib import Path
+
+    build_dir = Path(build_dir)
+    if not build_dir.exists():
+        return None
+
+    # 1) 优先匹配当前 Python ABI
+    exact = build_dir / f"_raw_bindings{_ext_suffix()}"
+    candidates = [exact] if exact.exists() else sorted(build_dir.glob("_raw_bindings*.so"))
+    if not candidates:
+        return None
+
+    for so_path in candidates:
+        try:
+            spec = importlib.util.spec_from_file_location("_raw_bindings", so_path)
+            if spec is None or spec.loader is None:
                 continue
-            raise ImportError(
-                "golden: 未找到 _raw_bindings。自动编译失败。\n"
-                "手动修复: make build-golden（需要先 pip install pybind11）。"
-            )
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            return mod
+        except ImportError as e:
+            logger.warning("加载 %s 失败（可能是 ABI 不匹配）: %s", so_path.name, e)
+            continue
+    return None

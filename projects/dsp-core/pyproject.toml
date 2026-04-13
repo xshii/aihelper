@@ -34,6 +34,8 @@ all = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+# NOTE: op 测试文件 src/dsp/ops/<op>/test_<op>.py 会被 setuptools 当成模块
+# 一起打包。dev-only 框架无所谓；真正发 wheel 时再通过 MANIFEST.in 剔除。
 
 # ============================================================
 # import-linter: 强制分层依赖
@@ -61,12 +63,19 @@ source_modules = ["dsp.data"]
 forbidden_modules = ["dsp.ops"]
 
 [[tool.importlinter.contracts]]
-name = "分层顺序: core → golden → data → ops → context"
+name = "分层顺序: core → golden → data"
 type = "layers"
-layers = ["dsp.context", "dsp.ops", "dsp.data", "dsp.golden", "dsp.core"]
+layers = ["dsp.data", "dsp.golden", "dsp.core"]
+# ops ↔ context 的分离不在这里拦：
+#   - ops 不该 import context 靠 hook 注入模式保证（真直接 import 会立即循环崩）
+#   - op 测试文件和 op 代码住在同一目录，测试需要 dsp.context.set_mode 切模式
+# 上面三个 forbidden 合约已经覆盖了真正关键的架构边界（core/golden/data 不被反向依赖）
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# 测试分两类入口:
+#   tests/            — 公共层测试（core / golden / data / context 等）
+#   src/dsp/ops/      — 每个 op 的测试和 op 代码住在同一目录
+testpaths = ["tests", "src/dsp/ops"]
 addopts = "-v --tb=short"
 markers = [
     "ut: 单元测试 — 单函数/单类，无 I/O，无副作用",

@@ -1,9 +1,14 @@
 """自动扫描 _raw_bindings 模块的 dsp_* 函数，注册到 manifest。
 
 命名规则:
-    dsp_{op}_{dut_name}                  — compute 函数 (如 dsp_matmul_bf16)
-    dsp_{op}_{dut_name}_{compute_type}   — 带 compute type (如 dsp_layernorm_bf16_int32)
-    dsp_convert_{src}_{dst}              — convert 函数
+    dsp_{op}_{dut}                           — 同构 (如 dsp_layernorm1d_bf16)
+    dsp_{op}_{dut}_{compute}                 — 同构 + compute type
+    dsp_{op}_{dut_a}_dutw_{dut_w}            — 异构 (如 dsp_matmul_bf16_dutw_bf8)
+    dsp_{op}_{dut_a}_dutw_{dut_w}_{compute}  — 异构 + compute type
+    dsp_convert_{src}_{dst}                  — convert 函数
+
+dutw marker 表示 weight (src1) 使用独立的 DUT 类型；bias (src2) 和输出 (dst0)
+跟 input (src0) 同类型。
 
 Python 侧零手动注册：binding 暴露的函数名即 manifest 的 source of truth。
 """
@@ -66,35 +71,42 @@ def _register_convert(name: str):
 
 
 def _register_compute(name: str):
-    """dsp_{op}_{dut}_{compute_type?} → COMPUTE 表。
+    """解析 binding 函数名 → ComputeKey，写入 COMPUTE + _COMPUTE_BY_OP。"""
+    parts = name[len("dsp_"):].split("_")  # e.g. ["matmul","bf16","dutw","bf8","int32"]
 
-    新命名: dsp_matmul_bf16, dsp_layernorm_bf16_int32
-    所有输入/输出/bias 都是同一个 DUT 类型。
-    """
-    parts = name[len("dsp_"):].split("_")  # e.g. ["matmul", "bf16"] or ["layernorm", "bf16", "int32"]
-
-    # 从尾部提取 compute type (如果有)
+    # 1. 尾部 compute type (如 int32)
     if parts and parts[-1] in _COMPUTE_TOKENS:
-        parts.pop()  # 去掉尾部的 compute type (如 "int32")
+        parts.pop()
 
-    # 从尾部提取 DUT type
-    dut = None
-    # 尝试匹配 (如 bf16)
-    if len(parts) >= 2:
-        candidate = parts[-1]
-        if candidate in _TYPE_TOKENS:
-            dut = _TYPE_TOKENS[candidate]
+    # 2. 识别 dutw marker
+    dut_a = None
+    dut_w = None
+    if "dutw" in parts:
+        idx = parts.index("dutw")
+        # 形式: [..., dut_a, "dutw", dut_w]
+        if idx >= 1 and idx + 1 < len(parts):
+            dut_a_tok = parts[idx - 1]
+            dut_w_tok = parts[idx + 1]
+            if dut_a_tok in _TYPE_TOKENS and dut_w_tok in _TYPE_TOKENS:
+                dut_a = _TYPE_TOKENS[dut_a_tok]
+                dut_w = _TYPE_TOKENS[dut_w_tok]
+                parts = parts[:idx - 1]  # op 是 dut_a 之前的部分
+    else:
+        # 3. 同构形式: 尾部一个 DUT token
+        if len(parts) >= 2 and parts[-1] in _TYPE_TOKENS:
+            dut_a = _TYPE_TOKENS[parts[-1]]
+            dut_w = dut_a
             parts.pop()
 
-    if dut is None:
+    if dut_a is None:
         return
 
-    # 剩余是 op 名
     op = "_".join(parts)
     if not op:
         return
 
-    key = ComputeKey(op=op, src0=dut, dst0=dut)
+    # bias (src2) 和输出 (dst0) 都跟 input 同类型
+    key = ComputeKey(op=op, src0=dut_a, src1=dut_w, dst0=dut_a)
     if key not in COMPUTE:
         COMPUTE[key] = name
         _COMPUTE_BY_OP.setdefault(key.op, []).append((key, name))

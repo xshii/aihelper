@@ -5,6 +5,9 @@ import torch
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor,
            *, compute: str | None = None, output_dtype: str | None = None) -> torch.Tensor: ...
 
+def matmul(x: torch.Tensor, weight: torch.Tensor,
+           *, compute: str | None = None, output_dtype: str | None = None) -> torch.Tensor: ...
+
 def layernorm1d(x: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor,
                 *, compute: str | None = None, output_dtype: str | None = None) -> torch.Tensor: ...
 

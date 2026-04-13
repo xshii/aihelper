@@ -47,20 +47,23 @@ def _pad_and_flatten(data: np.ndarray, dtype_name: str, fmt) -> np.ndarray:
     return padded.flatten().copy()  # 行优先 (默认 C order)
 
 
-def _prepare_2d(src0_2d, src1_2d, dtype_name):
+def _prepare_2d(src0_2d, src1_2d, dtype_a, dtype_w):
     """单个 2D 矩阵对的准备：pad + flatten（ZZ/NN 行列优先）。
+
+    异构权重: input 用 dtype_a 的 ZZ block，weight 用 dtype_w 的 NN block。
+    同构时 dtype_a == dtype_w。
 
     Returns:
         (input_flat, weight_flat, M, K, N, orig_M, orig_N)
     """
     orig_M, K, orig_N = src0_2d.shape[0], src0_2d.shape[1], src1_2d.shape[1]
 
-    input_flat = _pad_and_flatten(src0_2d, dtype_name, ZZ)   # 行优先
-    weight_flat = _pad_and_flatten(src1_2d, dtype_name, NN)  # 列优先
+    input_flat = _pad_and_flatten(src0_2d, dtype_a, ZZ)   # 行优先，input dtype
+    weight_flat = _pad_and_flatten(src1_2d, dtype_w, NN)  # 列优先，weight dtype
 
-    bh, bw = get_block_shape(dtype_name, ZZ)
+    bh, bw = get_block_shape(dtype_a, ZZ)
     M, K_padded = pad_dim(orig_M, bh), pad_dim(K, bw)
-    _, bw_nn = get_block_shape(dtype_name, NN)
+    _, bw_nn = get_block_shape(dtype_w, NN)
     N = pad_dim(orig_N, bw_nn)
 
     return input_flat, weight_flat, M, K_padded, N, orig_M, orig_N
@@ -88,7 +91,8 @@ class MatmulConvention(OpConvention, op="matmul"):
 
     def call_c_func(self, func, *inputs_np, **params):
         key = params.get("compute_key")
-        dtype_name = str(key.src0) if key else "bf16"
+        dtype_a = str(key.src0) if key else "bf16"
+        dtype_w = str(key.src1) if key and key.src1 else dtype_a
 
         batch_shape, src0_list = _to_2d_batches(inputs_np[0])
         _, src1_list = _to_2d_batches(inputs_np[1])
@@ -98,7 +102,7 @@ class MatmulConvention(OpConvention, op="matmul"):
 
         results = []
         for s0, s1 in zip(src0_list, src1_list):
-            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_name)
+            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_a, dtype_w)
             dst_flat = np.zeros(M * N, dtype=np.double)
             func(dst_flat, input_flat, weight_flat, M, K, N)
             results.append(dst_flat.reshape(M, N)[:orig_M, :orig_N].copy())
@@ -119,7 +123,8 @@ class LinearConvention(OpConvention, op="linear"):
 
     def call_c_func(self, func, *inputs_np, **params):
         key = params.get("compute_key")
-        dtype_name = str(key.src0) if key else "bf16"
+        dtype_a = str(key.src0) if key else "bf16"
+        dtype_w = str(key.src1) if key and key.src1 else dtype_a
         scale_exp = params.get("scale_exp", 0)
 
         batch_shape, src0_list = _to_2d_batches(inputs_np[0])
@@ -127,21 +132,17 @@ class LinearConvention(OpConvention, op="linear"):
         if len(src1_list) == 1 and len(src0_list) > 1:
             src1_list = src1_list * len(src0_list)
 
-        has_bias = len(inputs_np) > 2 and inputs_np[2] is not None
+        if len(inputs_np) < 3 or inputs_np[2] is None:
+            raise ValueError("linear 需要 bias 输入；无 bias 请用 matmul op")
 
+        bias = inputs_np[2]
         results = []
         for s0, s1 in zip(src0_list, src1_list):
-            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_name)
+            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_a, dtype_w)
             dst_flat = np.zeros(M * N, dtype=np.double)
-
-            if has_bias:
-                bias = inputs_np[2]
-                bias_pad = np.zeros(N, dtype=bias.dtype)
-                bias_pad[:orig_N] = bias.flatten()[:orig_N]
-                func(dst_flat, input_flat, weight_flat, bias_pad, scale_exp, M, K, N)
-            else:
-                func(dst_flat, input_flat, weight_flat, scale_exp, M, K, N)
-
+            bias_pad = np.zeros(N, dtype=bias.dtype)
+            bias_pad[:orig_N] = bias.flatten()[:orig_N]
+            func(dst_flat, input_flat, weight_flat, bias_pad, scale_exp, M, K, N)
             results.append(dst_flat.reshape(M, N)[:orig_M, :orig_N].copy())
 
         if not batch_shape:
@@ -217,3 +218,9 @@ def _wrap(data, dsp_dtype):
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
     """Linear: out = x @ weight + bias"""
     return torch.matmul(x, weight) + bias
+
+
+@register_op(weight=Format.NN)
+def matmul(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    """Matmul: out = x @ weight（无 bias 版本）"""
+    return torch.matmul(x, weight)
