@@ -44,16 +44,19 @@ import-linter 自动检查，违反即 CI 失败。
 ```mermaid
 graph LR
     subgraph core ["core — 类型系统"]
-        dtype["DSPDtype<br/>int16, int32, float32..."]
-        tensor["DSPTensor<br/>torch.Tensor 子类"]
-        codec["TypeCodec<br/>编解码器"]
-        enums["Mode / Format / DType<br/>字符串枚举"]
+        dtype["DSPDtype<br/>bf8, bf16, double"]
+        tensor["DSPTensor<br/>torch.Tensor 子类 (存储 torch.double)"]
+        codec["TypeCodec<br/>from_double / to_double / fake_quantize"]
+        block["block.py<br/>pad_to_block / to_block / from_block"]
+        convention["convention.py<br/>OpConvention 注册表"]
+        enums["Mode / Format / DType / TensorSource"]
     end
 
     subgraph golden ["golden — C++ 封装"]
         manifest["manifest.py<br/>ComputeKey → C 函数名"]
         call["call.py<br/>调用 C++ 绑定"]
-        convention["op_convention.py<br/>参数映射约定"]
+        auto["auto_register.py<br/>从 dsp_* 函数名自动建表"]
+        dispatch["dispatch.py<br/>桥接 ops → convention → C"]
     end
 
     subgraph data ["data — 数据管线"]
@@ -65,10 +68,10 @@ graph LR
         compare["compare.py<br/>比数"]
     end
 
-    subgraph ops ["ops — 算子"]
+    subgraph ops ["ops — 算子（每个 op 一个目录）"]
         register["@register_op<br/>装饰器 + wrapper"]
-        linear["linear.py<br/>+ math_strategy"]
-        correlate["correlate.py"]
+        linear["linear/<br/>__init__.py + dsp_matrix.h + bind.cpp"]
+        layernorm["layernorm/<br/>__init__.py + dsp_vector.h + bind.cpp"]
     end
 
     subgraph context ["context — 运行循环"]
@@ -92,7 +95,7 @@ sequenceDiagram
     participant OP as linear (torch)
     participant IO as save_op_inputs/output
 
-    U->>F: dsp.data.randn(4, 8, dtype=int16)
+    U->>F: dsp.data.randn(4, 8, dtype=bf16)
     F->>RL: intercepted_randn()
     RL-->>F: DSPTensor (_source="randn")
     F-->>U: x
@@ -162,43 +165,44 @@ sequenceDiagram
 ```mermaid
 classDiagram
     class DSPDtype {
-        +name: str
-        +torch_dtype: torch.dtype
-        +bits: int
-        +is_complex: bool
+        +name: str                "bf8 | bf16 | double"
+        +torch_dtype: torch.dtype "语义标签，非存储类型"
+        +subblock_size: int       "128-bit 寄存器内的元素数"
     }
 
     class DSPTensor {
         +_dsp_dtype: DSPDtype
-        +_source: str  "randn|op_output|None"
+        +_source: TensorSource    "RANDN | RANDN_QUANTIZED | OP_OUTPUT"
         +create(data, dsp_dtype)$ DSPTensor
         +torch() Tensor
-        +to_dsp(target) DSPTensor
         +fake_quantize() DSPTensor
         +dsp_dtype: DSPDtype
     }
 
     class TypeCodec {
         <<abstract>>
-        +to_float(data)*
-        +from_float(data)*
-        +fake_quantize(data)*
+        +to_double(raw, dtype)*
+        +from_double(t, dtype)*
+        +fake_quantize(t, dtype)*
     }
 
     class GoldenCCodec {
-        +to_float(data)
-        +from_float(data)
-        +fake_quantize(data)
+        +to_double(raw, dtype)    "走 golden C convert"
+        +from_double(t, dtype)    "走 golden C convert"
+        +fake_quantize(t, dtype)  "按 subblock_size 对齐后做 round trip"
     }
 
-    class IQ16Codec
-    class IQ32Codec
+    class PassthroughCodec {
+        +to_double(raw, dtype)    "raw.double()"
+        +from_double(t, dtype)    "t.to(torch_dtype)"
+    }
 
     DSPTensor --> DSPDtype : _dsp_dtype
-    DSPTensor --|> "torch.Tensor" : IS-A
+    DSPTensor --|> "torch.Tensor" : IS-A（存储始终 torch.double）
     GoldenCCodec --|> TypeCodec
-    IQ16Codec --|> GoldenCCodec : "dtype=int16 (auto-register)"
-    IQ32Codec --|> GoldenCCodec : "dtype=int32 (auto-register)"
+    PassthroughCodec --|> TypeCodec
+
+    note for GoldenCCodec "bf8 / bf16 都复用同一个 _golden_codec 实例\n不再为每个 dtype 造子类"
 ```
 
 ### 4.2 Golden C 封装
@@ -207,38 +211,29 @@ classDiagram
 classDiagram
     class ComputeKey {
         +op: str
-        +in0, in1, in2: str
-        +out0, out1, out2: str
-        +acc: str
-        +compute: str
+        +src0, src1, src2: str  "输入 dtype 字符串"
+        +dst0, dst1, dst2: str  "输出 dtype 字符串"
+        +compute_dtype: str     "可选 compute dtype"
     }
 
     class OpConvention {
         <<abstract>>
         +output_shape(*inputs)*
-        +call_c_func(func, *inputs_np)*
+        +call_c_func(func, *inputs_np, **params)*
     }
 
-    class LinearConvention {
-        +output_shape(*inputs)
-        +call_c_func(func, *inputs_np)
-    }
+    class MatmulConvention
+    class LinearConvention
+    class LayernormConvention
+    class TransposeConvention
 
-    class CorrelateConvention {
-        +output_shape(*inputs)
-        +call_c_func(func, *inputs_np)
-    }
+    MatmulConvention --|> OpConvention : "op='matmul'"
+    LinearConvention --|> OpConvention : "op='linear'"
+    LayernormConvention --|> OpConvention : "op='layernorm'"
+    TransposeConvention --|> OpConvention : "op='transpose' (纯 Python)"
 
-    class ElementwiseConvention {
-        +output_shape(*inputs)
-        +call_c_func(func, *inputs_np)
-    }
-
-    LinearConvention --|> OpConvention : "op='linear' (auto-register)"
-    CorrelateConvention --|> OpConvention : "op='correlate' (auto-register)"
-    ElementwiseConvention --|> OpConvention : "op=['add','mul','sub'] (auto-register)"
-
-    note for ComputeKey "manifest.COMPUTE 的 key\n3 输入 + 3 输出槽位"
+    note for OpConvention "__init_subclass__ 用 op= 参数自动注册到 _CONVENTIONS"
+    note for ComputeKey "manifest.COMPUTE 的 key\nauto_register 从 dsp_{op}_{dut} 函数名反解"
 ```
 
 ### 4.3 数据管线 (data)
@@ -277,7 +272,7 @@ classDiagram
     DataPipe --|> CompareMixin
     DataPipe --|> VizMixin
 
-    note for DataPipe "链式 API:\npipe.convert('int16').layout('zz').export('out.txt')"
+    note for DataPipe "链式 API:\npipe.layout(Format.ZZ).export('blocked.txt')"
 ```
 
 ---
@@ -295,15 +290,15 @@ graph TB
     end
 
     subgraph "Layer 2: 接 golden C"
-        L2["@register_op(golden_c={ComputeKey: 'c_func'})<br/>def linear(x, w, b): ..."]
+        L2["class LinearConvention(OpConvention, op='linear')<br/>bind.cpp 导出 dsp_linear_bf16<br/>(装饰器无需 golden_c 参数)"]
     end
 
     subgraph "Layer 3: 数学验证"
-        L3["@register_op(math_strategy=_math_fn)<br/>def linear(x, w, b): ..."]
+        L3["@register_op(weight=..., math_strategy=_math_fn)<br/>def linear(x, w, b): ..."]
     end
 
     L0 -->|加 format| L1
-    L1 -->|加 golden_c| L2
+    L1 -->|加 OpConvention + bind.cpp| L2
     L2 -->|加 math_strategy| L3
 
     style L0 fill:#c8e6c9
@@ -379,30 +374,33 @@ ops 和 data 永远不 import context，避免循环依赖。import-linter 强�
 
 | 模块 | 文件 | 一句话 |
 |------|------|--------|
-| core | `dtype.py` | DSPDtype 定义 + 注册表 |
-| core | `tensor.py` | DSPTensor (torch.Tensor 子类 + _dsp_dtype + _source) |
-| core | `dtype.py` | DType 枚举 + DSPDtype + TypeCodec / GoldenCCodec（统一在此文件） |
-| core | `enums.py` | Mode / Format / RunMode / DType 枚举 |
+| core | `dtype.py` | DType 枚举 + DSPDtype（bf8/bf16/double）+ TypeCodec + GoldenCCodec + PassthroughCodec |
+| core | `tensor.py` | DSPTensor（torch.Tensor 子类 + _dsp_dtype + _source，存储始终 torch.double） |
+| core | `block.py` | BlockShape / pad_dim / pad_to_block / to_block / from_block / format_to_dut |
+| core | `convention.py` | OpConvention 基类 + __init_subclass__ 自动注册到 _CONVENTIONS |
+| core | `enums.py` | Mode / Format / RunMode / TensorSource |
 | core | `errors.py` | 异常层级 + 修复提示 |
-| golden | `manifest.py` | TYPES / CONVERT / COMPUTE 三张表 |
+| golden | `bind_helpers.h` | to_dut / from_dut / num_blocks 模板（pybind11 桥接） |
+| golden | `bindings.cpp` | pybind11 顶层入口（编译为 _raw_bindings.so） |
+| golden | `manifest.py` | CONVERT / COMPUTE 表 + ComputeKey NamedTuple |
 | golden | `call.py` | convert() / compute() / is_available() |
-| golden | `dispatch.py` | dispatch_golden_c() — 桥接 ops → call |
-| golden | `op_convention.py` | OpConvention + __init_subclass__ 自动注册 |
-| golden | `bindings.cpp` | pybind11 绑定（编译为 _raw_bindings.so） |
-| data | `factory.py` | randn / zeros / ones (打 _source 标记) |
-| data | `datagen.py` | DataStrategy + generate_by_strategy |
-| data | `pipe.py` | DataPipe (Mixin 组合) |
-| data | `convert.py` | ConvertMixin (调 golden.convert) |
-| data | `layout.py` | LayoutMixin (block 分块) |
-| data | `io.py` | IOMixin (hex 文件) |
-| data | `compare.py` | CompareMixin + CompareResult |
+| golden | `auto_register.py` | 从 _raw_bindings 的 dsp_* 函数名反解并填 manifest |
+| golden | `dispatch.py` | dispatch_golden_c() — 桥接 ops → require_convention → call |
+| data | `factory.py` | randn / zeros / ones / tensor（一律 torch.double 存储，打 _source 标记） |
+| data | `datagen.py` | DataStrategy + generate_by_strategy（math / random / ...） |
+| data | `pipe.py` | DataPipe（Mixin 组合：layout + io + compare + viz） |
+| data | `layout.py` | LayoutMixin（ND ↔ ZZ / NN） |
+| data | `io.py` | IOMixin（hex txt 读写，按文件名 dtype 读写 double/bf16 bits） |
+| data | `compare.py` | CompareMixin + CompareResult（QSNR / cosine / max_diff） |
 | data | `report.py` | 跨模式比数报告 |
-| data | `viz.py` | VizMixin (matplotlib) |
-| ops | `__init__.py` | @register_op + 直接 re-export + hook 注入 |
-| ops | `linear.py` | linear + _linear_math_strategy |
-| ops | `correlate.py` | correlate (互相关) |
-| context | `__init__.py` | run() + hook 注入 + compute config |
-| context | `mode.py` | PseudoQuantMode / GoldenCMode |
-| context | `runloop.py` | 状态机 + intercepted_randn + 出数 |
+| data | `viz.py` | VizMixin（plotly HTML 报告） |
+| ops | `__init__.py` | _auto_import_ops: pkgutil 自动扫描 ops/ 下子目录 |
+| ops | `__init__.pyi` | Pylance 类型提示 stub |
+| ops | `_convert/` | dsp_convert.h + bind.cpp（double ↔ DUT 类型转换） |
+| ops | `linear/` | __init__.py（LinearConvention + math_strategy）+ dsp_matrix.h + bind.cpp |
+| ops | `layernorm/` | __init__.py + dsp_vector.h + bind.cpp |
+| ops | `transpose/` | __init__.py（纯 Python OpConvention，无 C） |
+| context | `__init__.py` | run() + hook 注入（set_ops_hooks + set_randn_interceptor） |
+| context | `mode.py` | torch / pseudo_quant / golden_c 的 dispatch mode |
+| context | `runloop.py` | 状态机 + intercepted_randn + save_op_inputs/output + load_op_inputs |
 | context | `case.py` | 目录命名 + seed 提取 |
-| — | `config.py` | 全局配置单例 |

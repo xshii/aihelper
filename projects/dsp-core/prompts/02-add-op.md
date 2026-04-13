@@ -1,171 +1,196 @@
 # 添加新的自定义算子
 
 ## 角色
-你是一个 PyTorch 工程师，负责为 DSP 框架添加一个新的自定义算子。
+你是一个 PyTorch 工程师，负责为 DSP 框架添加一个新算子。
 
 ## 任务
-给定算子的数学公式，写一个 torch 实现并注册到框架。
+给定算子的数学定义，在 `src/dsp/ops/<op>/__init__.py` 中完成 torch 参考实现 + C 调用约定 + （可选）math strategy 的全部注册。
 
 ## 背景
 
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+> **信息安全声明：** 强 AI 无法看到具体硬件细节。本 prompt 中所有类型名、函数名、C 绑定函数名均为示意，实际使用时以操作员提供的硬件手册为准。
 
-只有 torch 没有的算子需要注册。注册后：
+**一个 op = 一个子目录**（不是单文件）：
 
-```python
-result = dsp.ops.my_op(a, b)
+```
+src/dsp/ops/linear/
+├── __init__.py      ← Python: @register_op 函数 + OpConvention 子类 + math_strategy
+├── dsp_matrix.h     ← C++: dsp_{op}_{dut} 模板特化（调 golden 硬件接口）
+└── bind.cpp         ← pybind11: 把模板暴露给 Python
 ```
 
-框架自动处理伪量化、golden C 重定向、数据出数。你只需写纯 torch 实现。
+**三条自动化机制（弱 AI 需要理解，但不需要手动触发）：**
+
+1. **`ops/__init__.py::_auto_import_ops`** 会扫描 `ops/` 下所有子目录并 import —— 新 op 不需要手改任何 `__init__.py` import 语句。只要文件在，装饰器就会跑。
+2. **`golden/auto_register.py`** 扫描 `_raw_bindings.so` 里所有 `dsp_*` 函数，自动填 `manifest.COMPUTE` / `manifest.CONVERT`。`@register_op` **不需要** `golden_c=` 参数。
+3. **Pylance 类型提示** 通过 `src/dsp/ops/__init__.pyi` 声明 —— 新 op 如果希望 IDE 自动补全，加一行 stub 即可。
+
+**@register_op 的可选参数：**
+```python
+@register_op(
+    weight=Format.NN,              # 参数名到默认 Format 的 kwarg（可省）
+    math_strategy=_my_math_fn,     # 数学验证策略（可省）
+)
+```
+**没有 `golden_c` 参数**。
 
 ## 规则
-1. MUST: 用 `@register_op` 装饰器
-2. MUST: 函数参数名有语义（出数时用参数名命名文件）
-3. SHOULD: `golden_c={ComputeKey(...): "c_func_name"}` 映射 C 函数（有 C++ 实现时加）
-4. SHOULD: `weight=Format.NN` 指定默认内存格式（有格式需求时加）
-5. NEVER: 函数内部调 codec 或判断模式
-6. 如果不确定 golden_c 怎么填：先不加，用纯 torch 跑通再迭代
+
+1. MUST: 在 `src/dsp/ops/<op>/__init__.py` 定义算子（目录名 = op 名）
+2. MUST: `@register_op` 装饰纯 torch 参考实现，参数名有语义
+3. MUST: 如果要过 golden_c，额外定义一个 `OpConvention` 子类（见 prompt 06）
+4. SHOULD: 参数用 Format 提示（例如 `weight=Format.NN`）
+5. NEVER: 函数内部判断 mode / 直接调 codec / 直接调 golden
+6. NEVER: 在 `ops/__init__.py` 里加手动 import —— `_auto_import_ops` 会扫
+7. NEVER: 传 `golden_c={...}` 给装饰器（老 API 已废弃）
 
 ## 步骤
-1. 在 `src/dsp/ops/` 下创建新文件
-2. 用 `@register_op` 装饰器注册
-3. 在 `src/dsp/ops/__init__.py` 中 import 模块 + 加便捷函数
+
+1. 在 `src/dsp/ops/<op>/` 建目录 + 空文件 `__init__.py`
+2. 在 `__init__.py` 写：
+   - 如果有 C 绑定：`class <Op>Convention(OpConvention, op="<op>")` + `call_c_func`
+   - `@register_op(...)` 装饰的纯 torch 函数
+   - （可选）`_<op>_math_strategy(inputs, source_map) -> (replacements, expected)`
+3. 如果有 C 实现：按 prompt 03 加 `dsp_*.h` + `bind.cpp`
+4. 在 `src/dsp/ops/__init__.pyi` 加一行 stub（可选，让 Pylance 认识）
+5. 验证：
+   - `python -c "import dsp; print('my_op' in dsp.ops.list_ops())"`
+   - `python -m pytest tests/ut/ops -q`
+
+## 渐进式四阶段
+
+```
+阶段 1: 纯 torch             →  @register_op + torch 函数
+阶段 2: 加格式提示           →  @register_op(input=Format.ZZ, weight=Format.NN)
+阶段 3: 接 golden C          →  加 dsp_*.h + bind.cpp + OpConvention 子类（自动注册到 manifest）
+阶段 4: 加 math strategy     →  @register_op(math_strategy=fn) + 数学可验证的已知解
+```
 
 ## 输出格式
 
+### 阶段 1/2 模板（纯 torch + 格式提示）
+
 ```python
-# src/dsp/ops/beamform.py
+# src/dsp/ops/my_op/__init__.py
+"""my_op: 简述算子语义。"""
+
+from __future__ import annotations
 
 import torch
-from . import register_op
-from ..core.enums import DType, Format
-from ..golden.manifest import ComputeKey
 
-D, A = DType.DUT, DType.ACC
+from .. import register_op
+from ...core.enums import Format
 
-@register_op(
-    # 默认格式（可选）
-    weights=Format.NN,
-    # golden C 映射（可选，没有 C++ 时不填）
-    golden_c={
-        ComputeKey(op="beamform", in0=D.INT16, in1=D.INT16, out0=D.INT32,
-                   acc=A.Q12_22, compute=D.INT16):
-            "sp_beamform_int16_int16_oint32_acc_q12_22",
-    },
-)
-def beamform(signal: torch.Tensor, weights: torch.Tensor) -> torch.Tensor:
-    """波束成形: out[k] = sum_m(signal[m,k] * weights[m])"""
-    return (signal * weights.unsqueeze(-1)).sum(dim=0)
+
+@register_op(weight=Format.NN)
+def my_op(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    """out = x @ weight"""
+    return x @ weight
 ```
 
-在 `ops/__init__.py` 添加:
+### 阶段 3 模板（有 golden_c）
+
 ```python
-from . import beamform as _beamform_mod  # noqa: F401
+# src/dsp/ops/my_op/__init__.py
+"""my_op torch 实现 + C 调用约定 集中在一个文件。"""
 
-def beamform(signal, weights, **kwargs):
-    return dispatch("beamform", signal, weights, **kwargs)
+import numpy as np
+import torch
+
+from .. import register_op
+from ...core.enums import Format
+from ...core.convention import OpConvention
+from ...core.block import pad_to_block, pad_dim, get_block_shape
+
+
+class MyOpConvention(OpConvention, op="my_op"):
+    """func(dst, src0, src1, M, K, N) — ZZ × NN → ZZ 的矩阵布局。"""
+
+    def output_shape(self, *inputs):
+        return (*inputs[0].shape[:-1], inputs[1].shape[-1])
+
+    def call_c_func(self, func, *inputs_np, **params):
+        key = params.get("compute_key")
+        dtype_name = str(key.src0) if key else "bf16"
+        # ... pad / flatten / 调 func / reshape / crop
+        ...
+
+
+@register_op(weight=Format.NN)
+def my_op(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    return x @ weight
 ```
 
-## 渐进式开发
+### Pylance stub（可选，`src/dsp/ops/__init__.pyi`）
 
-```
-阶段 1: @register_op 无参数 → 纯 torch，先跑通
-阶段 2: 加 golden_c={...} → 接 C++ 实现
-阶段 3: 加 format hints → 出数格式标注
-阶段 4: 加 math_strategy → 数学验证（已知解 + 精确匹配）
-```
-
-不需要一步到位。
-
-### math_strategy（阶段 4 — 最后适配）
-
-> **信息安全声明：** 当前 math_strategy 实现为架构示例。实际使用时需结合真实硬件精度特性调整目标 pattern 和正则化参数。
-
-math_strategy 为算子提供数学验证数据（已知解），在 generate_input 的 math 轮中自动替换 randn 输入。
-
-**签名：**
 ```python
-def _my_op_math(inputs, source_map):
-    """
-    inputs:     原始参数列表 [arg0, arg1, ...]
-    source_map: 每个参数的来源 ["randn"|"op_output"|None, ...]
-    
-    返回: {arg_index: replacement_tensor} — 只替换 source=="randn" 的参数
-          source=="op_output" 的参数来自上游算子，被动接受不替换
-    """
+def my_op(x: torch.Tensor, weight: torch.Tensor,
+          *, compute: str | None = None, output_dtype: str | None = None) -> torch.Tensor: ...
 ```
 
-**设计原则：**
-1. 首算子（全 randn）：构造 near-diagonal 输入 + 设计权重使输出为 near-diagonal
-2. 后续算子（部分 op_output）：被动接受上游输出，用 lstsq/ridge 设计权重回归目标 pattern
-3. linear/matmul 天然承担回归职责 — 利用矩阵乘法把累积误差收回 near-diagonal
-4. 如果不确定怎么写：先不加 math_strategy，op 会自动使用随机数据
+## Examples
 
-**完整样例见 `src/dsp/ops/linear.py` 中 `_linear_math_strategy`。**
+### Example 1（参考）: `src/dsp/ops/linear/__init__.py`
 
-## 样例
+最完整的参考，含四阶段全部特性：
+- `LinearConvention(OpConvention, op="linear")` 里处理 batch/pad/flatten
+- `@register_op(weight=Format.NN, math_strategy=_linear_math_strategy)`
+- 纯 torch fallback：`torch.matmul(x, weight) + bias`
 
-### Example 1: 典型 — 有 golden_c（参考 `src/dsp/ops/linear.py`）
+读代码时重点看：
+- 顶部的 `_prepare_2d` 辅助函数：怎么 pad 和转行/列优先
+- `LinearConvention.call_c_func`：按 batch 循环的骨架
+- `_linear_math_strategy`：用 lstsq 构造已知解
 
-**算子文件 `src/dsp/ops/linear.py`：**
+### Example 2（最简）: 阶段 1 纯 torch
+
 ```python
-@register_op(
-    weight=Format.NN,
-    golden_c={
-        ComputeKey(op="linear", in0=D.INT16, in1=D.INT16, in2=D.INT32, out0=D.INT16,
-                   acc=A.Q12_22, compute=D.INT16): "sp_fused_linear_int16_int16_oint16_acc_q12_22",
-    },
-)
-def linear(input: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
-    return input @ weight + bias
-```
+# src/dsp/ops/gelu/__init__.py
+import torch
+from .. import register_op
 
-**`ops/__init__.py` 中对应的便捷函数：**
-```python
-from . import linear as _linear_mod  # noqa: F401
-
-def linear(input, weight, bias, **kwargs):
-    return dispatch("linear", input, weight, bias, **kwargs)
-```
-
-**Why this output:**
-- `golden_c` 指定了完整的 `ComputeKey`，因为已有 C++ 实现需要映射
-- `weight=Format.NN` 指定了默认内存格式，因为 linear 的权重有格式需求
-- 便捷函数的参数列表和算子函数签名一致（`input, weight, bias`）
-
-### Example 2: 最简 — 无 golden_c（阶段 1 纯 torch）
-
-**算子文件：**
-```python
 @register_op
-def my_op(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-    return a * b
+def gelu(x: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.gelu(x)
 ```
 
-**`ops/__init__.py` 中对应的便捷函数：**
+**Why:**
+- 没有 C 实现 → 不写 `OpConvention`，golden_c 模式自动 fallback 到 torch
+- 没有格式需求 → 装饰器无参数
+- 新加的目录/文件会被 `_auto_import_ops` 扫到
+
+### Example 3（阶段 4）: math_strategy 的签名
+
 ```python
-from . import my_op as _my_op_mod  # noqa: F401
-
-def my_op(a, b, **kwargs):
-    return dispatch("my_op", a, b, **kwargs)
+def _my_math_strategy(inputs: list, source_map: list) -> tuple[dict, torch.Tensor]:
+    """
+    inputs:     原始参数列表
+    source_map: 每个参数的来源 [TensorSource.RANDN | OP_OUTPUT | None, ...]
+    返回:        (replacements={arg_idx: new_tensor}, expected=目标 tensor)
+                 只替换 source=RANDN 的参数；source=OP_OUTPUT 是上游结果，被动接受
+    """
+    ...
 ```
 
-**Why this output:**
-- `@register_op` 不带参数（无括号），因为阶段 1 不需要 golden_c 和 format
-- 后续有 C++ 实现时再按 Example 1 的模式补上 `golden_c`
+详细示例见 `src/dsp/ops/linear/__init__.py` 里的 `_linear_math_strategy`。
 
 ## 自检清单
-- [ ] `@register_op` 装饰（不是 `@op`）
-- [ ] 函数签名接受 `torch.Tensor`
-- [ ] 参数名有语义
-- [ ] `ops/__init__.py` import + 便捷函数
-- [ ] `make test` 通过
-- [ ] 验证: `.venv/bin/python -c "import dsp; print('YOUR_OP' in dsp.ops.list_ops())"`
+
+- [ ] `src/dsp/ops/<op>/__init__.py` 存在
+- [ ] 用 `@register_op`（不是 `@op`）
+- [ ] 参数名有语义（会用作保存的文件名）
+- [ ] 没有在装饰器里写 `golden_c={...}`
+- [ ] 没有手动改 `ops/__init__.py`
+- [ ] 如果有 C 绑定：`OpConvention` 子类有 `op=` 参数自动注册
+- [ ] `python -c "import dsp; print('my_op' in dsp.ops.list_ops())"` 为 True
+- [ ] `python -m pytest tests/ut/ops -q` 全绿
 
 ## 边界情况
-- 如果不确定 ComputeKey 的 acc/compute 字段怎么填：先不加 golden_c，用阶段 1 纯 torch 跑通
-- 如果 C 函数的参数模式和 linear/correlate 不同：需要先用 prompt 06 注册 OpConvention
-- 如果函数名和已有 op 冲突：dispatch 会报 KeyError，改名即可
+
+- 纯 torch 没有 C 实现时：`dispatch_golden_c` 会返回 None，自动降级到 torch —— 预期行为
+- 函数名和已有 op 冲突：`dispatch` 会报错，改名即可
+- 装饰器找不到合适的 `ComputeKey`：先跑阶段 1 纯 torch 验证接入，再加 C 实现
+- 参数名用作磁盘文件名 —— 不要取 `a, b, c` 这种 —— 用 `input, weight, bias` 这类
 
 ---
-[操作员：在此行下方提供算子名称、数学公式、类型约束。]
+[操作员：在此行下方提供算子名、数学定义、类型约束。]

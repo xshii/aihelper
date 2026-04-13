@@ -1,6 +1,7 @@
 """比数报告 — 跨模式输出对比。
 
-从 use_input 产出的目录结构中加载各模式输出，两两比对，生成报告。
+USE_INPUT 比数：generate_input 产出 → use_input 各模式对比（double 域）。
+USE_INPUT_DUT 比数：实现在 context/runloop._compare_use_input_dut。
 """
 
 from __future__ import annotations
@@ -8,38 +9,43 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from .compare import compute_diff
+from .compare import compute_diff, CompareType, USE_INPUT_COMPARE
 from .pipe import DataPipe
 
 logger = logging.getLogger("dsp.data")
 
 
 def compare_all_modes(data_path: str, saved_dirs: list[str],
-                      modes_list: list[str]) -> dict:
-    """对比 use_input 产出的所有模式输出。
+                      modes_list: list[str],
+                      compare_specs: dict = None) -> dict:
+    """对比各模式输出。
 
     Args:
         data_path: 用例根目录
         saved_dirs: 策略目录名列表
         modes_list: 模式列表
+        compare_specs: {mode: [CompareType, ...]}，None 用 USE_INPUT_COMPARE
 
     Returns:
-        {strategy: {output_file: {"mode_a vs mode_b": diff_stats}}}
+        {strategy: {output_file: {pair_name: diff_stats}}}
     """
     from ..core.enums import RunMode
+    if compare_specs is None:
+        compare_specs = USE_INPUT_COMPARE
+
     base = Path(data_path) / RunMode.USE_INPUT
     gen_base = Path(data_path)
     report = {}
     for strategy_name in saved_dirs:
         strategy_report = _compare_strategy(
             base / strategy_name, modes_list,
-            gen_dir=gen_base / strategy_name,  # generate_input 的 torch 输出作为基准
+            gen_dir=gen_base / strategy_name,
+            compare_specs=compare_specs,
         )
-        # math 策略：额外对比 expected vs torch actual
         expected_report = _compare_expected(
             gen_dir=gen_base / strategy_name,
             use_dir=base / strategy_name,
-            modes_list=["torch"] + modes_list,  # torch 从 gen_dir 取
+            modes_list=["torch"] + modes_list,
         )
         if expected_report:
             strategy_report.update(expected_report)
@@ -49,7 +55,7 @@ def compare_all_modes(data_path: str, saved_dirs: list[str],
 
 
 def print_compare_summary(report: dict):
-    """打印比数摘要到终端。阈值从 config.compare 读。"""
+    """打印比数摘要到终端。"""
     from ..config import config as cfg
     pass_cos = cfg.compare.pass_cosine
     warn_cos = cfg.compare.warn_cosine
@@ -57,26 +63,43 @@ def print_compare_summary(report: dict):
     print("\n" + "=" * 60)
     print("比数报告")
     print("=" * 60)
-    for strategy, ops in report.items():
-        print(f"\n[{strategy}]")
+    for section, ops in report.items():
+        print(f"\n[{section}]")
         for op_file, pairs in ops.items():
             for pair_name, stats in pairs.items():
-                max_d = stats["max_diff"]
-                cos_s = stats["cosine_sim"]
-                if max_d == 0:
-                    status = "PASS"
-                elif cos_s > pass_cos:
-                    status = "PASS"
-                elif cos_s > warn_cos:
-                    status = "WARN"
+                if stats.get("type") == CompareType.DUT_BIT_EXACT.value:
+                    # DUT bit 精确比对
+                    match = stats["match"]
+                    status = "PASS" if match else "FAIL"
+                    detail = f"mismatches={stats['mismatches']}/{stats['total']}"
+                    if stats.get("first_mismatch"):
+                        idx, got, want = stats["first_mismatch"]
+                        detail += f"  first@{idx}: got={got} want={want}"
+                    print(f"  {op_file}: {pair_name}  {detail}  [{status}]")
                 else:
+                    # double 比对
+                    max_d = stats["max_diff"]
+                    cos_s = stats["cosine_sim"]
+                    if max_d == 0:
+                        status = "PASS"
+                    elif cos_s > pass_cos:
+                        status = "PASS"
+                    elif cos_s > warn_cos:
+                        status = "WARN"
+                    else:
                         status = "FAIL"
-                print(
-                    f"  {op_file}: {pair_name}  "
-                    f"max_diff={max_d:.2e}  cosine={cos_s:.6f}  [{status}]"
-                )
+                    qsnr = stats.get("qsnr_db", float("inf"))
+                    qsnr_str = f"{qsnr:.1f}dB" if qsnr != float("inf") else "inf"
+                    print(
+                        f"  {op_file}: {pair_name}  "
+                        f"max_diff={max_d:.2e}  QSNR={qsnr_str}  cosine={cos_s:.6f}  [{status}]"
+                    )
     print("=" * 60)
 
+
+# ============================================================
+# 内部函数（USE_INPUT 模式用）
+# ============================================================
 
 def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> dict:
     """对比 math strategy 的 expected 文件 vs 各模式 actual 输出。"""
@@ -94,11 +117,9 @@ def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> di
             logger.warning("加载 expected 失败 %s: %s", exp_path, e)
             continue
 
-        # 从 expected 文件名推导对应的 output 文件名
         out_fname = exp_path.name.replace("_expected0_", "_output0_")
         pairs = {}
         for m in modes_list:
-            # torch 输出在 gen_dir，其他在 use_dir/{mode}/
             if m == "torch":
                 out_path = gen_dir / out_fname
             else:
@@ -116,23 +137,21 @@ def _compare_expected(gen_dir: Path, use_dir: Path, modes_list: list[str]) -> di
 
 
 def _compare_strategy(strategy_dir: Path, modes_list: list[str],
-                      gen_dir: Path = None) -> dict:
-    """对比各模式输出。gen_dir 是 generate_input 的 torch 输出目录（作为基准）。"""
+                      gen_dir: Path = None,
+                      compare_specs: dict = None) -> dict:
+    """对比各模式输出（USE_INPUT 模式）。"""
     if not strategy_dir.exists():
         return {}
 
-    # use_input 的各模式目录
     mode_dirs = {m: strategy_dir / m for m in modes_list
                  if (strategy_dir / m).exists()}
 
-    # 加入 generate_input 的 torch 输出作为基准
     if gen_dir is not None and gen_dir.exists():
         mode_dirs["torch"] = gen_dir
 
     if len(mode_dirs) < 2:
         return {}
 
-    # 从任一模式目录取 output 文件列表
     ref_dir = next(iter(mode_dirs.values()))
     output_files = [f.name for f in ref_dir.glob("*_output*_*.txt")]
 

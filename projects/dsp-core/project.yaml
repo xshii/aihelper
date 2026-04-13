@@ -6,5 +6,17 @@ tags: [torch, dsp, quantization, pybind11, custom-op, tensor-subclass, facade, c
 difficulty: advanced
 status: active
 created: 2026-04-03
-run: cd src && python -c "import dsp; print(dsp.ops.randn(4, dtype=dsp.core.iq16))"
-test: cd src && python -m pytest ../tests/ -v
+
+# 安装
+#   pip install -e .          # 发布模式（最小运行集）
+#   pip install -e '.[dev]'   # 开发模式（含 pytest/ruff/import-linter）
+#   pip install -e '.[all]'   # 一次装全（含 viz + dev）
+install: pip install -e '.[all]'
+
+# 一次最小冒烟：跑端到端 attention 示例
+run: python examples/attention_example.py
+
+# 测试 / lint / 分层检查（dev 模式下可用）
+test: python -m pytest tests/ut -q
+lint: ruff check src/
+check-imports: lint-imports

@@ -22,15 +22,18 @@
 from __future__ import annotations
 
 import functools
+import importlib
 import inspect
 import logging
+import pkgutil
+import sys
 from typing import Callable, Optional
 
 import torch
 
 from ..core.tensor import DSPTensor
 from ..core.dtype import DSPDtype
-from ..core.enums import Mode, Format
+from ..core.enums import Mode, Format, TensorSource
 
 logger = logging.getLogger("dsp.ops")
 
@@ -60,6 +63,8 @@ _hooks = {
     "get_compute_config": lambda: {},
     "get_current_strategy": lambda: None,
     "save_op_expected": lambda *a, **k: None,
+    "load_op_inputs": lambda *a, **k: None,
+    "get_runmode": lambda: None,
 }
 
 
@@ -112,6 +117,31 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             # --- math strategy 拦截（在 save_op_inputs 之前）---
             args, math_expected = _apply_math_strategy(op_name, math_strategy, args)
 
+            # --- randn 前置量化: 对 randn 来源的 tensor 做 format-aware 量化 ---
+            # 把硬件量化误差前置到输入，让 torch 的 double 计算结果接近硬件
+            args = _pre_quantize_randn_args(args, param_names, active_formats)
+
+            # --- USE_INPUT / USE_INPUT_DUT 模式: 用磁盘保存的输入替换 args ---
+            from ..core.enums import RunMode
+            _load_modes = (RunMode.USE_INPUT, RunMode.USE_INPUT_DUT)
+            if _hooks["is_runmode_active"]() and _hooks["get_runmode"]() in _load_modes:
+                tensor_count = sum(1 for a in args if isinstance(a, torch.Tensor))
+                loaded = _hooks["load_op_inputs"](op_name, tensor_count)
+                new_args = []
+                loaded_idx = 0
+                for a in args:
+                    if isinstance(a, torch.Tensor):
+                        t = loaded[loaded_idx]
+                        loaded_idx += 1
+                        # 保留 dtype 元信息
+                        if isinstance(a, DSPTensor) and a._dsp_dtype is not None:
+                            new_args.append(DSPTensor.create(t, a.dsp_dtype))
+                        else:
+                            new_args.append(t)
+                    else:
+                        new_args.append(a)
+                args = tuple(new_args)
+
             # --- 出数（通过 hook，不直接 import context）---
             if _hooks["is_runmode_active"]():
                 _hooks["save_op_inputs"](op_name, param_names, args, active_formats)
@@ -141,7 +171,7 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
 
             # --- 标记结果来源 ---
             if isinstance(result, DSPTensor):
-                result._source = "op_output"
+                result._source = TensorSource.OP_OUTPUT
 
             # --- 出数 ---
             if _hooks["is_runmode_active"]():
@@ -150,6 +180,18 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
                     _hooks["save_op_expected"](op_name, math_expected)
 
             return result
+
+        # 动态追加 compute / output_dtype 到签名，让 IDE 能看到
+        _extra_params = [
+            inspect.Parameter("compute", inspect.Parameter.KEYWORD_ONLY, default=None,
+                              annotation="str | None"),
+            inspect.Parameter("output_dtype", inspect.Parameter.KEYWORD_ONLY, default=None,
+                              annotation="str | None"),
+        ]
+        orig_sig = inspect.signature(func)
+        wrapper.__signature__ = orig_sig.replace(
+            parameters=[*orig_sig.parameters.values(), *_extra_params]
+        )
 
         _OP_REGISTRY[op_name] = wrapper
         wrapper._dsp_op_name = op_name
@@ -191,6 +233,60 @@ def _register_golden_c(op_name: str, golden_c: dict):
         _COMPUTE_BY_OP.setdefault(key.op, []).append((key, func_name))
         if key.src0 and key.dst0:
             _OUTPUT_TYPE_RULES[(op_name, key.src0, key.src1)] = key.dst0
+
+
+def _pre_quantize_randn_args(args, param_names, active_formats):
+    """对 randn 来源的 tensor 做前置量化。
+
+    流程: pad → to_block → bf16→double (via codec) → from_block → unpad
+
+    只处理 _source == "randn" 的 DSPTensor，非 randn 来源（op_output 等）保留。
+    format 从 active_formats[param_name] 取，默认 ZZ。
+    """
+    from ..core.dtype import get_codec
+    from ..core.block import to_block, from_block, pad_to_block
+
+    new_args = []
+    for i, arg in enumerate(args):
+        if not (isinstance(arg, DSPTensor) and getattr(arg, "_source", None) == TensorSource.RANDN):
+            new_args.append(arg)
+            continue
+        dsp_dtype = arg._dsp_dtype
+        if dsp_dtype is None or dsp_dtype.name == "double":
+            new_args.append(arg)
+            continue
+
+        # 确定 format hint
+        name = param_names[i] if i < len(param_names) else None
+        fmt = active_formats.get(name, Format.ZZ) if name else Format.ZZ
+        if not isinstance(fmt, Format):
+            fmt = Format(fmt)
+
+        t = arg.torch()  # (double, no_pad, nd)
+        orig_shape = tuple(t.shape)
+
+        if t.ndim >= 2:
+            padded = pad_to_block(t, dsp_dtype.name, fmt)
+            blocked = to_block(padded, dsp_dtype.name, fmt)
+        else:
+            blocked = t  # 1D 不做 block 重排
+
+        # double → bf16 → double (走 codec)
+        codec = get_codec(dsp_dtype)
+        bf16_like = codec.from_double(blocked, dsp_dtype)    # quant: double → bf16
+        back = codec.to_double(bf16_like, dsp_dtype)         # dequant: bf16 → double
+
+        if t.ndim >= 2:
+            nd = from_block(back, dsp_dtype.name, fmt, tuple(padded.shape))
+            nd = nd[..., :orig_shape[-2], :orig_shape[-1]].contiguous()
+        else:
+            nd = back
+
+        # 保留 DSPTensor 元信息但清除 randn 标记（避免下次再量化）
+        new_t = DSPTensor.create(nd, dsp_dtype)
+        new_t._source = TensorSource.RANDN_QUANTIZED
+        new_args.append(new_t)
+    return tuple(new_args)
 
 
 def infer_output_dtype(op: str, dtype_a: DSPDtype, dtype_b: DSPDtype) -> DSPDtype:
@@ -250,7 +346,7 @@ def _infer_output_from_args(op_name: str, args) -> Optional[DSPDtype]:
     dtypes = []
     for a in args:
         if isinstance(a, DSPTensor) and a._dsp_dtype is not None:
-            dtypes.append(a._dsp_dtype)
+            dtypes.append(a.dsp_dtype)
     if len(dtypes) >= 2:
         return infer_output_dtype(op_name, dtypes[0], dtypes[1])
     if len(dtypes) == 1:
@@ -259,14 +355,26 @@ def _infer_output_from_args(op_name: str, args) -> Optional[DSPDtype]:
 
 
 # ============================================================
-# 内置算子 — 直接 re-export，不经过 dispatch
+# 内置算子 — 自动扫描 ops/ 下所有 .py 文件，import 即注册
 #
-# dsp.ops.linear 就是 @register_op 装饰后的函数本身。
+# 新增算子只需在 ops/ 下新建 .py 文件，用 @register_op 装饰。
 # 调用路径: dsp.ops.linear(x, w, b) → wrapper(x, w, b) → torch/golden_c
 # ============================================================
 
-from .correlate import correlate  # noqa: E402
-from .linear import linear  # noqa: E402
+def _auto_import_ops():
+    """自动 import ops/ 下所有模块，触发 @register_op 注册。"""
+    package = sys.modules[__name__]
+    for importer, modname, ispkg in pkgutil.iter_modules(package.__path__):
+        if modname.startswith("_"):
+            continue
+        mod = importlib.import_module(f".{modname}", __name__)
+        # 把模块里 @register_op 装饰的函数导出到 ops 命名空间
+        for attr_name in dir(mod):
+            obj = getattr(mod, attr_name)
+            if hasattr(obj, "_dsp_op_name"):
+                setattr(package, attr_name, obj)
+
+_auto_import_ops()
 
 
 # ============================================================

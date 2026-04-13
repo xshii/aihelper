@@ -41,10 +41,10 @@ class ConventionNotFound(DSPError):
     """算子没有注册 OpConvention（不知道怎么调 C 函数）。
 
     修复:
-        1. 在 golden/op_convention.py 添加:
+        1. 在 ops/<op_name>/__init__.py 添加:
            class MyConvention(OpConvention, op="my_op"):
                def call_c_func(self, func, *inputs_np, **params): ...
-        2. 或复用已有 convention（matmul/elementwise/linear/correlate）
+        2. 或复用已有 convention（matmul/linear/layernorm）
     """
 
 

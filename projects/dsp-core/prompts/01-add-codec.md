@@ -1,115 +1,105 @@
 # 添加新的数据类型 Codec
 
 ## 角色
-你是一个 Python 工程师，负责为 DSP 框架添加一种新的数据类型编解码器。
+你是一个 Python 工程师，负责为 DSP 框架注册一种新数据类型的 Codec。
 
 ## 任务
-给定一种数据类型名，创建一个 Codec 类，注册到框架。
+给定已存在的 `DSPDtype`，把它的 Codec 注册到框架。
 
 ## 背景
 
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+Codec 的三个方法 **`to_double` / `from_double` / `fake_quantize`** 全部通过 golden C 的 convert 函数实现：
 
-Codec 的三个方法（to_float / from_float / fake_quantize）**全部通过 golden C convert 函数实现**。
-Python 层不需要知道定点格式的内部细节，全交给 C++。
+- **`from_double(t, dtype)`** — 量化：double → 原生 bits（如 bf16）
+- **`to_double(raw, dtype)`** — 反量化：原生 bits → double
+- **`fake_quantize(t, dtype)`** — 一次 round trip，截断到原生精度但保持 double 存储（内部已按 `subblock_size` 补零对齐，任意 shape 可用）
 
-新增 Codec 只需一行：
+**DUT 类型统一复用 `_golden_codec` 这一个实例，不要继承子类。**
 
-```python
-class BFP16Codec(GoldenCCodec, dtype=bfp16):  # 定义即注册
-    pass
-```
+Real 类型（如 `double` 自身）用 `PassthroughCodec`（不过 C）。
 
-`__init_subclass__` 自动注册，无需手动调 `register_codec()`。
+注册位置：`src/dsp/core/dtype.py` 底部。
 
 ## 规则
-1. MUST: 继承 `GoldenCCodec`（不是 `TypeCodec`）
-2. MUST: 在 `dtype=` 参数指定对应的 DSPDtype 实例
-3. NEVER: 实现 `_fallback_*` 方法或重写 `to_float/from_float/fake_quantize`（Python fallback 已删除，全走 golden C）
-4. NEVER: 手动调 `register_codec()`
+
+1. MUST: DUT 类型注册 `_golden_codec` 实例
+2. MUST: 调用 `register_codec(dtype, codec)`
+3. NEVER: 继承 `GoldenCCodec` 子类
+4. NEVER: 重写 `to_double / from_double / fake_quantize` —— 全走 golden C
+5. NEVER: 写空子类（如 `class BF16Codec(GoldenCCodec): pass`）
+6. 前提：对应的 `DSPDtype` 已定义，对应的 C convert 函数 `dsp_convert_{dtype}_double` / `dsp_convert_double_{dtype}` 已在 binding 中导出（`auto_register` 会自动挂到 manifest）
 
 ## 步骤
-1. 确认对应的 DSPDtype 已存在（如果没有，先用 prompt 05 创建）
-2. 在 `src/dsp/core/codec.py` 底部添加一行 Codec 类
-3. 在 `src/dsp/core/__init__.py` 中导出（如需要）
+
+1. 确认 `src/dsp/core/dtype.py` 中已有目标 `DSPDtype`（没有先用 prompt 05 创建）
+2. 在同文件底部 codec 注册区添加一行
+3. 跑 `python -c "from dsp.core.dtype import get_codec, YOUR_DTYPE; print(get_codec(YOUR_DTYPE))"` 验证
+4. `python -m pytest tests/ut -q`
 
 ## 输出格式
 
 ```python
-# 在 src/dsp/core/codec.py 底部添加:
-
-class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
-    """bfp16 编解码器。定义即注册。"""
+# src/dsp/core/dtype.py 底部:
+_golden_codec = GoldenCCodec()
+register_codec(bf8,  _golden_codec)
+register_codec(bf16, _golden_codec)
+register_codec(my_new_dtype, _golden_codec)     # ← 新增
+register_codec(double, PassthroughCodec())
 ```
 
-## Examples (样例)
+## Examples
 
-完整样例见 `src/dsp/core/codec.py` 中 `INT16Codec` 和 `INT32Codec`。
+### Example 1（典型）: 注册 bf4 的 Codec
 
-### Example 1 (典型): 添加 bfp16 Codec
+**前提:** `bf4 = DSPDtype(name="bf4", torch_dtype=torch.int8, subblock_size=32)` 已定义，C 侧有 `dsp_convert_bf4_double` 和 `dsp_convert_double_bf4`。
 
-**任务:** 添加 bfp16 数据类型的 Codec。
-
-**代码 diff:**
-
-```diff
---- a/src/dsp/core/codec.py
-+++ b/src/dsp/core/codec.py
-@@ existing codecs
- class INT16Codec(GoldenCCodec, dtype=_dtypes.int16):
-     """int16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
-
- class INT32Codec(GoldenCCodec, dtype=_dtypes.int32):
-     """int32 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
-+
-+class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
-+    """bfp16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
+**代码:**
+```python
+# src/dsp/core/dtype.py 底部
+register_codec(bf8,  _golden_codec)
+register_codec(bf16, _golden_codec)
+register_codec(bf4,  _golden_codec)   # ← 新增
+register_codec(double, PassthroughCodec())
 ```
 
-**验证命令:**
+**Why:** 只需要一行 —— DUT 类型一律复用 `_golden_codec`，convert 函数名由 `auto_register.py` 从 binding 扫描自动注册到 `CONVERT` 表。
 
-```bash
-make test
-```
-
-**Why this output:**
-- 继承 `GoldenCCodec`，三个方法（`to_float`/`from_float`/`fake_quantize`）全部由基类委托给 golden C，子类不需要实现任何方法。
-- `dtype=_dtypes.bfp16` 通过 `__init_subclass__` 自动完成注册，无需手动调用。
-- 只需在文件底部添加一行类定义，和 `INT16Codec`/`INT32Codec` 模式完全一致。
-
-### Example 2 (错误): 继承了 TypeCodec 而不是 GoldenCCodec
-
-**错误代码:**
+### Example 2（错误）: 创建空子类
 
 ```python
-# WRONG — 继承了 TypeCodec
-class BFP16Codec(TypeCodec, dtype=_dtypes.bfp16):
-    """bfp16 编解码器。"""
+# WRONG
+class BF4Codec(GoldenCCodec):
+    pass
+
+register_codec(bf4, BF4Codec())
 ```
 
-**错误症状:**
-- `TypeCodec` 是抽象基类，没有提供 `to_float`/`from_float`/`fake_quantize` 的实现。
-- 调用时抛出 `TypeError: Can't instantiate abstract class BFP16Codec with abstract methods from_float, to_float`。
-- 即使手动实现了这些方法，也违反了"全走 golden C"的设计：你写的 Python 实现不会和 golden C 对齐。
+**Fix:** 直接 `register_codec(bf4, _golden_codec)`。子类化没有任何意义，GoldenCCodec 已经根据传入的 `dtype.name` 查对应的 C 函数。
 
-**正确做法:**
+### Example 3（错误）: 手动实现转换
 
 ```python
-# CORRECT — 继承 GoldenCCodec
-class BFP16Codec(GoldenCCodec, dtype=_dtypes.bfp16):
-    """bfp16 编解码器。定义即注册，全部委托给 golden C convert 函数。"""
+# WRONG — 别用 torch 的原生转换，bf16 语义要过 C
+class MyBF16Codec(GoldenCCodec):
+    def from_double(self, t, dtype):
+        return t.to(torch.bfloat16)     # ← 丢失的是 RNE 行为和硬件 bit 一致性
 ```
+
+**Fix:** 一定要走 `_golden_codec`，让 C 侧的 `DoubleToBF16`（RNE 舍入）决定 bit 模式。
 
 ## 自检清单
-- [ ] 继承 `GoldenCCodec`（不是 `TypeCodec`）
-- [ ] `dtype=` 指定了正确的 DSPDtype 实例
-- [ ] 没有实现任何方法（全走 golden C）
-- [ ] `make test` 通过
-- [ ] 验证: `.venv/bin/python -c "from dsp.core.codec import get_codec; print(get_codec(dsp.core.YOUR_DTYPE))"`
+
+- [ ] 一行 `register_codec(dtype, _golden_codec)`
+- [ ] 没有新建 Codec 子类
+- [ ] C 侧 `dsp_convert_double_{name}` / `dsp_convert_{name}_double` 已在 binding 中（`_raw_bindings.so`）
+- [ ] `python -c "from dsp.core.dtype import get_codec; import dsp; get_codec(dsp.core.YOUR_DTYPE)"` 不报错
+- [ ] `python -m pytest tests/ut -q` 全绿
 
 ## 边界情况
-- golden C 不可用时会抛 `GoldenNotAvailable`，这是正确行为
-- 如果需要新的 DUT 类型，先在 `core/enums.py` 的 `DType.DUT` 加枚举值
+
+- golden C 不可用时 `to_double / from_double / fake_quantize` 会抛 `GoldenNotAvailable` —— 这是正确行为（用户需要先编译 `_raw_bindings.so`）
+- 如果 DSPDtype 还不存在：先走 prompt 05 创建
+- 如果 C convert 函数还没加：先走 prompt 03 把 binding 补上
 
 ---
-[操作员：在此行下方提供新数据类型名。]
+[操作员：在此行下方提供新数据类型的 `name`（假设 `DSPDtype` 和 C binding 都已就位）。]

@@ -35,12 +35,12 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
     """类型转换。
 
     Args:
-        data: flat float32 numpy array（原始字节）
-        src_type: 源类型名（如 "int16"）
-        dst_type: 目标类型名（如 "float32"）
+        data: flat double numpy array
+        src_type: 源类型名（如 "bf16"）
+        dst_type: 目标类型名（如 "double"）
 
     Returns:
-        flat float32 numpy array
+        flat double numpy array
     """
     func_name = require_convert_func(src_type, dst_type)
     lib = _get_lib()
@@ -50,7 +50,7 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
             f"C 函数 '{func_name}' 在 .so 中不存在。"
         )
     dst = np.empty_like(data)
-    func(data.astype(np.float64), dst, data.size)
+    func(data.astype(np.double), dst, data.size)
     return dst
 
 
@@ -58,7 +58,7 @@ def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
     """计算。
 
     Args:
-        *inputs: flat float32 numpy arrays（个数由算子决定）
+        *inputs: flat double numpy arrays（个数由算子决定）
         query: ComputeKey 查询条件（部分填写，None 字段不过滤）
 
     Returns:
@@ -73,12 +73,12 @@ def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
         raise GoldenNotAvailable(
             f"C 函数 '{func_name}' 在 .so 中不存在。"
         )
-    from .op_convention import require_convention
+    from ..core.convention import require_convention
     conv = require_convention(op)
 
-    inputs_f32 = [inp.astype(np.float64) for inp in inputs]
+    inputs: list[np.ndarray] = [inp.astype(np.double) for inp in inputs]  # double
     key = info["key"]
-    out_np = conv.call_c_func(func, *inputs_f32, compute_key=key)
+    out_np = conv.call_c_func(func, *inputs, compute_key=key)
     return {
         "result": out_np,
         "key": key,
@@ -91,8 +91,67 @@ def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
 
 _lib_cache = None
 
+def _auto_build() -> bool:
+    """JIT 编译 _raw_bindings.so。不依赖 Makefile，直接调 cmake。
+
+    pip install 后也能用：只要系统有 cmake 和 C++ 编译器，
+    pybind11 从当前 Python 环境自动找。
+    """
+    import subprocess
+    import sys
+    import logging
+    from pathlib import Path
+    from ..config import GOLDEN_BUILD_DIR
+
+    logger = logging.getLogger("dsp.golden")
+
+    # 定位关键路径（相对于本文件，pip install 后也能找到）
+    golden_dir = Path(__file__).resolve().parent          # src/dsp/golden/
+    cmake_source = golden_dir                              # CMakeLists.txt 所在目录
+    build_dir = GOLDEN_BUILD_DIR                           # src/dsp/golden/build/
+
+    if not (cmake_source / "CMakeLists.txt").exists():
+        logger.warning("自动编译跳过: CMakeLists.txt 不存在 (%s)", cmake_source)
+        return False
+
+    build_dir.mkdir(parents=True, exist_ok=True)
+    python_exe = sys.executable
+
+    # pybind11 cmake dir
+    try:
+        import pybind11
+        pybind11_dir = pybind11.get_cmake_dir()
+    except ImportError:
+        logger.warning("自动编译跳过: pybind11 未安装 (pip install pybind11)")
+        return False
+
+    logger.info("JIT 编译 _raw_bindings... (build_dir=%s)", build_dir)
+
+    def _run(cmd):
+        r = subprocess.run(cmd, cwd=str(build_dir), capture_output=True, text=True, timeout=120)
+        if r.returncode != 0:
+            logger.warning("命令失败: %s\n%s", " ".join(cmd), r.stderr[-500:] if r.stderr else "")
+        return r.returncode == 0
+
+    # cmake configure
+    ok = _run([
+        "cmake", str(cmake_source),
+        f"-Dpybind11_DIR={pybind11_dir}",
+        f"-DPYTHON_EXECUTABLE={python_exe}",
+        "-Wno-dev",
+    ])
+    if not ok:
+        return False
+
+    # cmake build
+    ok = _run(["cmake", "--build", "."])
+    if ok:
+        logger.info("JIT 编译成功")
+    return ok
+
+
 def _get_lib():
-    """加载 C++ 绑定模块（make build-golden 编译产物在 build/ 目录）。"""
+    """加载 C++ 绑定模块。找不到时自动触发一次编译。"""
     global _lib_cache
     if _lib_cache is not None:
         return _lib_cache
@@ -100,13 +159,21 @@ def _get_lib():
     import sys
     from ..config import GOLDEN_BUILD_DIR
     build_dir = str(GOLDEN_BUILD_DIR)
-    if GOLDEN_BUILD_DIR.exists() and build_dir not in sys.path:
-        sys.path.insert(0, build_dir)
-    try:
-        import _raw_bindings
-        _lib_cache = _raw_bindings
-        return _lib_cache
-    except ImportError:
-        raise ImportError(
-            "golden: 未找到 _raw_bindings。请运行 make build-golden 编译 C++ 绑定。"
-        )
+
+    for attempt in range(2):
+        if GOLDEN_BUILD_DIR.exists() and build_dir not in sys.path:
+            sys.path.insert(0, build_dir)
+        try:
+            import _raw_bindings
+            _lib_cache = _raw_bindings
+            return _lib_cache
+        except ImportError:
+            if attempt == 0 and _auto_build():
+                # 编译成功，重新 import（清除之前的失败缓存）
+                if "_raw_bindings" in sys.modules:
+                    del sys.modules["_raw_bindings"]
+                continue
+            raise ImportError(
+                "golden: 未找到 _raw_bindings。自动编译失败。\n"
+                "手动修复: make build-golden（需要先 pip install pybind11）。"
+            )

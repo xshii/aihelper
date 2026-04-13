@@ -1,74 +1,53 @@
-"""DSP 类型系统 — 运行时 dtype + 分类枚举 + codec，统一在此文件。
+"""DSP 类型系统 — 运行时 dtype + 分类枚举 + codec。
 
 运行时 dtype:
-    dsp.core.bint16 → DSPDtype(name="bint16", torch_dtype=torch.int16)
+    dsp.core.bf16 → DSPDtype(name="bf16", torch_dtype=torch.bfloat16, subblock_size=8)
 
 分类枚举:
-    DType.DUT.BINT16 = "bint16"
+    DType.DUT.BF16 = "bf16"
     DType.ACC.Q12_22 = "q12.22"
 
 用法:
-    from dsp.core.dtype import DType, bint16, get_dtype
-    a = dsp.data.randn(100, dtype=dsp.core.bint16)
-    ComputeKey(op="matmul", src0=DType.DUT.BINT16, ...)
+    from dsp.core.dtype import DType, bf16, get_dtype
 """
 
 from __future__ import annotations
 
+from typing import Callable, Optional
+
+import numpy as np
 import torch
 from dataclasses import dataclass
-from enum import Enum
+from abc import ABC, abstractmethod
+
+from .enums import _StrEnum
 
 
 # ============================================================
 # 分类枚举 — ComputeKey 用
 # ============================================================
 
-class _StrEnum(str, Enum):
-    def __str__(self):
-        return self.value
-
-    def __format__(self, format_spec):
-        return self.value.__format__(format_spec)
-
-
 class DType:
-    """分级类型枚举。
-
-    DType.REAL — 标准浮点（参考计算用）
-    DType.DUT  — 芯片原生定点（数据存储）
-    DType.ACC  — 累加器格式（只有 Q 格式）
-    """
-
     class REAL(_StrEnum):
         DOUBLE = "double"
 
     class DUT(_StrEnum):
-        BINT8 = "bint8"
-        BINT16 = "bint16"
-        BINT32 = "bint32"
+        BF8 = "bf8"
+        BF16 = "bf16"
 
     class ACC(_StrEnum):
         Q12_22 = "q12.22"
-        Q8_26  = "q8.26"
-        Q24_40 = "q24.40"
 
 
 # ============================================================
-# 运行时 dtype — tensor 创建用
+# 运行时 dtype
 # ============================================================
-
 
 @dataclass(frozen=True)
 class DSPDtype:
-    """一种 DSP 数据类型的描述。
-
-    name: 显示名（"int16", "float32", ...）
-    torch_dtype: 底层 torch 存储类型
-    """
-
     name: str
     torch_dtype: torch.dtype
+    subblock_size: int = 1  # 128-bit 寄存器内的元素数
 
     def __repr__(self):
         return f"dsp.{self.name}"
@@ -82,23 +61,13 @@ class DSPDtype:
         return NotImplemented
 
 
-# ============================================================
 # 预定义 dtype
-# ============================================================
-
-bint8 = DSPDtype(name="bint8", torch_dtype=torch.int8)
-bint16 = DSPDtype(name="bint16", torch_dtype=torch.int16)
-bint32 = DSPDtype(name="bint32", torch_dtype=torch.int32)
-double = DSPDtype(name="double", torch_dtype=torch.float64)
-
-
+bf8 = DSPDtype(name="bf8", torch_dtype=torch.float8_e4m3fn, subblock_size=16)
+bf16 = DSPDtype(name="bf16", torch_dtype=torch.bfloat16, subblock_size=8)
+double = DSPDtype(name="double", torch_dtype=torch.double)
 
 # dtype 注册表
-_ALL_DTYPES: dict[str, DSPDtype] = {}
-
-
-def register_dtype(dtype: DSPDtype):
-    _ALL_DTYPES[dtype.name] = dtype
+_ALL_DTYPES: dict[str, DSPDtype] = {d.name: d for d in [bf8, bf16, double]}
 
 
 def get_dtype(name: str) -> DSPDtype:
@@ -108,27 +77,32 @@ def get_dtype(name: str) -> DSPDtype:
     return d
 
 
+def dtype_from_torch(torch_dtype: torch.dtype) -> Optional[DSPDtype]:
+    """按 torch.dtype 反查 DSPDtype。未注册返回 None。"""
+    for d in _ALL_DTYPES.values():
+        if d.torch_dtype == torch_dtype:
+            return d
+    return None
+
+
+def register_dtype(dtype: DSPDtype):
+    _ALL_DTYPES[dtype.name] = dtype
+
+
 def list_dtypes() -> list[str]:
     return list(_ALL_DTYPES.keys())
-
-
-for _d in [bint8, bint16, bint32, double]:
-    register_dtype(_d)
 
 
 # ============================================================
 # 类型编解码器: 自定义格式 ↔ torch float
 # ============================================================
 
-from abc import ABC, abstractmethod
-
-
 class TypeCodec(ABC):
     @abstractmethod
-    def to_float(self, raw: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
+    def to_double(self, raw: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
 
     @abstractmethod
-    def from_float(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
+    def from_double(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
 
     @abstractmethod
     def fake_quantize(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor: ...
@@ -144,80 +118,78 @@ def register_codec(dtype: DSPDtype, codec: TypeCodec):
 def get_codec(dtype: DSPDtype) -> TypeCodec:
     codec = _CODEC_REGISTRY.get(dtype.name)
     if codec is None:
-        raise TypeError(
-            f"未注册类型 {dtype} 的编解码器。已注册: {list(_CODEC_REGISTRY.keys())}"
-        )
+        raise TypeError(f"未注册类型 {dtype} 的编解码器。已注册: {list(_CODEC_REGISTRY.keys())}")
     return codec
 
 
 class PassthroughCodec(TypeCodec):
-    """float32 / float64，无需转换。"""
-    def to_float(self, raw, dtype):
-        return raw.float()
+    """double 等标准浮点，无需转换。"""
+    def to_double(self, raw: torch.Tensor, _dtype: DSPDtype) -> torch.Tensor:
+        return raw.double()
 
-    def from_float(self, t, dtype):
+    def from_double(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
         return t.to(dtype.torch_dtype)
 
-    def fake_quantize(self, t, dtype):
+    def fake_quantize(self, t: torch.Tensor, _dtype: DSPDtype) -> torch.Tensor:
         return t
 
 
+def _to_np(t: torch.Tensor) -> np.ndarray:
+    """torch → flat double numpy。"""
+    return t.detach().cpu().double().numpy().flatten().astype(np.double)
+
+
+_ConverterFn = Callable[[np.ndarray, str, str], np.ndarray]
+
+
 class GoldenCCodec(TypeCodec):
-    """通过 golden C convert 函数实现的 codec。
+    """通过 golden C convert 函数实现的 codec。"""
 
-    子类用 __init_subclass__ 自动注册:
-        class Int8Codec(GoldenCCodec, dtype=int8):
-            pass
-    """
-
-    _converter = None
-    _is_available = None
+    _converter: Optional[_ConverterFn] = None
+    _is_available: Optional[Callable[[], bool]] = None
 
     @classmethod
-    def set_golden_converter(cls, converter, is_available_fn):
-        cls._converter = staticmethod(converter)
-        cls._is_available = staticmethod(is_available_fn)
+    def set_golden_converter(cls, converter: _ConverterFn, is_available_fn: Callable[[], bool]) -> None:
+        cls._converter = staticmethod(converter)  # type: ignore[assignment]
+        cls._is_available = staticmethod(is_available_fn)  # type: ignore[assignment]
 
-    def __init_subclass__(cls, dtype: DSPDtype = None, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if dtype is not None:
-            register_codec(dtype, cls())
-
-    def _require_golden(self):
+    def _require_golden(self) -> None:
         if self._is_available is None or not self._is_available():
             from .errors import GoldenNotAvailable
             raise GoldenNotAvailable("codec 需要 golden C。")
 
-    def to_float(self, raw, dtype):
+    def to_double(self, raw: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
         self._require_golden()
-        import numpy as np
-        flat = raw.detach().cpu().double().numpy().flatten().astype(np.float64)
-        out = self._converter(flat, dtype.name, "double")
+        assert self._converter is not None
+        out = self._converter(_to_np(raw), dtype.name, "double")
         return torch.from_numpy(out.copy()).reshape(raw.shape)
 
-    def from_float(self, t, dtype):
+    def from_double(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
         self._require_golden()
-        import numpy as np
-        flat = t.detach().cpu().double().numpy().flatten().astype(np.float64)
-        out = self._converter(flat, "double", dtype.name)
+        assert self._converter is not None
+        out = self._converter(_to_np(t), "double", dtype.name)
         return torch.from_numpy(out.copy()).reshape(t.shape)
 
-    def fake_quantize(self, t, dtype):
+    def fake_quantize(self, t: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
         self._require_golden()
-        import numpy as np
-        flat = t.detach().cpu().double().numpy().flatten().astype(np.float64)
+        assert self._converter is not None
+        from .block import pad_dim
+        flat = _to_np(t)
+        n = flat.size
+        # C 侧 dsp_convert 要求 count 是 subblock 整数倍 → 补零对齐后再 trim
+        n_pad = pad_dim(n, dtype.subblock_size)
+        if n_pad != n:
+            flat = np.concatenate([flat, np.zeros(n_pad - n, dtype=np.double)])
         quantized = self._converter(flat, "double", dtype.name)
-        result_np = self._converter(quantized, dtype.name, "double")
-        result = torch.from_numpy(result_np.copy()).reshape(t.shape)
-        result = result.to(dtype.torch_dtype)
+        result_np = self._converter(quantized, dtype.name, "double")[:n]
+        result = torch.from_numpy(result_np.copy()).reshape(t.shape).double()
         if t.requires_grad:
             result = t + (result - t).detach()
         return result
 
 
-# 内置 codec（定义即注册）
-class Bint8Codec(GoldenCCodec, dtype=bint8): pass
-class Bint16Codec(GoldenCCodec, dtype=bint16): pass
-class Bint32Codec(GoldenCCodec, dtype=bint32): pass
-
+# 内置 codec 注册
+_golden_codec = GoldenCCodec()
+register_codec(bf8, _golden_codec)
+register_codec(bf16, _golden_codec)
 register_codec(double, PassthroughCodec())

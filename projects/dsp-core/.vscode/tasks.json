@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "运行当前文件",
+      "label": "[GC] 运行当前文件",
       "type": "shell",
       "command": "${workspaceFolder}/.venv/bin/python",
       "args": ["${file}"],
@@ -12,7 +12,7 @@
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
-      "label": "运行当前文件（带参数）",
+      "label": "[GC] 运行当前文件（带参数）",
       "type": "shell",
       "command": "${workspaceFolder}/.venv/bin/python",
       "args": ["${file}", "${input:args}"],
@@ -21,7 +21,7 @@
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
-      "label": "CI 全量检查",
+      "label": "[GC] CI 全量检查",
       "type": "shell",
       "command": "make ci",
       "group": { "kind": "build", "isDefault": true },
@@ -30,7 +30,35 @@
       "options": { "cwd": "${workspaceFolder}" }
     },
     {
-      "label": "选择检查项",
+      "label": "[GC] 编译 Golden C Bindings",
+      "type": "shell",
+      "command": "make build-golden",
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "detail": "cmake + build → _raw_bindings.so",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "[GC] 生成生产环境 (.venv-prod)",
+      "type": "shell",
+      "command": "python3 -m venv .venv-prod && .venv-prod/bin/pip install -U pip && .venv-prod/bin/pip install -e .",
+      "problemMatcher": [],
+      "detail": "创建 .venv-prod 并只安装运行时依赖（torch/numpy/pybind11）",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "[GC] 生成测试环境 (.venv)",
+      "type": "shell",
+      "command": "python3 -m venv .venv && .venv/bin/pip install -U pip && .venv/bin/pip install -e '.[all]'",
+      "problemMatcher": [],
+      "detail": "创建 .venv 并安装全部依赖（运行时 + dev + viz），适合开发/调试",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "[GC] 选择检查项",
       "type": "shell",
       "command": "make ${input:target}",
       "problemMatcher": ["$python"],

@@ -12,9 +12,10 @@
     pytest -m st              — 只跑端到端
 
 Fixtures（弱 AI 直接用，不需要自己造数据）:
-    int16_pair     — 一对 int16 DSPTensor (64,)
-    float32_pair   — 一对 float32 DSPTensor (64,)
-    int16_matrix   — int16 矩阵 (4, 8)
+    bf16_pair      — 一对 bf16 DSPTensor (64,)
+    double_pair    — 一对 double DSPTensor (64,)
+    bf16_matrix    — bf16 矩阵 (4, 8)
+    double_matrix  — double 矩阵 (4, 8)
     tmp_output_dir — 临时输出目录（自动清理）
     sample_pipe    — 预建的 DataPipe 实例
 """
@@ -35,35 +36,35 @@ import shutil
 # ============================================================
 
 @pytest.fixture
-def int16_pair():
-    """一对 INT16 DSPTensor (64,)。"""
+def bf16_pair():
+    """一对 bf16 DSPTensor (64,)。"""
     import dsp
-    a = dsp.ops.randn(64, dtype=dsp.core.bint16)
-    b = dsp.ops.randn(64, dtype=dsp.core.bint16)
+    a = dsp.data.randn(64, dtype=dsp.core.bf16)
+    b = dsp.data.randn(64, dtype=dsp.core.bf16)
     return a, b
 
 
 @pytest.fixture
-def float32_pair():
-    """一对 Float32 DSPTensor (64,)。"""
+def double_pair():
+    """一对 double DSPTensor (64,)。"""
     import dsp
-    a = dsp.ops.randn(64, dtype=dsp.core.double)
-    b = dsp.ops.randn(64, dtype=dsp.core.double)
+    a = dsp.data.randn(64, dtype=dsp.core.double)
+    b = dsp.data.randn(64, dtype=dsp.core.double)
     return a, b
 
 
 @pytest.fixture
-def int16_matrix():
-    """INT16 矩阵 (4, 8)。"""
+def bf16_matrix():
+    """bf16 矩阵 (4, 8)。"""
     import dsp
-    return dsp.ops.randn(4, 8, dtype=dsp.core.bint16)
+    return dsp.data.randn(4, 8, dtype=dsp.core.bf16)
 
 
 @pytest.fixture
-def float32_matrix():
-    """Float32 矩阵 (4, 8)。"""
+def double_matrix():
+    """double 矩阵 (4, 8)。"""
     import dsp
-    return dsp.ops.randn(4, 8, dtype=dsp.core.double)
+    return dsp.data.randn(4, 8, dtype=dsp.core.double)
 
 
 # ============================================================
@@ -84,10 +85,10 @@ def tmp_output_dir():
 
 @pytest.fixture
 def sample_pipe():
-    """预建的 float32 DataPipe (4, 8)。"""
+    """预建的 double DataPipe (4, 8)。"""
     from dsp.data.pipe import DataPipe
-    t = torch.randn(4, 8)
-    return DataPipe(t, dtype="float32")
+    t = torch.randn(4, 8, dtype=torch.double)
+    return DataPipe(t, dtype="double")
 
 
 # ============================================================

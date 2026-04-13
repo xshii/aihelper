@@ -16,7 +16,7 @@ import torch
 
 from ..core.tensor import DSPTensor
 from ..core.dtype import DSPDtype
-from ..core.enums import Mode, Format, RunMode
+from ..core.enums import Mode, Format, RunMode, TensorSource
 from .mode import set_mode as _set_compute_mode
 from .case import make_case_dir, resolve_case_dir_and_seed
 from ..data.datagen import (
@@ -24,7 +24,7 @@ from ..data.datagen import (
     generate_by_strategy,
 )
 from ..data.io import (
-    tensor_to_uint32_lines, make_filename, parse_filename,
+    make_filename,
 )
 from ..data.layout import infer_format
 
@@ -42,6 +42,9 @@ class RunState:
     data_path: str = ""
     seed: int = 0
 
+    # USE_INPUT_DUT: 外部 DUT 输入源目录（平铺的 *_zz.txt / *_nn.txt / *_nd.txt 文件）
+    dut_source: str = ""
+
     round_index: int = 0
     total_rounds: int = 0
     done: bool = False
@@ -55,9 +58,7 @@ class RunState:
     mode_index: int = 0
     current_mode: str = Mode.TORCH
 
-    randn_counter: int = 0
     op_id_counter: int = 0
-    current_op_name: str = ""
 
     results: list[dict] = field(default_factory=list)
     round_logs: list[str] = field(default_factory=list)
@@ -70,8 +71,14 @@ _state = RunState()
 # 公开 API
 # ============================================================
 
-def set_global_runmode(runmode: str, data_path: str = None, seed: int = None):
-    """设置全局 runmode。data_path 默认从 config.yaml 的 output.root 取。"""
+def set_global_runmode(runmode: str, data_path: str = None, seed: int = None,
+                       dut_source: str = None):
+    """设置全局 runmode。data_path 默认从 config.yaml 的 output.root 取。
+
+    Args:
+        dut_source: USE_INPUT_DUT 专用 —— 外部 DUT 输入源目录（平铺文件，
+                    无 strategy 子目录）。若 None，则尝试在 data_path 下找 dut/ 子目录。
+    """
     if data_path is None:
         from ..config import config as _cfg
         data_path = _cfg.output.root
@@ -85,20 +92,26 @@ def set_global_runmode(runmode: str, data_path: str = None, seed: int = None):
     elif runmode == RunMode.USE_INPUT:
         data_path, seed = resolve_case_dir_and_seed(data_path, seed)
         logger.info("加载目录: %s (seed=%d)", data_path, seed)
+    elif runmode == RunMode.USE_INPUT_DUT:
+        data_path = make_case_dir(data_path, seed)
+        logger.info("use_input_dut 用例目录: %s (seed=%d, dut_source=%s)",
+                    data_path, seed, dut_source)
 
     torch.manual_seed(seed)
 
     global _state
-    _state = RunState(active=True, runmode=runmode, data_path=data_path, seed=seed)
+    _state = RunState(
+        active=True, runmode=runmode, data_path=data_path, seed=seed,
+        dut_source=dut_source or "",
+    )
 
-    _SETUP = {
-        RunMode.GENERATE_INPUT: _setup_generate_input,
-        RunMode.USE_INPUT: _setup_use_input,
-    }
-    setup_fn = _SETUP.get(runmode)
-    if setup_fn is None:
-        raise ValueError(f"未知 runmode: '{runmode}'。可用: {list(_SETUP)}")
-    setup_fn()
+    # GENERATE_INPUT 单独一路；USE_INPUT / USE_INPUT_DUT 共用 _setup_use_input
+    if runmode == RunMode.GENERATE_INPUT:
+        _setup_generate_input()
+    elif runmode in (RunMode.USE_INPUT, RunMode.USE_INPUT_DUT):
+        _setup_use_input()
+    else:
+        raise ValueError(f"未知 runmode: '{runmode}'")
 
 
 def is_global_done() -> bool:
@@ -143,6 +156,8 @@ def export():
     compare_report = {}
     if _state.runmode == RunMode.USE_INPUT and _state.saved_dirs:
         compare_report = _compare_all_modes()
+    elif _state.runmode == RunMode.USE_INPUT_DUT and _state.dut_source:
+        compare_report = _compare_use_input_dut()
 
     log_data = {
         "runmode": _state.runmode,
@@ -201,15 +216,33 @@ def _setup_generate_input():
 
 
 def _setup_use_input():
-    _state.saved_dirs = _scan_saved_dirs()
-    _state.modes_list = list(USE_INPUT_MODES)
+    """USE_INPUT / USE_INPUT_DUT 共用: saved_dirs × modes_list 两层循环。
+
+    - USE_INPUT:     saved_dirs 扫 data_path 下的 strategy 子目录
+    - USE_INPUT_DUT: saved_dirs 记作 ["dut"]（单占位），输入源在 dut_source 平铺目录
+                     modes_list 默认沿用 USE_INPUT_MODES 并自动补 Mode.TORCH
+                     （USE_INPUT_DUT 没有单独的 torch 参考轮，需要 torch 做无损基线）
+    """
+    if _state.runmode == RunMode.USE_INPUT_DUT:
+        if not _state.dut_source or not Path(_state.dut_source).exists():
+            _state.done = True
+            logger.error("use_input_dut: dut_source 不存在: %s", _state.dut_source)
+            return
+        _state.saved_dirs = ["dut"]
+        _state.modes_list = list(USE_INPUT_MODES)
+        if Mode.TORCH not in _state.modes_list:
+            _state.modes_list.insert(0, Mode.TORCH)
+    else:
+        _state.saved_dirs = _scan_saved_dirs()
+        _state.modes_list = list(USE_INPUT_MODES)
+
     _state.mode_index = 0
     _state.strategy_index = 0
     _state.total_rounds = len(_state.saved_dirs) * len(_state.modes_list)
 
     if _state.total_rounds == 0:
         _state.done = True
-        logger.warning("use_input: 未找到已保存的数据目录")
+        logger.warning("%s: 未找到已保存的数据", _state.runmode)
         return
 
     _state.current_mode = _state.modes_list[0]
@@ -217,7 +250,8 @@ def _setup_use_input():
     _set_compute_mode(_state.current_mode)
     _prepare_dir(_current_round_dir())
     logger.info(
-        "use_input: %d 目录 × %d 模式 = %d 轮",
+        "%s: %d 目录 × %d 模式 = %d 轮",
+        _state.runmode,
         len(_state.saved_dirs), len(_state.modes_list), _state.total_rounds,
     )
 
@@ -239,15 +273,16 @@ def _scan_saved_dirs() -> list[str]:
 # ============================================================
 
 def _advance_round():
-    {RunMode.GENERATE_INPUT: _advance_generate, RunMode.USE_INPUT: _advance_use_input}[
-        _state.runmode
-    ]()
+    # USE_INPUT 和 USE_INPUT_DUT 共用 _advance_use_input
+    if _state.runmode == RunMode.GENERATE_INPUT:
+        _advance_generate()
+    else:
+        _advance_use_input()
 
 
 def _advance_generate():
     _state.strategy_index += 1
     _state.round_index += 1
-    _state.randn_counter = 0
     _state.op_id_counter = 0
 
     if _state.strategy_index >= len(_state.strategies):
@@ -263,7 +298,6 @@ def _advance_generate():
 def _advance_use_input():
     _state.mode_index += 1
     _state.round_index += 1
-    _state.randn_counter = 0
     _state.op_id_counter = 0
 
     if _state.mode_index >= len(_state.modes_list):
@@ -289,10 +323,13 @@ def _advance_use_input():
 def _current_round_dir() -> str:
     if _state.runmode == RunMode.GENERATE_INPUT:
         return str(Path(_state.data_path) / _state.current_strategy.name)
+    base = Path(_state.data_path) / _state.runmode
+    # USE_INPUT_DUT: 无真 strategy，扁平化为 use_input_dut/<mode>/
+    if _state.runmode == RunMode.USE_INPUT_DUT:
+        return str(base / _state.current_mode)
+    # USE_INPUT: use_input/<strategy>/<mode>/
     strategy_name = _state.saved_dirs[_state.strategy_index]
-    return str(
-        Path(_state.data_path) / RunMode.USE_INPUT / strategy_name / _state.current_mode
-    )
+    return str(base / strategy_name / _state.current_mode)
 
 
 def _prepare_dir(path: str):
@@ -311,150 +348,223 @@ def get_current_strategy():
 
 
 
-def _randn_for_dtype(*size, torch_dtype):
-    """Generate random data compatible with both float and int dtypes."""
-    if torch_dtype.is_floating_point:
-        return torch.randn(*size, dtype=torch_dtype)
-    # int 类型: 先生成 float，再 round+clamp+cast
-    t = torch.randn(*size, dtype=torch.float32)
-    return t.round().clamp(-32768, 32767).to(torch_dtype)
-
 def intercepted_randn(*size, dtype: DSPDtype) -> DSPTensor:
-    counter = _state.randn_counter
-    _state.randn_counter += 1
+    """拦截 randn。
 
+    GENERATE_INPUT: 按 strategy 生成数据
+    USE_INPUT: passthrough — 不替换，op 级别会从磁盘加载保存的输入
+    其他: 普通 randn
+
+    内存全程 double 存储；dtype 只是标签，pre_quantize 会按需把量化误差打进去。
+    """
     if _state.runmode == RunMode.GENERATE_INPUT:
         strategy = _state.current_strategy
-        if strategy is not None and strategy.name == "math":  # 同 ops.MATH_STRATEGY_NAME
-            # math 策略：生成随机数据，打标 randn，由 op-level 拦截替换
-            t = _randn_for_dtype(*size, torch_dtype=dtype.torch_dtype)
-            result = DSPTensor.create(t, dtype)
-            result._source = "randn"
-            return result
-        t = generate_by_strategy(
-            *size, dtype_torch=dtype.torch_dtype, strategy=strategy,
-        )
-        result = DSPTensor.create(t, dtype)
-        result._source = "randn"
-        return result
+        if strategy is not None and strategy.name == "math":
+            t = torch.randn(*size, dtype=torch.double)
+        else:
+            t = generate_by_strategy(*size, dtype_torch=torch.double, strategy=strategy)
+    else:
+        # USE_INPUT 和其他模式：普通 randn（值在 USE_INPUT 下会被 op 层覆盖）
+        t = torch.randn(*size, dtype=torch.double)
 
-    if _state.runmode == RunMode.USE_INPUT:
-        return _load_randn_input(counter, size, dtype)
-
-    result = DSPTensor.create(_randn_for_dtype(*size, torch_dtype=dtype.torch_dtype), dtype)
-    result._source = "randn"
+    result = DSPTensor.create(t, dtype)
+    result._source = TensorSource.RANDN
     return result
 
 
-def _load_randn_input(counter, size, dtype):
+def get_current_runmode():
+    return _state.runmode
+
+
+def load_op_inputs(op_name: str, n_inputs: int) -> list:
+    """从磁盘加载当前 op 的输入。USE_INPUT / USE_INPUT_DUT 模式用。
+
+    使用 _state.op_id_counter 作为当前 op_id（和 save 同步）。
+    """
     from ..data.pipe import DataPipe
 
+    op_id = _state.op_id_counter
+
+    if _state.runmode == RunMode.USE_INPUT_DUT:
+        # 从 dut_source 平铺目录读 bf16/bf8 bits，经 codec 还原成 double tensor
+        src_dir = Path(_state.dut_source)
+        loaded = []
+        for i in range(n_inputs):
+            pattern = f"{op_name}_{op_id}_input{i}_*.txt"
+            matches = list(src_dir.glob(pattern))
+            if not matches:
+                raise FileNotFoundError(
+                    f"未找到 DUT 输入 {op_name}_{op_id}_input{i} (dir={src_dir})"
+                )
+            loaded.append(_load_dut_file(matches[0]))
+        return loaded
+
+    # USE_INPUT: 从 ND 文件（double）加载
     strategy_name = _state.saved_dirs[_state.strategy_index]
     src_dir = Path(_state.data_path) / strategy_name
 
-    matches = list(src_dir.glob(f"*_input{counter}_*"))
-    if matches:
+    loaded = []
+    for i in range(n_inputs):
+        # DUT 文件在 dut/ 子目录，这里只扫根目录
+        pattern = f"{op_name}_{op_id}_input{i}_*.txt"
+        matches = list(src_dir.glob(pattern))
+        if not matches:
+            raise FileNotFoundError(
+                f"未找到 {op_name}_{op_id}_input{i} 文件 (dir={src_dir})"
+            )
         pipe = DataPipe.load(str(matches[0]))
-        return DSPTensor.create(pipe.tensor, dtype)
-
-    logger.warning("未找到 input%d 文件 (dir=%s)，降级为随机", counter, src_dir)
-    return DSPTensor.create(_randn_for_dtype(*size, torch_dtype=dtype.torch_dtype), dtype)
+        loaded.append(pipe.tensor)
+    return loaded
 
 
 # ============================================================
 # 算子数据保存（由 ops hook 调用）
 # ============================================================
 
-def save_op_inputs(op_name, param_names, args, format_hints):
-    """保存算子输入。所有模式统一 double + ND，golden_c 额外导出 DUT 格式。"""
+def _get_dtype_name(t: torch.Tensor) -> str:
+    """按 tensor 真实 torch dtype 命名（用于 ND 文件）。未注册的 torch dtype 回退到原始名字。"""
+    from ..core.dtype import dtype_from_torch
+    d = dtype_from_torch(t.dtype)
+    return d.name if d else str(t.dtype).replace("torch.", "")
+
+
+def _to_dut_bits(t: torch.Tensor, dsp_dtype, fmt) -> torch.Tensor:
+    """double tensor → padded + block 重排 + cast 到硬件原生 torch dtype。
+
+    结果 tensor 的 bit 模式就是硬件 DUT 文件应写的内容（bf16/bf8 等）。
+    """
+    from ..core.block import pad_to_block, to_block
+    fmt = Format(fmt) if not isinstance(fmt, Format) else fmt
+    name = dsp_dtype.name
+    if t.ndim >= 2 and fmt != Format.ND:
+        padded = pad_to_block(t, name, fmt)
+        blocked = to_block(padded, name, fmt)
+    else:
+        blocked = t
+    # 值在此之前已经是 bf16 量化过的 double（经 pre_quantize / golden_c 输出），
+    # .to(bf16) 是无损截断。
+    return blocked.to(dsp_dtype.torch_dtype)
+
+
+def _load_dut_file(path: Path) -> torch.Tensor:
+    """从 DUT 文件加载 → double tensor (原始 shape, 无 padding)。
+
+    DUT 文件存储硬件原生 bit 模式（bf16/bf8 ...），padded 且按 block 重排。
+    本函数负责：读 bytes → view 为原生 torch dtype → .double() → 反 block → 裁 padding。
+    """
+    from ..core.block import get_block_shape, pad_dim, from_block
+    from ..core.dtype import get_dtype
+    from ..data.io import parse_filename, uint32_lines_to_bytes
+    import numpy as np
+
+    meta = parse_filename(str(path))
+    dtype_name = meta.get("dtype", "bf16")
+    orig_shape = meta.get("shape", ())
+    fmt = Format(meta.get("format", Format.ND))
+
+    dsp_dtype = get_dtype(dtype_name)
+    torch_dtype = dsp_dtype.torch_dtype
+
+    # 计算 padded shape（DUT 文件里含 padding）
+    if len(orig_shape) >= 2 and fmt != Format.ND:
+        bh, bw = get_block_shape(dtype_name, fmt)
+        padded_last2 = (pad_dim(orig_shape[-2], bh), pad_dim(orig_shape[-1], bw))
+        padded_shape = (*orig_shape[:-2], *padded_last2)
+    else:
+        padded_shape = orig_shape
+
+    # 读取原始字节
+    with open(path) as f:
+        lines = f.readlines()
+    raw = uint32_lines_to_bytes(lines)
+
+    # numpy 不支持 bf16/fp8 → 用等宽 int 类型 view 回硬件 dtype
+    if torch_dtype == torch.bfloat16:
+        view_dtype = torch.int16
+    elif torch_dtype == torch.float8_e4m3fn:
+        view_dtype = torch.int8
+    else:
+        view_dtype = torch_dtype
+
+    np_dtype = torch.zeros(1, dtype=view_dtype).numpy().dtype
+    total = int(np.prod(padded_shape)) if padded_shape else len(raw) // np_dtype.itemsize
+    arr = np.frombuffer(raw, dtype=np_dtype, count=total).copy()
+    tensor = torch.from_numpy(arr)
+    if view_dtype != torch_dtype:
+        tensor = tensor.view(torch_dtype)
+
+    # 硬件原生 → double（现在所有内存都是 double）
+    double_blocked = tensor.double()
+
+    # 反 block: blocked → nd + 去 padding
+    if len(orig_shape) >= 2 and fmt != Format.ND:
+        return from_block(double_blocked, dtype_name, fmt, tuple(orig_shape))
+    return double_blocked.reshape(orig_shape)
+
+
+def _save_tensor(tensor: torch.Tensor, op_name: str, op_id: int,
+                 operand: str, fmt_hint: Optional[Format] = None) -> None:
+    """写一份 ND（按真实 torch dtype） + 可选的 DUT（硬件原生 bits，写 dut/ 子目录）。"""
     from ..data.pipe import DataPipe
 
-    _state.current_op_name = op_name
+    t_cpu = tensor.detach().cpu()
+    out_dir = Path(_current_round_dir())
+    storage_name = _get_dtype_name(t_cpu)
+
+    # ND 文件
+    nd_name = make_filename(op_name, op_id, operand, storage_name, tuple(t_cpu.shape), Format.ND)
+    DataPipe(t_cpu, dtype=storage_name).export(str(out_dir / nd_name))
+
+    # golden_c 额外: DUT 文件（硬件原生 bits），写到 dut/ 子目录
+    # 只对带 DSPDtype 的 tensor 写 DUT；double tensor 没有硬件原生表示
+    dsp_dtype = tensor._dsp_dtype if isinstance(tensor, DSPTensor) else None
+    if _state.current_mode == Mode.GOLDEN_C and dsp_dtype is not None and dsp_dtype.name != "double":
+        dut_dir = out_dir / "dut"
+        dut_dir.mkdir(parents=True, exist_ok=True)
+        dut_fmt = fmt_hint if fmt_hint is not None else infer_format(t_cpu)
+        dut_bits = _to_dut_bits(t_cpu, dsp_dtype, dut_fmt)
+        dut_name = make_filename(op_name, op_id, operand, dsp_dtype.name, tuple(t_cpu.shape), dut_fmt)
+        DataPipe(dut_bits, dtype=dsp_dtype.name, fmt=dut_fmt).export(str(dut_dir / dut_name))
+
+
+def save_op_inputs(op_name, param_names, args, format_hints):
+    """保存算子每个 tensor 输入。ND 按真实 dtype，golden_c 额外导出 DUT。"""
     op_id = _state.op_id_counter
     out_dir = _current_round_dir()
-    is_gc = _state.current_mode == Mode.GOLDEN_C
 
     for i, arg in enumerate(args):
         if not isinstance(arg, torch.Tensor):
             continue
         name = param_names[i] if i < len(param_names) else f"input{i}"
-        operand = f"input{i}"
-        dtype_name = _get_dtype_name(arg)
-
-        # 统一: ND 格式（不分块），对齐 torch dtype
-        aligned = _align_torch_dtype(arg)
-        filename = make_filename(op_name, op_id, operand, dtype_name, tuple(aligned.shape), Format.ND)
-        DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
-
-        # golden_c 额外: DUT 格式（带分块 + padding）
-        if is_gc:
-            dut_fmt = format_hints.get(name, infer_format(aligned))
-            dut_name = make_filename(op_name, op_id, operand + "_dut", dtype_name, tuple(aligned.shape), dut_fmt)
-            DataPipe(aligned, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
+        fmt_hint = format_hints.get(name) if _state.current_mode == Mode.GOLDEN_C else None
+        _save_tensor(arg, op_name, op_id, f"input{i}", fmt_hint=fmt_hint)
 
     _write_input_order(out_dir, op_name, op_id, param_names, args)
 
 
 def save_op_output(op_name, result):
-    """保存算子输出。所有模式统一 double + ND，golden_c 额外导出 DUT 格式。"""
-    from ..data.pipe import DataPipe
-
+    """保存算子输出。和 save_op_inputs 同构，额外负责 op_id 自增。"""
     op_id = _state.op_id_counter
     _state.op_id_counter += 1
-
     if not isinstance(result, torch.Tensor):
         return
-
-    out_dir = _current_round_dir()
-    dtype_name = _get_dtype_name(result)
-    is_gc = _state.current_mode == Mode.GOLDEN_C
-
-    # 统一: ND 格式，对齐 torch dtype
-    aligned = _align_torch_dtype(result)
-    filename = make_filename(op_name, op_id, "output0", dtype_name, tuple(aligned.shape), Format.ND)
-    DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
-
-    # golden_c 额外: DUT 格式
-    if is_gc:
-        dut_fmt = infer_format(aligned)
-        dut_name = make_filename(op_name, op_id, "output0_dut", dtype_name, tuple(aligned.shape), dut_fmt)
-        DataPipe(aligned, dtype=dtype_name).layout(dut_fmt).export(str(Path(out_dir) / dut_name))
-
-
-def _get_dtype_name(t):
-    if isinstance(t, DSPTensor) and t._dsp_dtype is not None:
-        return t._dsp_dtype.name
-    return "float64"
-
-
-def _align_torch_dtype(t):
-    """确保 tensor 的 torch dtype 和 DSP dtype 一致（防止序列化/反序列化 byte 数不匹配）。"""
-    if isinstance(t, DSPTensor) and t._dsp_dtype is not None:
-        expected = t._dsp_dtype.torch_dtype
-        if t.dtype != expected:
-            return t.to(expected)
-    return t
+    _save_tensor(result, op_name, op_id, "output0")
 
 
 def save_op_expected(op_name, expected):
-    """保存 math strategy 的期望输出。统一 double + ND。"""
+    """保存 math strategy 的期望输出。只写 ND（不进 dut/）。"""
     from ..data.pipe import DataPipe
 
     if not isinstance(expected, torch.Tensor):
         return
 
-    op_id = _state.op_id_counter - 1  # save_op_output 已经 +1 了
+    op_id = _state.op_id_counter - 1  # save_op_output 已经 +1
     out_dir = _current_round_dir()
-    dtype_name = _get_dtype_name(expected)
-
-    aligned = _align_torch_dtype(expected)
-    filename = make_filename(op_name, op_id, "expected0", dtype_name, tuple(aligned.shape), Format.ND)
-    DataPipe(aligned, dtype=dtype_name).export(str(Path(out_dir) / filename))
+    t_cpu = expected.detach().cpu()
+    storage_name = _get_dtype_name(t_cpu)
+    filename = make_filename(op_name, op_id, "expected0", storage_name, tuple(t_cpu.shape), Format.ND)
+    DataPipe(t_cpu, dtype=storage_name).export(str(Path(out_dir) / filename))
     logger.info("[math] %s: saved expected output → %s", op_name, filename)
-
-
-def clear_current_op():
-    _state.current_op_name = ""
 
 
 def _write_input_order(out_dir, op_name, op_id, param_names, args):
@@ -477,9 +587,53 @@ def _compare_all_modes():
     return compare_all_modes(_state.data_path, _state.saved_dirs, _state.modes_list)
 
 
+def _compare_use_input_dut() -> dict:
+    """USE_INPUT_DUT 比数：每个模式的 output vs dut_source 里的 expected DUT 文件。
+
+    dut_source 里的 `<op>_<id>_output0_*.txt` 是外部硬件产出的期望，解码成 double 后
+    和 data_path/use_input_dut/<mode>/ 下每个模式的 ND 输出做 compute_diff。
+    """
+    from ..data.compare import compute_diff
+    from ..data.pipe import DataPipe
+    from ..data.io import parse_filename
+
+    src = Path(_state.dut_source)
+    base = Path(_state.data_path) / _state.runmode
+
+    report = {"dut": {}}
+    for exp_path in sorted(src.glob("*_output0_*.txt")):
+        try:
+            exp_tensor = _load_dut_file(exp_path)
+        except Exception as e:
+            logger.warning("加载 expected %s 失败: %s", exp_path.name, e)
+            continue
+
+        meta = parse_filename(exp_path.name)
+        op = meta.get("op")
+        op_id = meta.get("op_id")
+        operand = meta.get("operand")
+        if not op or op_id is None or not operand:
+            continue
+
+        pairs = {}
+        for mode in _state.modes_list:
+            pattern = f"{op}_{op_id}_{operand}_*_nd.txt"
+            matches = list((base / mode).glob(pattern))
+            if not matches:
+                continue
+            act_tensor = DataPipe.load(str(matches[0])).tensor
+            pairs[f"expected vs {mode}"] = compute_diff(act_tensor, exp_tensor)
+
+        if pairs:
+            report["dut"][exp_path.name] = pairs
+
+    return report
+
+
 def _export_html(compare_report):
     from ..data.viz import export_html
-    export_html(_state.data_path, compare_report, _state.modes_list)
+    export_html(_state.data_path, compare_report, _state.modes_list,
+                runmode=_state.runmode)
 
 
 def _print_compare_summary(report):

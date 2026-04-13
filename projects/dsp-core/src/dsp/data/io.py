@@ -34,20 +34,33 @@ class IOMixin:
         from ..core.enums import Format
         fmt = meta.get("format", Format.ND)
 
-        # 推断 torch dtype
+        # 读取 dtype 直接由文件名里的 dtype_name 决定 —
+        # 存什么就读什么。ND 文件存 double，DUT 文件存硬件原生位。
         from ..core.dtype import get_dtype
         try:
-            dsp_dtype = get_dtype(dtype_name)
-            torch_dtype = dsp_dtype.torch_dtype
+            torch_dtype = get_dtype(dtype_name).torch_dtype
         except ValueError:
             torch_dtype = torch.float32
 
         with open(path) as f:
             lines = f.readlines()
         raw = uint32_lines_to_bytes(lines)
-        np_dtype = torch.zeros(1, dtype=torch_dtype).numpy().dtype
-        arr = np.frombuffer(raw, dtype=np_dtype)[:np.prod(shape) if shape else len(raw) // 4]
-        tensor = torch.from_numpy(arr.copy()).reshape(shape) if shape else torch.from_numpy(arr.copy())
+
+        # numpy 不支持 bf16/fp8，用等宽整数读取后 view
+        view_dtype = torch_dtype
+        if torch_dtype == torch.bfloat16:
+            view_dtype = torch.int16
+        elif torch_dtype == torch.float8_e4m3fn:
+            view_dtype = torch.int8
+
+        np_dtype = torch.zeros(1, dtype=view_dtype).numpy().dtype
+        n = int(np.prod(shape)) if shape else len(raw) // np_dtype.itemsize
+        arr = np.frombuffer(raw, dtype=np_dtype)[:n]
+        tensor = torch.from_numpy(arr.copy())
+        if view_dtype != torch_dtype:
+            tensor = tensor.view(torch_dtype)
+        if shape:
+            tensor = tensor.reshape(shape)
 
         return cls(tensor, dtype=dtype_name, fmt=fmt)
 
@@ -82,7 +95,16 @@ def parse_filename(filename: str) -> dict:
 # ============================================================
 
 def tensor_to_uint32_lines(t: torch.Tensor) -> list[str]:
-    raw_bytes = t.detach().cpu().contiguous().numpy().tobytes()
+    # 脱壳 DSPTensor → torch.Tensor（避免 subclass 在 numpy() 里触发 __torch_function__）
+    if type(t) is not torch.Tensor:
+        t = t.as_subclass(torch.Tensor)
+    t = t.detach().cpu().contiguous()
+    # numpy 不支持 bf16/fp8，用等宽整数类型 reinterpret bits
+    if t.dtype == torch.bfloat16:
+        t = t.view(torch.int16)
+    elif t.dtype == torch.float8_e4m3fn:
+        t = t.view(torch.int8)
+    raw_bytes = t.numpy().tobytes()
     pad_len = (4 - len(raw_bytes) % 4) % 4
     raw_bytes += b'\x00' * pad_len
     lines = []

@@ -1,82 +1,31 @@
 #pragma once
+#include <cstddef>
 #include "golden_convert.h"
 
 // 硬件矩阵运算（参考实现）
-// 签名用 BINT*，内部 cast 成 int16_t*/int32_t* flat 索引
+// src0 (input): ZZ 行优先存储，索引 a[m*K+k]
+// src1 (weight): NN 列优先存储，索引 b[n*K+k]
+// dst (output):  ZZ 行优先存储，索引 dst[m*N+n]
+// 累加在 float32 (Q12_22.raw) 中进行
 
-inline void sp_gemm_int16_int16_oint32_acc_q12_22(
-    Q12_22 *dst, const BINT16 *src0, const BINT16 *src1, int M, int K, int N) {
-    const int16_t *a = (const int16_t *)src0, *b = (const int16_t *)src1;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            dst[m*N+n].raw = (int32_t)(acc > 2147483647LL ? 2147483647 : acc < -2147483648LL ? -2147483648 : acc);
-        }
+#define SP_GEMM_ACC_Q12_22(DUT, name, elem_t, to_float)                              \
+inline void sp_gemm_##name##_acc_q12_22(                                             \
+    Q12_22 *dst, DUT *src0, DUT *src1,                                               \
+    DUT *bias, int scale_exp, size_t M, size_t K, size_t N) {                        \
+    elem_t *a = (elem_t *)src0;  /* ZZ: row-major */                                 \
+    elem_t *b = (elem_t *)src1;  /* NN: col-major */                                 \
+    elem_t *bi = bias ? (elem_t *)bias : nullptr;                                    \
+    for (size_t m = 0; m < M; m++)                                                   \
+        for (size_t n = 0; n < N; n++) {                                             \
+            float acc = 0.0f;                                                        \
+            for (size_t k = 0; k < K; k++)                                           \
+                acc += to_float(a[m*K+k]) * to_float(b[n*K+k]);                     \
+            if (bi) acc += to_float(bi[n]) * (float)(1 << scale_exp);                \
+            dst[m*N+n].raw = acc;                                                    \
+        }                                                                            \
 }
 
-inline void sp_gemm_int16_int16_oint16_acc_q12_22(
-    BINT16 *dst, const BINT16 *src0, const BINT16 *src1, int M, int K, int N) {
-    const int16_t *a = (const int16_t *)src0, *b = (const int16_t *)src1;
-    int16_t *d = (int16_t *)dst;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            d[m*N+n] = (int16_t)(acc > 32767 ? 32767 : acc < -32768 ? -32768 : acc);
-        }
-}
+SP_GEMM_ACC_Q12_22(BF8,  bf8,  uint8_t,  fp8_to_float)
+SP_GEMM_ACC_Q12_22(BF16, bf16, uint16_t, bf16_to_float)
 
-inline void sp_gemm_int32_int32_oint32_acc_q24_40(
-    Q24_40 *dst, const BINT32 *src0, const BINT32 *src1, int M, int K, int N) {
-    const int32_t *a = (const int32_t *)src0, *b = (const int32_t *)src1;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            dst[m*N+n].raw = (int32_t)(acc > 2147483647LL ? 2147483647 : acc < -2147483648LL ? -2147483648 : acc);
-        }
-}
-
-inline void sp_fused_linear_int16_int16_bint32_oint16_acc_q12_22(
-    BINT16 *dst, const BINT16 *src0, const BINT16 *src1,
-    const BINT32 *src2, int scale_exp, int M, int K, int N) {
-    const int16_t *a = (const int16_t *)src0, *b = (const int16_t *)src1;
-    const int32_t *bias = (const int32_t *)src2;
-    int16_t *d = (int16_t *)dst;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            acc += (int64_t)bias[n];
-            d[m*N+n] = (int16_t)(acc > 32767 ? 32767 : acc < -32768 ? -32768 : acc);
-        }
-}
-
-inline void sp_fused_linear_int16_int16_bint32_oint32_acc_q12_22(
-    Q12_22 *dst, const BINT16 *src0, const BINT16 *src1,
-    const BINT32 *src2, int scale_exp, int M, int K, int N) {
-    const int16_t *a = (const int16_t *)src0, *b = (const int16_t *)src1;
-    const int32_t *bias = (const int32_t *)src2;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            acc += (int64_t)bias[n];
-            dst[m*N+n].raw = (int32_t)(acc > 2147483647LL ? 2147483647 : acc < -2147483648LL ? -2147483648 : acc);
-        }
-}
-
-inline void sp_fused_linear_int32_int32_bint32_oint32_acc_q24_40(
-    Q24_40 *dst, const BINT32 *src0, const BINT32 *src1,
-    const BINT32 *src2, int scale_exp, int M, int K, int N) {
-    const int32_t *a = (const int32_t *)src0, *b = (const int32_t *)src1;
-    const int32_t *bias = (const int32_t *)src2;
-    for (int m = 0; m < M; m++)
-        for (int n = 0; n < N; n++) {
-            int64_t acc = 0;
-            for (int k = 0; k < K; k++) acc += (int64_t)a[m*K+k] * b[k*N+n];
-            acc += (int64_t)bias[n];
-            dst[m*N+n].raw = (int32_t)(acc > 2147483647LL ? 2147483647 : acc < -2147483648LL ? -2147483648 : acc);
-        }
-}
+#undef SP_GEMM_ACC_Q12_22

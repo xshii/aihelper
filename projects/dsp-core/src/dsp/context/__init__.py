@@ -20,7 +20,7 @@ from .runloop import (
     set_global_runmode, is_global_done, is_runmode_active,
     submit_output, export,
     save_op_inputs, save_op_output, save_op_expected, intercepted_randn,
-    get_current_strategy,
+    get_current_strategy, load_op_inputs, get_current_runmode,
 )
 
 # 注入 hooks 到 ops 和 data（解除反向依赖）
@@ -33,6 +33,8 @@ set_ops_hooks(
     get_compute_config=lambda: get_compute_config(),
     get_current_strategy=get_current_strategy,
     save_op_expected=save_op_expected,
+    load_op_inputs=load_op_inputs,
+    get_runmode=get_current_runmode,
 )
 
 from ..data.factory import set_randn_interceptor
@@ -79,6 +81,7 @@ def run(
     output_dtype=None,
     strategies=None,
     modes=None,
+    dut_source=None,
 ):
     """一键运行验证循环。所有可配置项集中在这里。
 
@@ -114,7 +117,7 @@ def run(
         )
 
     with _temp_strategies_and_modes(strategies, modes):
-        set_global_runmode(runmode, data_path, seed)
+        set_global_runmode(runmode, data_path, seed, dut_source=dut_source)
         while not is_global_done():
             result = main_fn()
             submit_output(result)

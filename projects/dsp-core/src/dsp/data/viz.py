@@ -121,8 +121,12 @@ _PIPE_PLOTS = {
 # ============================================================
 
 def export_html(data_path: str, report: dict, modes_list: list[str],
-                auto_open: bool = True):
-    """生成 HTML 比数报告。文件放 output 根目录，命名含时间戳。"""
+                auto_open: bool = True, runmode: str = "use_input"):
+    """生成 HTML 比数报告。文件放 output 根目录，命名含时间戳。
+
+    Args:
+        runmode: "use_input" 或 "use_input_dut"，决定 mode 输出文件的查找路径
+    """
     try:
         _require_plotly()
     except ImportError:
@@ -137,7 +141,7 @@ def export_html(data_path: str, report: dict, modes_list: list[str],
     parts = [_HTML_HEADER]
     parts.append(_safe_render(_build_summary_table, report, cfg.compare))
     parts.append(_safe_render(_build_strategy_bars, report))
-    parts.extend(_build_detail_sections(data_path, report, modes_list))
+    parts.extend(_build_detail_sections(data_path, report, modes_list, runmode))
     parts.append("</body></html>")
 
     case_name = Path(data_path).name
@@ -148,7 +152,7 @@ def export_html(data_path: str, report: dict, modes_list: list[str],
     logger.info("HTML 报告: %s", out_path)
 
     if auto_open:
-        webbrowser.open(out_path.as_uri())
+        webbrowser.open(out_path.resolve().as_uri())
 
 
 # --- 汇总表 ---
@@ -210,14 +214,20 @@ def _build_strategy_bars(report: dict) -> str:
 
 # --- 详情区（折叠） ---
 
-def _build_detail_sections(data_path, report, modes_list):
-    from ..core.enums import RunMode
-    base = Path(data_path) / RunMode.USE_INPUT
+def _build_detail_sections(data_path, report, modes_list, runmode: str):
+    """USE_INPUT:     base/<strategy>/<mode>/<fname>
+    USE_INPUT_DUT:  base/<mode>/<fname>（无 strategy 层）
+    """
+    base = Path(data_path) / runmode
+    is_dut = runmode == "use_input_dut"
     sections = ['<h2>详情（点击展开）</h2>']
 
     for strategy, ops in report.items():
-        mode_dirs = {m: base / strategy / m for m in modes_list
-                     if (base / strategy / m).exists()}
+        if is_dut:
+            mode_dirs = {m: base / m for m in modes_list if (base / m).exists()}
+        else:
+            mode_dirs = {m: base / strategy / m for m in modes_list
+                         if (base / strategy / m).exists()}
         op_parts = []
         for fname in ops:
             tensors = _load_tensors(fname, mode_dirs)
@@ -241,10 +251,28 @@ def _build_detail_sections(data_path, report, modes_list):
 
 
 def _load_tensors(fname, mode_dirs):
+    """按 op_id+operand 前缀模糊匹配各模式的输出文件。
+
+    USE_INPUT 时 fname 和实际文件名一致 (`*_double_*_nd.txt`)。
+    USE_INPUT_DUT 时 fname 来自 dut_source (`*_bf16_*_zz.txt`)，需要按
+    `<op>_<id>_<operand>_*` 前缀匹配各 mode dir 里的 ND 文件。
+    """
     from .pipe import DataPipe
+    from .io import parse_filename
+
+    meta = parse_filename(fname)
+    op = meta.get("op")
+    op_id = meta.get("op_id")
+    operand = meta.get("operand")
+    prefix = f"{op}_{op_id}_{operand}_" if op and op_id is not None and operand else None
+
     tensors = {}
     for m, d in mode_dirs.items():
         fpath = d / fname
+        if not fpath.exists() and prefix:
+            matches = list(d.glob(f"{prefix}*.txt"))
+            if matches:
+                fpath = matches[0]
         if fpath.exists():
             try:
                 t = DataPipe.load(str(fpath)).tensor

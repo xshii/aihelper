@@ -1,96 +1,133 @@
 #pragma once
 #include <cstdint>
-#include "dsp/dsp_types.h"
+#include <cstring>
 
 // ============================================================
-// 硬件类型定义（纯 C 风格，平铺）
+// 硬件类型定义
+//
+// BF8:  fp8_e4m3 (1+4+3, range ±448)
+// BF16: bfloat16 (1+8+7, range ±3.4e38)
+// Q12_22: float32 累加器（模拟硬件 ACC，范围略大于 fp16）
 // ============================================================
 
-typedef struct { int32_t raw; } Q12_22;
-typedef struct { int32_t raw; } Q24_40;
+typedef struct { float raw; } Q12_22;
 
-typedef struct { int8_t  val[DSP_BLOCK_BYTES / sizeof(int8_t)];  } BINT8;   // 16 元素
-typedef struct { int16_t val[DSP_BLOCK_BYTES / sizeof(int16_t)]; } BINT16;  // 8 元素
-typedef struct { int32_t val[DSP_BLOCK_BYTES / sizeof(int32_t)]; } BINT32;  // 4 元素
+#define BF8_BLOCK_SIZE  16   // 128-bit / 8-bit  = 16 elements
+#define BF16_BLOCK_SIZE  8   // 128-bit / 16-bit =  8 elements
+typedef struct { uint8_t  val[BF8_BLOCK_SIZE];  } BF8;   // fp8_e4m3 bits
+typedef struct { uint16_t val[BF16_BLOCK_SIZE]; } BF16;  // bfloat16 bits
 
 // ============================================================
-// 硬件转换接口 — 每次操作一个 subblock（一个 BINT = 128 bits）
+// 内部工具: bf16 / fp8 ↔ float
 // ============================================================
 
-// DUT → double
-void BINT8ToDouble(BINT8 value, double *dst);
-void BINT16ToDouble(BINT16 value, double *dst);
-void BINT32ToDouble(BINT32 value, double *dst);
+// --- bfloat16: float32 高 16 位 ---
+inline float bf16_to_float(uint16_t bf16) {
+    uint32_t bits = (uint32_t)bf16 << 16;
+    float f;
+    memcpy(&f, &bits, sizeof(float));
+    return f;
+}
 
-// double → DUT
-BINT8  DoubleToBINT8(double *src);
-BINT16 DoubleToBINT16(double *src);
-BINT32 DoubleToBINT32(double *src);
+inline uint16_t float_to_bf16(float f) {
+    uint32_t bits;
+    memcpy(&bits, &f, sizeof(float));
+    // round-to-nearest-even (和 torch .to(bfloat16) 一致)
+    uint32_t lsb = (bits >> 16) & 1;
+    uint32_t rounding_bias = 0x7FFF + lsb;
+    bits += rounding_bias;
+    return (uint16_t)(bits >> 16);
+}
 
-// ACC → DUT（一个 subblock）
-void acc_q12_22_to_bint8(Q12_22 *src, BINT8 *dst);
-void acc_q12_22_to_bint16(Q12_22 *src, BINT16 *dst);
-void acc_q12_22_to_bint32(Q12_22 *src, BINT32 *dst);
-void acc_q24_40_to_bint32(Q24_40 *src, BINT32 *dst);
+// --- fp8_e4m3: 1 sign + 4 exp (bias=7) + 3 mantissa, no inf, max=448 ---
+inline float fp8_to_float(uint8_t fp8) {
+    uint8_t sign = (fp8 >> 7) & 1;
+    uint8_t exp = (fp8 >> 3) & 0xF;
+    uint8_t man = fp8 & 0x7;
+    if (exp == 0 && man == 0) return sign ? -0.0f : 0.0f;
+    if (exp == 0) {
+        // subnormal: (-1)^sign × 2^(-6) × (0.man)
+        float val = (float)man / 8.0f * (1.0f / 64.0f);
+        return sign ? -val : val;
+    }
+    // normal: (-1)^sign × 2^(exp-7) × (1.man)
+    uint32_t f_exp = (uint32_t)(exp - 7 + 127);
+    uint32_t f_bits = ((uint32_t)sign << 31) | (f_exp << 23) | ((uint32_t)man << 20);
+    float f;
+    memcpy(&f, &f_bits, sizeof(float));
+    return f;
+}
 
+inline uint8_t float_to_fp8(float f) {
+    uint32_t bits;
+    memcpy(&bits, &f, sizeof(float));
+    uint8_t sign = (bits >> 31) & 1;
+    int32_t exp = ((bits >> 23) & 0xFF) - 127;
+    uint32_t man = bits & 0x7FFFFF;
+
+    if (f == 0.0f || f == -0.0f) return sign << 7;
+    // clamp to fp8 range (max = 448)
+    if (exp > 8) return (sign << 7) | 0x7E;  // max positive: s_1111_110 = ±448
+    if (exp < -6) return sign << 7;  // underflow → ±0
+    if (exp < -6 + 1) {
+        // subnormal
+        int shift = -6 - exp;
+        uint8_t m = (uint8_t)((0x800000 | man) >> (20 + shift));
+        return (sign << 7) | (m & 0x7);
+    }
+    uint8_t fp8_exp = (uint8_t)(exp + 7);
+    uint8_t fp8_man = (uint8_t)(man >> 20) & 0x7;
+    return (sign << 7) | (fp8_exp << 3) | fp8_man;
+}
 
 // ============================================================
 // 参考实现（demo 用，真实硬件替换）
 // ============================================================
 
-inline void BINT8ToDouble(BINT8 value, double *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++)
-        dst[i] = (double)value.val[i];
+#pragma region DUT<->DOUBLE
+
+inline void BF8ToDouble(BF8 value, double *dst) {
+    for (int i = 0; i < BF8_BLOCK_SIZE; i++)
+        dst[i] = (double)fp8_to_float(value.val[i]);
 }
-inline void BINT16ToDouble(BINT16 value, double *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++)
-        dst[i] = (double)value.val[i];
-}
-inline void BINT32ToDouble(BINT32 value, double *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++)
-        dst[i] = (double)value.val[i];
+inline void BF16ToDouble(BF16 value, double *dst) {
+    for (int i = 0; i < BF16_BLOCK_SIZE; i++)
+        dst[i] = (double)bf16_to_float(value.val[i]);
 }
 
-inline BINT8 DoubleToBINT8(double *src) {
-    BINT8 r;
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++)
-        r.val[i] = (src[i] > 127) ? 127 : (src[i] < -128) ? -128 : (int8_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
+inline BF8 DoubleToBF8(double *src) {
+    BF8 r;
+    for (int i = 0; i < BF8_BLOCK_SIZE; i++)
+        r.val[i] = float_to_fp8((float)src[i]);
     return r;
 }
-inline BINT16 DoubleToBINT16(double *src) {
-    BINT16 r;
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++)
-        r.val[i] = (src[i] > 32767) ? 32767 : (src[i] < -32768) ? -32768 : (int16_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
-    return r;
-}
-inline BINT32 DoubleToBINT32(double *src) {
-    BINT32 r;
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++)
-        r.val[i] = (src[i] > 2147483647.0) ? 2147483647 : (src[i] < -2147483648.0) ? -2147483648 : (int32_t)(src[i] + (src[i] > 0 ? 0.5 : -0.5));
+inline BF16 DoubleToBF16(double *src) {
+    BF16 r;
+    for (int i = 0; i < BF16_BLOCK_SIZE; i++)
+        r.val[i] = float_to_bf16((float)src[i]);
     return r;
 }
 
-inline void acc_q12_22_to_bint8(Q12_22 *src, BINT8 *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int8_t); i++) {
-        int64_t s = (int64_t)src[i].raw >> 22;
-        dst->val[i] = (s > 127) ? 127 : (s < -128) ? -128 : (int8_t)s;
-    }
+#pragma endregion
+
+#pragma region ACC<->DUT
+
+inline void acc_q12_22_to_bf8(Q12_22 *src, BF8 *dst) {
+    for (int i = 0; i < BF8_BLOCK_SIZE; i++)
+        dst->val[i] = float_to_fp8(src[i].raw);
 }
-inline void acc_q12_22_to_bint16(Q12_22 *src, BINT16 *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int16_t); i++) {
-        int64_t s = (int64_t)src[i].raw >> 22;
-        dst->val[i] = (s > 32767) ? 32767 : (s < -32768) ? -32768 : (int16_t)s;
-    }
+inline void acc_q12_22_to_bf16(Q12_22 *src, BF16 *dst) {
+    for (int i = 0; i < BF16_BLOCK_SIZE; i++)
+        dst->val[i] = float_to_bf16(src[i].raw);
 }
-inline void acc_q12_22_to_bint32(Q12_22 *src, BINT32 *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++) {
-        int64_t s = (int64_t)src[i].raw >> 22;
-        dst->val[i] = (s > 2147483647LL) ? 2147483647 : (s < -2147483648LL) ? -2147483648 : (int32_t)s;
-    }
+
+inline void bf8_to_acc_q12_22(BF8 *src, Q12_22 *dst) {
+    for (int i = 0; i < BF8_BLOCK_SIZE; i++)
+        dst[i].raw = fp8_to_float(src->val[i]);
 }
-inline void acc_q24_40_to_bint32(Q24_40 *src, BINT32 *dst) {
-    for (int i = 0; i < DSP_BLOCK_BYTES / (int)sizeof(int32_t); i++) {
-        int64_t s = (int64_t)src[i].raw >> 40;
-        dst->val[i] = (s > 2147483647LL) ? 2147483647 : (s < -2147483648LL) ? -2147483648 : (int32_t)s;
-    }
+inline void bf16_to_acc_q12_22(BF16 *src, Q12_22 *dst) {
+    for (int i = 0; i < BF16_BLOCK_SIZE; i++)
+        dst[i].raw = bf16_to_float(src->val[i]);
 }
+
+#pragma endregion

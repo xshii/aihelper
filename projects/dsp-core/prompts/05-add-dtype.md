@@ -4,130 +4,134 @@
 你是一个 Python 工程师，负责定义一种新的硬件数据类型。
 
 ## 任务
-给定硬件规格，创建 DSPDtype + Codec + DType 枚举值。
+给定硬件规格，创建 `DSPDtype` + 注册 Codec + 加 `DType` 枚举值。
 
 ## 背景
 
-> **信息安全声明：** 由于信息安全要求，强 AI 无法知道具体硬件细节。当前代码为架构示例，所有类型名、函数名、精度参数均为示意。实际使用时需结合真实硬件规格进行适配。
+当前框架中已有的 DUT dtype：`bf8` / `bf16`，加上 real type `double`。
 
-DSPDtype 只存最基本的元数据。DUT 格式的细节（frac_bits 等）由 golden C 处理，Python 不感知。
+关键约定（**一定要理解**）：
+
+1. **内存里所有 tensor 全程用 `torch.double` 存储。** `DSPDtype.torch_dtype` 只是个语义标签，**不是内存容器类型**。
+2. **定点/低精度类型** 只在和 C / 硬件 DUT 文件交互时才真正变成原生 bit。
+3. `subblock_size` = 128-bit 寄存器能装多少个该类型的元素（bf8=16, bf16=8, double=1）。**它不是 block 大小，只是 subblock/register 内的元素数**。
+
+定义点：`src/dsp/core/dtype.py`。
 
 ## 规则
-1. MUST: 填写 `name`, `torch_dtype`
-2. MUST: `name` 全小写，和 DType 枚举的 value 一致
-3. MUST: 同步在 `core/enums.py` 的 `DType.DUT`（或 `DType.ACC`）加枚举值
-4. NEVER: 填 `frac_bits`、`qmin`、`qmax`（已移除，由 golden C 处理）
+
+1. MUST: 填 `name`, `torch_dtype`, `subblock_size`
+2. MUST: `name` 全小写，和 `DType.DUT`（或 `DType.REAL`）枚举 value 一致
+3. MUST: 在 `DType.DUT` 或 `DType.REAL` 加对应枚举值
+4. MUST: 加进 `_ALL_DTYPES` 字典
+5. MUST: `register_codec(my_dtype, _golden_codec)`（DUT 类型）或 `PassthroughCodec()`（double 类）
+6. MUST: 在 `src/dsp/core/__init__.py` re-export
+7. NEVER: 把 `torch_dtype` 选成"容器位宽"—— 它是语义类型本身（如 bf16 → `torch.bfloat16`，不是 `torch.int16`）
+8. NEVER: 在 DSPDtype 里塞 frac_bits / exponent_bias 等细节 —— 由 golden C 处理
 
 ## torch_dtype 选择
 
-| 特征 | torch_dtype |
-|------|------------|
-| int8 | `torch.int8` |
-| int16 | `torch.int16` |
-| int32 | `torch.int32` |
-| float32 | `torch.float32` |
+| 类型 | torch_dtype | subblock_size |
+|---|---|---|
+| bf16（brain float, 1+8+7） | `torch.bfloat16` | 8 |
+| bf8（fp8 e4m3） | `torch.float8_e4m3fn` | 16 |
+| double | `torch.double` | 1 |
+
+新硬件类型如果 torch 没有原生支持，**先和操作员确认用什么容器**，不要自己拍脑袋。
 
 ## 步骤
-1. 在 `src/dsp/core/enums.py` 的 `DType.DUT` 加枚举值
-2. 在 `src/dsp/core/dtype.py` 底部加 DSPDtype 实例 + `register_dtype()`
-3. 在 `src/dsp/core/codec.py` 底部加 Codec 类（一行，见 prompt 01）
-4. 在 `src/dsp/core/__init__.py` 导出
+
+1. 在 `DType.DUT`（或 `DType.REAL`）加枚举值
+2. 加 `DSPDtype(...)` 实例
+3. 加进 `_ALL_DTYPES`
+4. 底部 `register_codec(...)`
+5. 在 `src/dsp/core/__init__.py` re-export
+6. 跑 `python -m pytest tests/ut -q`
 
 ## 输出格式
 
 ```python
-# 1. core/enums.py DType.DUT 加:
-INT4 = "int4"
+# src/dsp/core/dtype.py
 
-# 2. core/dtype.py 底部加:
-int4 = DSPDtype(
-    name="int4",
-    torch_dtype=torch.int8,
-)
-register_dtype(int4)
+# 1. DType.DUT 加枚举值
+class DUT(_StrEnum):
+    BF8  = "bf8"
+    BF16 = "bf16"
+    BF4  = "bf4"        # ← 新增
 
-# 3. core/codec.py 底部加:
-class INT4Codec(GoldenCCodec, dtype=_dtypes.int4):
-    pass
+# 2. 实例
+bf4 = DSPDtype(name="bf4", torch_dtype=torch.int8, subblock_size=32)
 
-# 4. core/__init__.py 导出:
-from .dtype import (..., int4)
+# 3. 注册表
+_ALL_DTYPES: dict[str, DSPDtype] = {d.name: d for d in [bf8, bf16, double, bf4]}
+
+# 4. codec
+register_codec(bf4, _golden_codec)
 ```
-
-## 样例
-
-完整样例见 `src/dsp/core/dtype.py` 中 `int16` 和 `float32` 的定义。
-
-### Example 1: 添加 int4（4bit 整数类型）
-
-**输入：** 硬件规格要求添加 int4，4bit 定点整数格式。
-
-**输出：**
 
 ```python
-# 1. core/enums.py — DType.DUT 加:
-INT4 = "int4"
-
-# 2. core/dtype.py — 底部加:
-int4 = DSPDtype(
-    name="int4",
-    torch_dtype=torch.int8,   # 最小的整数容器
+# src/dsp/core/__init__.py
+from .dtype import (
+    DType,
+    DSPDtype, bf8, bf16, double, bf4,   # ← 加 bf4
+    ...
 )
-register_dtype(int4)
-
-# 3. core/codec.py — 底部加:
-class INT4Codec(GoldenCCodec, dtype=_dtypes.int4):
-    pass
-
-# 4. core/__init__.py — 导出:
-from .dtype import (..., int4)
 ```
 
-**Why this output:**
-- `torch_dtype` 选 `torch.int8`，因为 PyTorch 没有 int4，用最近的整数容器
-- DSPDtype 只记 name 和 torch_dtype，具体定点细节由 golden C 处理
+## Examples
 
-### Example 2: 添加 uint8（8bit 无符号整数类型）
+### Example 1: 添加 bf4（4-bit 浮点）
 
-**输入：** 硬件规格要求添加 uint8，8bit 无符号整数格式。
+**输入:** 硬件新增 `bf4`，4-bit 浮点（1+2+1），两元素一字节。
 
-**输出：**
-
+**修改:**
 ```python
-# 1. core/enums.py — DType.DUT 加:
-UINT8 = "uint8"
+# DType.DUT:
+BF4 = "bf4"
 
-# 2. core/dtype.py — 底部加:
-uint8 = DSPDtype(
-    name="uint8",
-    torch_dtype=torch.int8,   # PyTorch 无 uint8 tensor，用 int8 容器
-)
-register_dtype(uint8)
+# 实例 — torch 无原生 bf4，用 int8 作容器（两个 bf4 塞一个字节由 C 处理）
+bf4 = DSPDtype(name="bf4", torch_dtype=torch.int8, subblock_size=32)
 
-# 3. core/codec.py — 底部加:
-class UINT8Codec(GoldenCCodec, dtype=_dtypes.uint8):
-    pass
-
-# 4. core/__init__.py — 导出:
-from .dtype import (..., uint8)
+# register_codec(bf4, _golden_codec)
 ```
 
-**Why this output:**
-- `torch_dtype` 选 `torch.int8`，因为 PyTorch 对 uint8 的 tensor 支持有限，用 int8 作为容器
-- 无符号的细节由 golden C 处理，Python 层不需要区分
+**Why:**
+- torch 没有 bf4 → 和操作员确认后用 `torch.int8` 作容器（2 个 bf4 共享一字节，打包由 C 处理）
+- 内存里 tensor 仍然是 `torch.double` 存储，`torch.int8` 这个 `torch_dtype` 标签只在写 DUT 文件 / 过 C 绑定时生效
+- `subblock_size=32` 假设 128-bit 寄存器里装 32 个 4-bit 元素
+
+### Example 2: 添加一个纯 real 类型 float32
+
+**输入:** 需要一个 float32 作为中间精度类型。
+
+**修改:**
+```python
+# DType.REAL:
+FLOAT32 = "float32"
+
+# 实例
+float32 = DSPDtype(name="float32", torch_dtype=torch.float32, subblock_size=4)
+
+# register_codec(float32, PassthroughCodec())    ← 不过 golden C
+```
+
+**Why:** 浮点原生类型，torch 直接支持，不需要通过 C convert。用 `PassthroughCodec` 直接复用 torch 的 `.float()`。
 
 ## 自检清单
-- [ ] DSPDtype 字段：name, torch_dtype
-- [ ] DType.DUT 枚举值和 DSPDtype.name 一致
-- [ ] Codec 继承 GoldenCCodec（一行，无方法）
-- [ ] `core/__init__.py` 导出
-- [ ] `make test` 通过
-- [ ] 验证: `.venv/bin/python -c "import dsp; print(dsp.core.YOUR_DTYPE)"`
+
+- [ ] `DSPDtype` 三个必填字段齐全：`name`, `torch_dtype`, `subblock_size`
+- [ ] 枚举值和 `DSPDtype.name` 字符串一致
+- [ ] 加进 `_ALL_DTYPES`
+- [ ] `register_codec(...)` 到位（DUT → GoldenCCodec；REAL → PassthroughCodec）
+- [ ] `core/__init__.py` re-export
+- [ ] 验证: `python -c "import dsp; print(dsp.core.bf4)"`（或对应名字）
+- [ ] `python -m pytest tests/ut -q` 全绿
 
 ## 边界情况
-- 如果漏改了其中一个文件：`make test` 会报 KeyError 或 ImportError，按报错信息逐个补
-- 如果 torch_dtype 选错了：查看上面的选择表
-- 如果类型是累加器格式（ACC）：加到 `DType.ACC` 而不是 `DType.DUT`
+
+- 如果是累加器类型（ACC，如 Q12_22）：加到 `DType.ACC`，**不要** 创建 DSPDtype 实例、**不要** 注册 codec，它只作为 ComputeKey 中的标签使用
+- 如果 torch 没有对应的原生 dtype：用位宽匹配的容器（int8/int16），**但要和操作员确认命名和打包方式**
+- 不要改 `subblock_size` 去"省内存" —— 这个值反映硬件寄存器布局
 
 ---
-[操作员：在此行下方提供硬件数据类型规格。]
+[操作员：在此行下方提供硬件数据类型规格（name, 位宽, torch 容器, subblock_size）。]

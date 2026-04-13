@@ -1,9 +1,12 @@
 """工厂函数 — 创建 DSPTensor（形似 torch.xxx）。
 
+所有工厂函数返回的 DSPTensor 都用 torch.double 存储；
+dsp_dtype 只是语义标签，硬件量化通过 pre_quantize / fake_quantize 实现。
+
 用法:
     import dsp
-    a = dsp.data.randn(4, 8, dtype=dsp.core.bint16)
-    b = dsp.data.zeros(10, dtype=dsp.core.float32)
+    a = dsp.data.randn(4, 8, dtype=dsp.core.bf16)
+    b = dsp.data.zeros(10, dtype=dsp.core.bf16)
 """
 
 from __future__ import annotations
@@ -12,6 +15,7 @@ import torch
 
 from ..core.tensor import DSPTensor
 from ..core.dtype import DSPDtype
+from ..core.enums import TensorSource
 from ..core import double as _double
 
 
@@ -25,32 +29,21 @@ def set_randn_interceptor(interceptor):
     _randn_interceptor = interceptor
 
 
-def _to_int_dtype(data: torch.Tensor, dtype: DSPDtype) -> torch.Tensor:
-    """将 float tensor 转为 int dtype: round + clamp + cast。"""
-    torch_dt = dtype.torch_dtype
-    if torch_dt == torch.int8:
-        return data.round().clamp(-128, 127).to(torch_dt)
-    elif torch_dt == torch.int16:
-        return data.round().clamp(-32768, 32767).to(torch_dt)
-    elif torch_dt == torch.int32:
-        return data.round().clamp(-(1 << 31), (1 << 31) - 1).to(torch_dt)
-    return data.to(torch_dt)
-
-
 def tensor(data, dtype: DSPDtype = None, requires_grad: bool = False) -> DSPTensor:
     dtype = dtype or _double
+    # 内存全程 double 存储，dsp_dtype 只作标签
     return DSPTensor.create(
-        torch.tensor(data, dtype=dtype.torch_dtype, requires_grad=requires_grad), dtype)
+        torch.tensor(data, dtype=torch.double, requires_grad=requires_grad), dtype)
 
 
 def zeros(*size, dtype: DSPDtype = None) -> DSPTensor:
     dtype = dtype or _double
-    return DSPTensor.create(torch.zeros(*size, dtype=dtype.torch_dtype), dtype)
+    return DSPTensor.create(torch.zeros(*size, dtype=torch.double), dtype)
 
 
 def ones(*size, dtype: DSPDtype = None) -> DSPTensor:
     dtype = dtype or _double
-    return DSPTensor.create(torch.ones(*size, dtype=dtype.torch_dtype), dtype)
+    return DSPTensor.create(torch.ones(*size, dtype=torch.double), dtype)
 
 
 def randn(*size, dtype: DSPDtype = None) -> DSPTensor:
@@ -58,18 +51,13 @@ def randn(*size, dtype: DSPDtype = None) -> DSPTensor:
         result = _randn_interceptor(*size, dtype=dtype or _double)
         if result is not None:
             if result._source is None:
-                result._source = "randn"
+                result._source = TensorSource.RANDN
             return result
     dtype = dtype or _double
-    torch_dt = dtype.torch_dtype
-    if not torch_dt.is_floating_point:
-        # int 类型: 先生成 float，再 round+clamp+cast
-        t_float = torch.randn(*size, dtype=torch.float32)
-        t = _to_int_dtype(t_float, dtype)
-    else:
-        t = torch.randn(*size, dtype=torch_dt)
+    # 内存全程 double 存储；dsp_dtype 只是标签，pre_quantize 会按需量化
+    t = torch.randn(*size, dtype=torch.double)
     result = DSPTensor.create(t, dtype)
-    result._source = "randn"
+    result._source = TensorSource.RANDN
     return result
 
 
@@ -82,4 +70,5 @@ def ones_like(t: DSPTensor) -> DSPTensor:
 
 
 def from_torch(t, dtype: DSPDtype) -> DSPTensor:
-    return DSPTensor.create(t.to(dtype.torch_dtype), dtype)
+    """把任意 torch.Tensor 包成 DSPTensor，统一转 double 存储 + 打 dsp_dtype 标签。"""
+    return DSPTensor.create(t.double(), dtype)

@@ -5,15 +5,20 @@ RUFF = .venv/bin/ruff
 RADON = .venv/bin/radon
 VULTURE = .venv/bin/vulture
 
-.PHONY: install dev test test-ut test-it test-st test-cov lint quality smoke check clean ci
+.PHONY: install install-prod dev test test-ut test-it test-st test-cov lint quality smoke check clean ci build-golden
 
 # ============================================================
 # Layer 0: 一键安装
 # ============================================================
 
+# 开发/测试环境 — 装 runtime + dev 工具（pytest, ruff, import-linter）+ viz
 install:
-	$(PIP) install -e ".[dev]"
-	$(PIP) install ruff radon vulture import-linter pybind11
+	$(PIP) install -e ".[all]"
+	$(PIP) install radon vulture    # 代码质量工具（不在 pyproject 里，可选）
+
+# 生产发布环境 — 只装 runtime 依赖
+install-prod:
+	$(PIP) install -e "."
 
 build-golden:
 	@echo "=== 编译 golden C++ 绑定 ==="
@@ -44,20 +49,21 @@ test:
 	$(PYTEST) tests/ -v
 
 test-ut:
-	$(PYTEST) tests/ -m ut -v
+	$(PYTEST) tests/ut -v
 
 test-it:
-	$(PYTEST) tests/ -m it -v
+	$(PYTEST) tests/it -v
 
 test-st:
-	$(PYTEST) tests/ -m st -v
+	$(PYTEST) tests/st -v
 
 test-cov:
 	$(PYTEST) tests/ -v --cov=dsp --cov-report=term-missing
 
+# E2E smoke — 直接跑 attention example
 smoke:
-	@echo "=== Smoke Test (E2E + 断言) ==="
-	$(PYTHON) scripts/smoke_test.py
+	@echo "=== E2E Smoke (attention example) ==="
+	$(PYTHON) examples/attention_example.py
 
 # ============================================================
 # Layer 2: 代码质量
@@ -72,8 +78,6 @@ lint:
 	$(LINT_IMPORTS)
 	@echo "=== prompt 引用校验 ==="
 	@$(PYTHON) scripts/check_prompt_refs.py
-	@echo "=== 算子结构校验 ==="
-	@$(PYTHON) scripts/check_structure.py
 	@echo "LINT DONE"
 
 quality:

@@ -1,10 +1,10 @@
 // pybind11 模块入口
-// 各分类绑定在独立文件中：
-//   bind_convert.cpp  — 类型转换 + ACC→double
-//   bind_matrix.cpp   — matmul + fused linear
-//   bind_vector.cpp   — add, mul, abs
-//   bind_signal.cpp   — correlate
+// 各 op 绑定在对应目录下:
+//   ops/_convert/bind.cpp  — 类型转换
+//   ops/linear/bind.cpp    — matmul + linear
+//   ops/layernorm/bind.cpp — layernorm
 //
+// 新增 op: 在 ops/<op_name>/ 下加 bind.cpp，CMake 自动收集。
 // 编译: make build-golden
 
 #include <pybind11/pybind11.h>

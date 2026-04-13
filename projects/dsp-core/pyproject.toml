@@ -1,19 +1,36 @@
 [build-system]
-requires = ["setuptools>=64"]
+requires = ["setuptools>=64", "pybind11>=2.11"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "dsp-core"
 version = "0.1.0"
 requires-python = ">=3.10"
+# 发布依赖: 最小运行集（纯 Python 调用路径 + C 扩展的 JIT 构建）
 dependencies = [
     "torch>=2.0",
     "numpy>=1.21",
+    "pybind11>=2.11",  # _raw_bindings.so 的 JIT 构建需要
 ]
 
 [project.optional-dependencies]
+# 可视化：HTML 报告 + 对比图
 viz = ["plotly>=5.0"]
-dev = ["pytest>=7.0", "pytest-cov"]
+# 开发/测试：测试框架 + lint + 分层依赖检查
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff>=0.5",
+    "import-linter>=2.0",
+]
+# 一次装全（开发者常用）
+all = [
+    "plotly>=5.0",
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff>=0.5",
+    "import-linter>=2.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

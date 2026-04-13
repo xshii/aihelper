@@ -46,6 +46,25 @@ class ComputeConfig:
 
 
 @dataclass
+class HWConfig:
+    """硬件行为开关 — 集中放所有"不知道真硬件具体怎么做"的可调项。
+
+    golden_c_count_mode: 非对齐输入下，golden_c 接收的"逻辑 count"用哪个值。
+        只影响 golden_c 模式；torch / pseudo_quant 永远走数学正确的 reduction。
+
+          - "orig":   传原始逻辑长度（硬件内部 reduction 只在真实数据上走）
+                      layernorm 等 reduction-divide-by-count 型 op 的数学正确模式
+          - "padded": 传 pad_dim(count, subblock_size) 后的长度
+                      硬件会把 padding 区的 0 也纳入 reduction —— 对 linear/matmul
+                      等 "0 × x = 0 是恒等元" 的 op 无影响，对 layernorm 有 bias
+
+        默认 "orig" —— 数学正确是最不意外的选择；需要对齐真实硬件行为的话
+        显式 `dsp.config.hw.golden_c_count_mode = "padded"`。
+    """
+    golden_c_count_mode: str = "orig"
+
+
+@dataclass
 class CompareConfig:
     pass_cosine: float = 0.999
     warn_cosine: float = 0.99
@@ -74,6 +93,7 @@ class DSPConfig:
     compute: ComputeConfig = field(default_factory=ComputeConfig)
     compare: CompareConfig = field(default_factory=CompareConfig)
     run: RunConfig = field(default_factory=RunConfig)
+    hw: HWConfig = field(default_factory=HWConfig)
 
     def apply_logging(self):
         level = getattr(logging, self.logging.level, logging.INFO)

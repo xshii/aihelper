@@ -33,7 +33,7 @@ dsp-core/
 │   ├── core/       DSPDtype + DSPTensor + Enums + Errors
 │   ├── golden/     C++ 封装（manifest + call + dispatch + pybind11 绑定）
 │   ├── data/       DataPipe 链式 API + 工厂函数 + 比数报告
-│   ├── ops/        @register_op + correlate, linear
+│   ├── ops/        @register_op + linear, layernorm
 │   ├── context/    模式切换 + 验证循环 + run()
 │   └── config.py   全局配置
 ├── golden_c/       硬件团队提供（.h + .so）
