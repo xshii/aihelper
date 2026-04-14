@@ -1,6 +1,7 @@
 // 绑定：matmul + linear
 // 统一形式 dsp_matmul_<dut_a>_dutw_<dut_w>，同构就 dut_a == dut_w。
 #include "bind_helpers.h"
+#include "bind_registry.h"
 #include "dsp_matrix.h"
 
 #define BIND_MATMUL_LINEAR(DUT_A, a_name, DUT_W, w_name)                             \
@@ -35,3 +36,5 @@ void bind_matrix(py::module& m) {
 }
 
 #undef BIND_MATMUL_LINEAR
+
+REGISTER_BIND(bind_matrix)

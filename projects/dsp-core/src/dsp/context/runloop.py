@@ -543,12 +543,34 @@ def save_op_inputs(op_name, param_names, args, format_hints):
 
 
 def save_op_output(op_name, result):
-    """保存算子输出。和 save_op_inputs 同构，额外负责 op_id 自增。"""
+    """保存算子输出。
+
+    支持单 tensor 和 tuple/list of tensor。
+    每个 output slot 的 fmt 优先从 ops._OP_OUTPUT_FMTS 取（显式声明）；
+    未声明的 op 不传 fmt_hint，由 _save_tensor 走 infer_format 兜底（保留旧行为）。
+    """
     op_id = _state.op_id_counter
     _state.op_id_counter += 1
-    if not isinstance(result, torch.Tensor):
+
+    if isinstance(result, torch.Tensor):
+        outputs = [result]
+    elif isinstance(result, (tuple, list)):
+        outputs = [t for t in result if isinstance(t, torch.Tensor)]
+    else:
         return
-    _save_tensor(result, op_name, op_id, "output0")
+
+    if not outputs:
+        return
+
+    from ..ops import _OP_OUTPUT_FMTS
+    declared_fmts = _OP_OUTPUT_FMTS.get(op_name)   # None = 未显式声明
+
+    for i, t in enumerate(outputs):
+        if declared_fmts is not None and i < len(declared_fmts):
+            fmt_hint = declared_fmts[i]
+        else:
+            fmt_hint = None   # 走 _save_tensor 内部的 infer_format
+        _save_tensor(t, op_name, op_id, f"output{i}", fmt_hint=fmt_hint)
 
 
 def save_op_expected(op_name, expected):

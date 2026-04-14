@@ -1,11 +1,15 @@
-"""Transpose 算子 — 支持指定交换维度，支持 block 重排。
+"""Transpose 算子 — 交换最后两维，对标硬件 transpose 指令。
 
 用法:
     dsp.ops.transpose(x)           # 默认交换最后两维
     dsp.ops.transpose(x, 0, 2)     # 交换 dim0 和 dim2
 
-流程 (golden_c 模式):
-    blocked DUT → unblock(去 padding) → 转置 → re-pad(新 shape) → re-block
+golden_c 路径: 走 C kernel dsp_transpose_<dut>（实际是 dsp_transpose_double），
+按 batch 维循环，每次把一个 (R, C) 2D 切片展平成 flat double 喂给 C 做元素搬运。
+是物理 transpose —— shape (R, C) → (C, R)，输出依然是 ZZ row-major，
+不需要声明 output_fmts（output 默认 ZZ 由 infer_format 兜底）。
+
+torch / pseudo_quant 路径: 走下面 register_op 注册的 torch 实现。
 """
 
 from __future__ import annotations
@@ -14,9 +18,7 @@ import numpy as np
 import torch
 
 from .. import register_op
-from ...core.enums import Format
 from ...core.convention import OpConvention
-from ...core.block import pad_dim, get_block_shape, to_block, from_block
 
 
 # ============================================================
@@ -24,7 +26,7 @@ from ...core.block import pad_dim, get_block_shape, to_block, from_block
 # ============================================================
 
 class TransposeConvention(OpConvention, op="transpose"):
-    """transpose 不调 C 函数，纯 Python 做 unblock → transpose → re-block。"""
+    """transpose 的 golden_c 路径：按 batch 循环调 C，每次处理一个 (R, C) 2D 切片。"""
 
     def output_shape(self, *inputs: torch.Tensor) -> tuple[int, ...]:
         shape = inputs[0].shape
@@ -34,33 +36,25 @@ class TransposeConvention(OpConvention, op="transpose"):
 
     def call_c_func(self, func, *inputs_np: np.ndarray, **params) -> np.ndarray:
         data = inputs_np[0]
-        dtype_name = params.get("dtype_name", "bf16")
-        fmt = params.get("fmt", "zz")
-        orig_shape = params.get("orig_shape", data.shape)
+        if data.ndim < 2:
+            return data
 
-        if len(orig_shape) >= 2:
-            h, w = orig_shape[-2], orig_shape[-1]
-            bh, bw = get_block_shape(dtype_name, fmt)
-            ph, pw = pad_dim(h, bh), pad_dim(w, bw)
+        batch_shape = data.shape[:-2]
+        R, C = data.shape[-2], data.shape[-1]
+        n = R * C
 
-            t = torch.from_numpy(data.reshape(-1))
-            nd = from_block(t.reshape(ph * pw // (bh * bw), bh, bw),
-                           dtype_name, fmt, (ph, pw))
-            nd_np = nd.numpy()[:h, :w]
-        else:
-            nd_np = data
+        batched = data.reshape(-1, R, C) if batch_shape else data.reshape(1, R, C)
+        results = []
+        for i in range(batched.shape[0]):
+            src_flat = np.ascontiguousarray(batched[i].flatten(), dtype=np.double)
+            dst_flat = np.zeros(n, dtype=np.double)
+            func(dst_flat, src_flat, R, C)
+            results.append(dst_flat.reshape(C, R).copy())
 
-        transposed = nd_np.T.copy()
-
-        new_h, new_w = transposed.shape[-2], transposed.shape[-1]
-        ph_new, pw_new = pad_dim(new_h, get_block_shape(dtype_name, fmt)[0]), \
-                         pad_dim(new_w, get_block_shape(dtype_name, fmt)[1])
-
-        padded = np.zeros((ph_new, pw_new), dtype=transposed.dtype)
-        padded[:new_h, :new_w] = transposed
-
-        t_out = to_block(torch.from_numpy(padded), dtype_name, fmt)
-        return t_out.numpy().reshape(-1).copy()
+        stacked = np.stack(results)
+        if batch_shape:
+            return stacked.reshape(*batch_shape, C, R)
+        return stacked[0]
 
 
 # ============================================================

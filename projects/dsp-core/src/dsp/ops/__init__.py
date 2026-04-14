@@ -46,9 +46,18 @@ MATH_STRATEGY_NAME = "math"  # 和 datagen.py 中 DataStrategy("math") 一致
 
 _OP_REGISTRY: dict[str, Callable] = {}
 
+# (op_name) → kernel 输出格式 tuple，单输出 op 是长度 1 的 tuple
+# 默认 (Format.ZZ,)，只有显式声明 output_fmts= 的 op 才进这个表
+_OP_OUTPUT_FMTS: dict[str, tuple[Format, ...]] = {}
+
 
 def list_ops() -> list[str]:
     return list(_OP_REGISTRY.keys())
+
+
+def get_output_fmts(op_name: str, n_outputs: int = 1) -> tuple[Format, ...]:
+    """查 op 的 kernel 输出 fmt。未声明 → 全部 Format.ZZ。"""
+    return _OP_OUTPUT_FMTS.get(op_name, (Format.ZZ,) * n_outputs)
 
 
 # ============================================================
@@ -77,7 +86,8 @@ def set_ops_hooks(**hooks):
 # @register_op 装饰器
 # ============================================================
 
-def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = None, **default_formats):
+def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = None,
+                output_fmts: tuple = None, **default_formats):
     """注册自定义算子。
 
     Args:
@@ -88,6 +98,10 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             inputs: 原始参数列表
             source_map: 每个参数的 _source ("randn" | "op_output" | None)
             返回: {arg_index: replacement_tensor} — 只替换 randn 源的参数
+        output_fmts: kernel 的输出格式 tuple，选填
+            单输出 op: (Format.NN,) 表示 kernel 写出 NN 布局
+            多输出 op: (Format.ZZ, Format.NN, Format.ZZ) 每个 output slot 一个
+            未声明时所有 output 默认 Format.ZZ
         **default_formats: 参数名→Format 的默认格式标注，选填
             未标注的参数按自动推断（矩阵→zz，向量→nd）
 
@@ -106,6 +120,12 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
         # 从 golden_c 的 ComputeKey 自动推导 output_rules
         if golden_c:
             _register_golden_c(op_name, golden_c)
+
+        # 注册 output_fmts (强制 tuple of Format)
+        if output_fmts is not None:
+            _OP_OUTPUT_FMTS[op_name] = tuple(
+                f if isinstance(f, Format) else Format(f) for f in output_fmts
+            )
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):

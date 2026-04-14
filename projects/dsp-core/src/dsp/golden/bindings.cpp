@@ -1,22 +1,15 @@
 // pybind11 模块入口
-// 各 op 绑定在对应目录下:
-//   ops/_convert/bind.cpp  — 类型转换
-//   ops/linear/bind.cpp    — matmul + linear
-//   ops/layernorm/bind.cpp — layernorm
 //
-// 新增 op: 在 ops/<op_name>/ 下加 bind.cpp，CMake 自动收集。
-// 编译: make build-golden
-
+// 每个 op 的 bind.cpp 用 REGISTER_BIND(bind_xxx) 把自己的注册函数
+// 塞进全局 registry，这里一次遍历即可。新增 op 时不需要改本文件。
 #include <pybind11/pybind11.h>
-namespace py = pybind11;
+#include "bind_registry.h"
 
-void bind_convert(py::module& m);
-void bind_matrix(py::module& m);
-void bind_vector(py::module& m);
+namespace py = pybind11;
 
 PYBIND11_MODULE(_raw_bindings, m) {
     m.doc() = "Golden C bindings — manifest.py 函数名直接可调用";
-    bind_convert(m);
-    bind_matrix(m);
-    bind_vector(m);
+    for (auto& fn : bind_registry()) {
+        fn(m);
+    }
 }

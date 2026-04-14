@@ -9,6 +9,7 @@
 // reduction 范围:
 //   每 (b,m,r) 行在前 cols 个元素上求 mean/var，[cols..cols_mem) 区不计入
 #include "bind_helpers.h"
+#include "bind_registry.h"
 #include "dsp_vector.h"
 
 #define BIND_LAYERNORM1D(DUT, dut_name, CT, ct_name)                                 \
@@ -36,3 +37,5 @@ void bind_vector(py::module& m) {
 }
 
 #undef BIND_LAYERNORM1D
+
+REGISTER_BIND(bind_vector)

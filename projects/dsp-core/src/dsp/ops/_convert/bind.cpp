@@ -1,5 +1,6 @@
 // 绑定：类型转换
 #include "bind_helpers.h"
+#include "bind_registry.h"
 #include "dsp_convert.h"
 
 #define BIND_CONVERT(DUT, dut_name)                                                  \
@@ -24,3 +25,5 @@ void bind_convert(py::module& m) {
 }
 
 #undef BIND_CONVERT
+
+REGISTER_BIND(bind_convert)
