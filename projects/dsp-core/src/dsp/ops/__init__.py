@@ -170,10 +170,19 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             result = None
             if _hooks["get_mode"]() == Mode.GOLDEN_C:
                 from ..golden.dispatch import dispatch_golden_c
+                # 收集非 tensor 位置参数 + 用户 kwargs，作为 op 参数透传到 call_c_func
+                # 例: transpose(x, 0, 2) → op_params={"dim0": 0, "dim1": 2}
+                op_params: dict = {}
+                for i, a in enumerate(args):
+                    if not isinstance(a, torch.Tensor):
+                        name = param_names[i] if i < len(param_names) else f"arg{i}"
+                        op_params[name] = a
+                op_params.update(kwargs)
                 result = dispatch_golden_c(
                     op_name, args, _hooks,
                     compute=call_compute,
                     output_dtype=call_output_dtype,
+                    op_params=op_params,
                 )
 
             # --- torch / pseudo_quant ---

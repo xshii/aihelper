@@ -504,10 +504,15 @@ def _load_dut_file(path: Path) -> torch.Tensor:
 
 def _save_tensor(tensor: torch.Tensor, op_name: str, op_id: int,
                  operand: str, fmt_hint: Optional[Format] = None) -> None:
-    """写一份 ND（按真实 torch dtype） + 可选的 DUT（硬件原生 bits，写 dut/ 子目录）。"""
+    """写一份 ND（按真实 torch dtype） + 可选的 DUT（硬件原生 bits，写 dut/ 子目录）。
+
+    在边界处统一 .contiguous()：上游 op（如 transpose）可以放心返回非连续 view
+    （和 torch 原生契约一致），写文件时这里强制物理连续，保护 to_block 的
+    row-major 假设和 DataPipe 的 raw bytes 输出。
+    """
     from ..data.pipe import DataPipe
 
-    t_cpu = tensor.detach().cpu()
+    t_cpu = tensor.detach().cpu().contiguous()
     out_dir = Path(_current_round_dir())
     storage_name = _get_dtype_name(t_cpu)
 

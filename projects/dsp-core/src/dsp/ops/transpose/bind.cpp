@@ -6,6 +6,8 @@
 //
 // bf16/bf8 两个符号都路由到同一个 dsp_transpose_double，只是为了让
 // auto_register 按 dtype 建 ComputeKey(op="transpose", src0=bf16/bf8, ...)。
+// Python 侧的 TransposeConvention.call_c_func 实际不会调用这些符号
+// （直接走 np.swapaxes），绑定存在只是为了满足 dispatch 的 ComputeKey 查表。
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include "bind_registry.h"
@@ -19,7 +21,7 @@ namespace py = pybind11;
            size_t rows, size_t cols) {                                           \
             dsp_transpose_double(                                                \
                 dst.mutable_data(),                                              \
-                const_cast<double*>(src.data()),                                 \
+                src.data(),                                                      \
                 rows, cols);                                                     \
         });
 

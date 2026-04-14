@@ -15,8 +15,13 @@ from .manifest import ComputeKey
 
 def dispatch_golden_c(op_name: str, args: tuple,
                       hooks: dict,
-                      compute=None, output_dtype=None) -> torch.Tensor | None:
-    """golden_c 模式下调 C++ 实现。找不到匹配时返回 None（fallback 到 torch）。"""
+                      compute=None, output_dtype=None,
+                      op_params: dict | None = None) -> torch.Tensor | None:
+    """golden_c 模式下调 C++ 实现。找不到匹配时返回 None（fallback 到 torch）。
+
+    op_params: 非 tensor 的 op 参数（如 transpose 的 dim0/dim1），会透传到
+    OpConvention.call_c_func 的 **params。
+    """
     if not is_available():
         return None
 
@@ -31,7 +36,7 @@ def dispatch_golden_c(op_name: str, args: tuple,
 
     try:
         all_np = _args_to_numpy(args)
-        info = golden_compute(*all_np, query=query)
+        info = golden_compute(*all_np, query=query, op_params=op_params or {})
         return torch.from_numpy(info["result"].copy())
     except ManifestNotFound:
         return None

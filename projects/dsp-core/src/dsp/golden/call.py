@@ -12,6 +12,7 @@ block 格式是上层（data 模块）的事。
 from __future__ import annotations
 
 import logging
+from typing import Optional
 
 import numpy as np
 
@@ -58,12 +59,15 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
     return dst
 
 
-def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
+def compute(*inputs: np.ndarray, query: ComputeKey,
+            op_params: Optional[dict] = None) -> dict:
     """计算。
 
     Args:
         *inputs: flat double numpy arrays（个数由算子决定）
         query: ComputeKey 查询条件（部分填写，None 字段不过滤）
+        op_params: op 非 tensor 参数（如 transpose 的 dim0/dim1），透传到
+            OpConvention.call_c_func 的 **params
 
     Returns:
         {"result": np.ndarray, "key": ComputeKey}
@@ -82,7 +86,8 @@ def compute(*inputs: np.ndarray, query: ComputeKey) -> dict:
 
     inputs: list[np.ndarray] = [inp.astype(np.double) for inp in inputs]  # double
     key = info["key"]
-    out_np = conv.call_c_func(func, *inputs, compute_key=key)
+    op_params = op_params or {}
+    out_np = conv.call_c_func(func, *inputs, compute_key=key, **op_params)
     return {
         "result": out_np,
         "key": key,

@@ -37,7 +37,7 @@ def attention(dtype=dsp.core.bf16):
     K_out = dsp.ops.linear(input_t, Wk, zero_d)
     V = dsp.ops.linear(input_t, Wv, zero_d)
 
-    KT = dsp.ops.transpose(K_out)
+    KT = dsp.ops.transpose(K_out, -2, -1)
 
     zero_mm = dsp.data.zeros(1, M, dtype=dtype)
     attn = dsp.ops.linear(Q, KT, zero_mm)
