@@ -2,14 +2,20 @@
 
 用法:
     dsp.ops.transpose(x)           # 默认交换最后两维
-    dsp.ops.transpose(x, 0, 2)     # 交换 dim0 和 dim2
+    dsp.ops.transpose(x, 0, 2)     # 交换 dim0 和 dim2（仅 torch / pseudo_quant 路径）
 
-golden_c 路径: 走 C kernel dsp_transpose_<dut>（实际是 dsp_transpose_double），
-按 batch 维循环，每次把一个 (R, C) 2D 切片展平成 flat double 喂给 C 做元素搬运。
-是物理 transpose —— shape (R, C) → (C, R)，输出依然是 ZZ row-major，
-不需要声明 output_fmts（output 默认 ZZ 由 infer_format 兜底）。
+golden_c 路径: 物理 transpose，直接在 double numpy 上 swapaxes(-2, -1)。
+Python 层收到的 numpy 已是逻辑 shape（无 padding），padding 由
+save_op_output → _save_tensor → to_block 在写 DUT 文件时按输出 dtype
+的 tile 自动施加，call_c_func 层不需要处理。
+
+已知限制: dispatch 链路目前不透传 dim0/dim1 kwargs 到 call_c_func，
+所以 GOLDEN_C 模式下 transpose 始终是"最后两维"语义。若需要任意
+dim 对调（例如 4D 下交换 dim1/dim2），目前只能走 torch / pseudo_quant 路径。
 
 torch / pseudo_quant 路径: 走下面 register_op 注册的 torch 实现。
+C kernel dsp_transpose_double 仍保留在 dsp_transpose.h 作为 header-only
+辅助，供其他 op 的 kernel 内部"先 transpose 再计算"时复用。
 """
 
 from __future__ import annotations
@@ -26,7 +32,7 @@ from ...core.convention import OpConvention
 # ============================================================
 
 class TransposeConvention(OpConvention, op="transpose"):
-    """transpose 的 golden_c 路径：按 batch 循环调 C，每次处理一个 (R, C) 2D 切片。"""
+    """transpose 的 golden_c 路径：直接 numpy swapaxes，不调 C kernel。"""
 
     def output_shape(self, *inputs: torch.Tensor) -> tuple[int, ...]:
         shape = inputs[0].shape
@@ -38,23 +44,7 @@ class TransposeConvention(OpConvention, op="transpose"):
         data = inputs_np[0]
         if data.ndim < 2:
             return data
-
-        batch_shape = data.shape[:-2]
-        R, C = data.shape[-2], data.shape[-1]
-        n = R * C
-
-        batched = data.reshape(-1, R, C) if batch_shape else data.reshape(1, R, C)
-        results = []
-        for i in range(batched.shape[0]):
-            src_flat = np.ascontiguousarray(batched[i].flatten(), dtype=np.double)
-            dst_flat = np.zeros(n, dtype=np.double)
-            func(dst_flat, src_flat, R, C)
-            results.append(dst_flat.reshape(C, R).copy())
-
-        stacked = np.stack(results)
-        if batch_shape:
-            return stacked.reshape(*batch_shape, C, R)
-        return stacked[0]
+        return np.ascontiguousarray(np.swapaxes(data, -2, -1))
 
 
 # ============================================================
