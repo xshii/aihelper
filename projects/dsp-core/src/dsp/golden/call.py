@@ -2,11 +2,10 @@
 
 对外:
     convert(data_np, src_type, dst_type) → np.ndarray
-    compute(op, a_np, b_np, type_a, type_b) → np.ndarray
+    compute(*inputs, query, op_params, arg_fmts, orig_args) → dict
     is_available() → bool
 
 所有函数操作 numpy flat array，不碰 torch / 文件 / block 格式。
-block 格式是上层（data 模块）的事。
 """
 
 from __future__ import annotations
@@ -15,9 +14,11 @@ import logging
 from typing import Optional
 
 import numpy as np
+import torch
 
 from .manifest import require_convert_func, require_compute_info, ComputeKey
 from ..core.errors import GoldenNotAvailable
+from ..core.prepare_args import prepare
 
 logger = logging.getLogger("dsp.golden")
 
@@ -60,17 +61,23 @@ def convert(data: np.ndarray, src_type: str, dst_type: str) -> np.ndarray:
 
 
 def compute(*inputs: np.ndarray, query: ComputeKey,
-            op_params: Optional[dict] = None) -> dict:
+            op_params: Optional[dict] = None,
+            arg_fmts: Optional[list] = None,
+            orig_args: Optional[tuple] = None) -> dict:
     """计算。
 
     Args:
-        *inputs: flat double numpy arrays（个数由算子决定）
+        *inputs: 每个 tensor arg 的 double numpy ndarray（**未 pad**、**未 flatten**）
         query: ComputeKey 查询条件（部分填写，None 字段不过滤）
         op_params: op 非 tensor 参数（如 transpose 的 dim0/dim1），透传到
             OpConvention.call_c_func 的 **params
+        arg_fmts: 每个 tensor arg 的 Format（按 tensor-only 顺序）。
+            None → raw 透传（不做 pad/flatten，直接把 double ndarray 给 call_c_func）
+            非 None → 按 Format 规则调 prepare_args.prepare() 生成 PreparedArg
+        orig_args: op 的原始全部位置参数（含非 tensor），供 conv.output_shape 算 crop 目标
 
     Returns:
-        {"result": np.ndarray, "key": ComputeKey}
+        {"result": np.ndarray (已 crop 回 orig output shape), "key": ComputeKey}
     """
     info = require_compute_info(query)
     op = query.op
@@ -84,14 +91,59 @@ def compute(*inputs: np.ndarray, query: ComputeKey,
     from ..core.convention import require_convention
     conv = require_convention(op)
 
-    inputs: list[np.ndarray] = [inp.astype(np.double) for inp in inputs]  # double
+    inputs_np = [inp.astype(np.double) for inp in inputs]
     key = info["key"]
     op_params = op_params or {}
-    out_np = conv.call_c_func(func, *inputs, compute_key=key, **op_params)
-    return {
-        "result": out_np,
-        "key": key,
-    }
+
+    # 每个 tensor arg 的 dtype 按位置从 compute_key.src* 取
+    arg_dtypes = _resolve_arg_dtypes(key, len(inputs_np))
+
+    if arg_fmts is None:
+        # raw 透传：tensor arg 直接以 double ndarray 进 call_c_func
+        out_np = conv.call_c_func(func, *inputs_np, compute_key=key, **op_params)
+    else:
+        # 预处理：按 fmt pad + flatten 整块 tensor，产生 list[PreparedArg]
+        if len(arg_fmts) != len(inputs_np):
+            raise ValueError(
+                f"arg_fmts 长度 {len(arg_fmts)} 与 tensor 参数数 {len(inputs_np)} 不匹配"
+            )
+        prepared = [
+            prepare(a, fmt, dt)
+            for a, fmt, dt in zip(inputs_np, arg_fmts, arg_dtypes)
+        ]
+        out_np = conv.call_c_func(func, *prepared, compute_key=key, **op_params)
+
+    # 按 orig output shape 把 padded 结果 crop 回
+    if orig_args is not None:
+        tensor_only = tuple(a for a in orig_args if isinstance(a, torch.Tensor))
+        orig_output_shape = conv.output_shape(*tensor_only, **op_params)
+        out_np = _crop_to_orig(out_np, orig_output_shape)
+
+    return {"result": out_np, "key": key}
+
+
+def _resolve_arg_dtypes(key: ComputeKey, n: int) -> list[str]:
+    """第 i 个 tensor arg → compute_key.src{i}。缺失时 fallback 到 src0。"""
+    fields = [key.src0, key.src1, key.src2]
+    fallback = key.src0 or "bf16"
+    out = []
+    for i in range(n):
+        v = fields[i] if i < len(fields) else None
+        out.append(str(v) if v else fallback)
+    return out
+
+
+def _crop_to_orig(result: np.ndarray, orig_output_shape: tuple) -> np.ndarray:
+    """把 padded 结果按 orig output shape 逐维 slice(0, d) 裁回。
+
+    ZZ / NN / ND 的 padding 都是"右侧 / 底部补 0"，crop 只需要 slice(0, orig)。
+    维度数不匹配时不做 crop（safety fallback）。
+    """
+    orig_output_shape = tuple(int(d) for d in orig_output_shape)
+    if len(orig_output_shape) != result.ndim:
+        return result
+    slices = tuple(slice(0, d) for d in orig_output_shape)
+    return np.ascontiguousarray(result[slices])
 
 
 # ============================================================
@@ -99,6 +151,7 @@ def compute(*inputs: np.ndarray, query: ComputeKey,
 # ============================================================
 
 _lib_cache = None
+
 
 def _auto_build() -> bool:
     """JIT 编译 _raw_bindings.so。不依赖 Makefile，直接调 cmake。
@@ -114,10 +167,9 @@ def _auto_build() -> bool:
 
     logger = logging.getLogger("dsp.golden")
 
-    # 定位关键路径（相对于本文件，pip install 后也能找到）
-    golden_dir = Path(__file__).resolve().parent          # src/dsp/golden/
-    cmake_source = golden_dir                              # CMakeLists.txt 所在目录
-    build_dir = GOLDEN_BUILD_DIR                           # src/dsp/golden/build/
+    golden_dir = Path(__file__).resolve().parent
+    cmake_source = golden_dir
+    build_dir = GOLDEN_BUILD_DIR
 
     if not (cmake_source / "CMakeLists.txt").exists():
         logger.warning("自动编译跳过: CMakeLists.txt 不存在 (%s)", cmake_source)
@@ -126,7 +178,6 @@ def _auto_build() -> bool:
     build_dir.mkdir(parents=True, exist_ok=True)
     python_exe = sys.executable
 
-    # pybind11 cmake dir
     try:
         import pybind11
         pybind11_dir = pybind11.get_cmake_dir()
@@ -142,7 +193,6 @@ def _auto_build() -> bool:
             logger.warning("命令失败: %s\n%s", " ".join(cmd), r.stderr[-500:] if r.stderr else "")
         return r.returncode == 0
 
-    # cmake configure
     ok = _run([
         "cmake", str(cmake_source),
         f"-Dpybind11_DIR={pybind11_dir}",
@@ -152,7 +202,6 @@ def _auto_build() -> bool:
     if not ok:
         return False
 
-    # cmake build
     ok = _run(["cmake", "--build", "."])
     if ok:
         logger.info("JIT 编译成功")
@@ -160,13 +209,7 @@ def _auto_build() -> bool:
 
 
 def _get_lib():
-    """加载 C++ 绑定模块。找不到时自动触发一次编译。
-
-    加载策略（绕开 sys.path + ABI tag 匹配的陷阱）:
-      1. 优先找当前 Python ABI tag 的 .so（sysconfig.EXT_SUFFIX）
-      2. 其次找任意 _raw_bindings*.so（可能是别的 Python 编的，会报清晰错误）
-      3. 用 importlib.util.spec_from_file_location 按绝对路径加载
-    """
+    """加载 C++ 绑定模块。找不到时自动触发一次编译。"""
     global _lib_cache
     if _lib_cache is not None:
         return _lib_cache
@@ -202,7 +245,6 @@ def _load_by_path(build_dir):
     if not build_dir.exists():
         return None
 
-    # 1) 优先匹配当前 Python ABI
     exact = build_dir / f"_raw_bindings{_ext_suffix()}"
     candidates = [exact] if exact.exists() else sorted(build_dir.glob("_raw_bindings*.so"))
     if not candidates:

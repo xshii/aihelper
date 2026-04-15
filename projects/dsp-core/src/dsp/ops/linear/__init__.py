@@ -1,153 +1,126 @@
-"""Linear / Matmul 算子 — torch 实现 + C 调用约定 + math strategy，集中在一个文件。
+"""Linear / Matmul 算子 — torch 实现 + C 调用约定 + math strategy。
 
 算子:
     linear:  out = x @ weight + bias (fused)
     matmul:  out = x @ weight
-"""
 
-import logging
+golden_c 预处理由框架接管（见 core/prepare_args.py）:
+    - x       : Format.ZZ → 保留 batch 维，last-2-dim pad 到 (bh_zz, bw_zz)，行优先 flatten
+    - weight  : Format.NN → 保留 batch 维，last-2-dim pad 到 (bh_nn, bw_nn)，每片列优先 flatten
+    - bias    : Format.ND → 1D 向量，末维 pad 到 bh_zz
+                由 `bh_zz == bw_nn` 不变式保证 bias 的 pad 长度和 weight 的 col 轴
+                pad 后 N 自动一致，不需要额外对齐
+
+Convention 职责:
+    C kernel 只认单片 2D 的 (M,K,N)，所以 call_c_func 在 x 或 w 有 batch 维时
+    自己 for 循环逐片调 kernel，再 stack 回 batch shape。支持两种场景:
+        A. 矩阵复用（w 无 batch）：每次迭代复用同一份 w.flat
+        B. 同 loop 维 QK^T（x/w 都有 batch）：batch shape 必须一致，逐片同步切
+"""
 
 import numpy as np
 import torch
+
 from .. import register_op
 from ...core.tensor import DSPTensor
 from ...core.enums import Format
 from ...core.convention import OpConvention
-from ...core.block import pad_dim, get_block_shape
-
-ZZ, NN = Format.ZZ, Format.NN
-
-logger = logging.getLogger("dsp.ops")
 
 
 # ============================================================
 # C 调用约定
 # ============================================================
 
-def _pad_and_flatten(data: np.ndarray, dtype_name: str, fmt) -> np.ndarray:
-    """pad 到 block 对齐 + row-major flatten。
-
-    golden C 的索引:
-      ZZ: a[row * K + col]  — 行优先 flat
-      NN: b[col * K + row]  — 列优先 flat (同一个矩阵，不同存储顺序)
-    """
-    bh, bw = get_block_shape(dtype_name, fmt)
-    h, w = data.shape[0], data.shape[1]
-    ph, pw = pad_dim(h, bh), pad_dim(w, bw)
-
-    if ph != h or pw != w:
-        padded = np.zeros((ph, pw), dtype=data.dtype)
-        padded[:h, :w] = data
+def _call_kernel(func, dst, x_flat, w_flat, bias_flat, scale_exp,
+                 M: int, K: int, N: int) -> None:
+    """按 bias 是否存在分发到 linear / matmul 签名。"""
+    if bias_flat is None:
+        func(dst, x_flat, w_flat, M, K, N)
     else:
-        padded = data
-
-    if str(fmt) == str(NN):
-        # 列优先: flat[col * nrows + row]
-        return padded.flatten(order='F').copy()
-    return padded.flatten().copy()  # 行优先 (默认 C order)
+        func(dst, x_flat, w_flat, bias_flat, scale_exp, M, K, N)
 
 
-def _prepare_2d(src0_2d, src1_2d, dtype_a, dtype_w):
-    """单个 2D 矩阵对的准备：pad + flatten（ZZ/NN 行列优先）。
+def _loop_matmul(func, x, w, bias_flat, scale_exp: int = 0) -> np.ndarray:
+    """在 batch 维上 for 循环调 C kernel，collect 2D 结果。
 
-    异构权重: input 用 dtype_a 的 ZZ block，weight 用 dtype_w 的 NN block。
-    同构时 dtype_a == dtype_w。
+    支持两种 case:
+      A. 矩阵复用: x 有 batch，w 是 2D，每次迭代复用 w
+      B. 同 loop 维 (QK^T): x 和 w 都有 batch，batch shape 必须一致
+
+    Args:
+        func: C kernel
+        x: PreparedArg(ZZ)，padded_shape = (*batch_x, M_pad, K_pad)
+        w: PreparedArg(NN)，padded_shape = (*batch_w, K_pad, N_pad)
+        bias_flat: 已 pad 的 bias flat ndarray（长度 = N_pad）；matmul 传 None
+        scale_exp: linear 的 scale_exp；matmul 不用
 
     Returns:
-        (input_flat, weight_flat, M, K, N, orig_M, orig_N)
+        ndarray shape (*batch, M_pad, N_pad)，batch = canonical batch shape
     """
-    orig_M, K, orig_N = src0_2d.shape[0], src0_2d.shape[1], src1_2d.shape[1]
+    *x_batch, M, K = x.padded_shape
+    *w_batch, K_w, N = w.padded_shape
+    if K != K_w:
+        raise ValueError(
+            f"matmul K 轴不一致: x.K={K}, w.K={K_w}; "
+            f"同 dtype 下应由 bw_zz==bh_nn 保证相等"
+        )
 
-    input_flat = _pad_and_flatten(src0_2d, dtype_a, ZZ)   # 行优先，input dtype
-    weight_flat = _pad_and_flatten(src1_2d, dtype_w, NN)  # 列优先，weight dtype
+    # ---- 纯 2D × 2D: 直接一次调完 ----
+    if not x_batch and not w_batch:
+        dst = np.zeros(M * N, dtype=np.double)
+        _call_kernel(func, dst, x.flat, w.flat, bias_flat, scale_exp, M, K, N)
+        return dst.reshape(M, N)
 
-    bh, bw = get_block_shape(dtype_a, ZZ)
-    M, K_padded = pad_dim(orig_M, bh), pad_dim(K, bw)
-    _, bw_nn = get_block_shape(dtype_w, NN)
-    N = pad_dim(orig_N, bw_nn)
+    # ---- 确定 iteration batch shape（case A / case B / 单侧有 batch）----
+    if x_batch and w_batch:
+        if tuple(x_batch) != tuple(w_batch):
+            raise ValueError(
+                f"matmul case B: x.batch={tuple(x_batch)} 与 w.batch={tuple(w_batch)} "
+                f"不一致；当前不支持跨 batch 维度 broadcast"
+            )
+        batch_shape = tuple(x_batch)
+    elif x_batch:
+        batch_shape = tuple(x_batch)
+    else:
+        batch_shape = tuple(w_batch)
 
-    return input_flat, weight_flat, M, K_padded, N, orig_M, orig_N
+    B_total = int(np.prod(batch_shape))
+    x_batched = x.flat.reshape(B_total, M * K) if x_batch else None
+    w_batched = w.flat.reshape(B_total, K * N) if w_batch else None
 
-
-def _to_2d_batches(arr):
-    """任意维度 → (batch_shape, list[2D arrays])。1D 补成 2D。"""
-    if arr.ndim < 2:
-        return (), [arr.reshape(1, -1)]
-    if arr.ndim == 2:
-        return (), [arr]
-    batch_shape = arr.shape[:-2]
-    flat = arr.reshape(-1, arr.shape[-2], arr.shape[-1])
-    return batch_shape, [flat[i] for i in range(flat.shape[0])]
+    results = []
+    for i in range(B_total):
+        xi = x_batched[i] if x_batched is not None else x.flat
+        wi = w_batched[i] if w_batched is not None else w.flat
+        dst = np.zeros(M * N, dtype=np.double)
+        _call_kernel(func, dst, xi, wi, bias_flat, scale_exp, M, K, N)
+        results.append(dst.reshape(M, N))
+    return np.stack(results).reshape(*batch_shape, M, N)
 
 
 class MatmulConvention(OpConvention, op="matmul"):
-    """func(dst, input_zz, weight_nn, M, K, N)
+    """func(dst, input_zz, weight_nn, M, K, N)"""
 
-    支持任意 batch 维度：按 batch 循环调 C 函数，结果 stack 回原 batch shape。
-    """
-
-    def output_shape(self, *inputs):
+    def output_shape(self, *inputs, **op_params):
         return (*inputs[0].shape[:-1], inputs[1].shape[-1])
 
-    def call_c_func(self, func, *inputs_np, **params):
-        key = params.get("compute_key")
-        dtype_a = str(key.src0) if key else "bf16"
-        dtype_w = str(key.src1) if key and key.src1 else dtype_a
-
-        batch_shape, src0_list = _to_2d_batches(inputs_np[0])
-        _, src1_list = _to_2d_batches(inputs_np[1])
-        # weight 可能没有 batch 维度，广播
-        if len(src1_list) == 1 and len(src0_list) > 1:
-            src1_list = src1_list * len(src0_list)
-
-        results = []
-        for s0, s1 in zip(src0_list, src1_list):
-            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_a, dtype_w)
-            dst_flat = np.zeros(M * N, dtype=np.double)
-            func(dst_flat, input_flat, weight_flat, M, K, N)
-            results.append(dst_flat.reshape(M, N)[:orig_M, :orig_N].copy())
-
-        if not batch_shape:
-            return results[0]
-        return np.stack(results).reshape(*batch_shape, *results[0].shape)
+    def call_c_func(self, func, x, w, **_):
+        return _loop_matmul(func, x, w, bias_flat=None)
 
 
 class LinearConvention(OpConvention, op="linear"):
     """func(dst, input_zz, weight_nn, bias, scale_exp, M, K, N)
 
-    支持任意 batch 维度。bias 不参与 batch（广播到每个 batch）。
+    bias 声明 Format.ND（1D 向量，框架把 `(1, N)` 包装 auto-squeeze 成 1D）。
+    末维 pad 到 `bh_zz`，由 `bh_zz == bw_nn` 不变式保证长度和 weight 的 N 一致，
+    直接喂 C kernel。
     """
 
-    def output_shape(self, *inputs):
+    def output_shape(self, *inputs, **op_params):
         return (*inputs[0].shape[:-1], inputs[1].shape[-1])
 
-    def call_c_func(self, func, *inputs_np, **params):
-        key = params.get("compute_key")
-        dtype_a = str(key.src0) if key else "bf16"
-        dtype_w = str(key.src1) if key and key.src1 else dtype_a
-        scale_exp = params.get("scale_exp", 0)
-
-        batch_shape, src0_list = _to_2d_batches(inputs_np[0])
-        _, src1_list = _to_2d_batches(inputs_np[1])
-        if len(src1_list) == 1 and len(src0_list) > 1:
-            src1_list = src1_list * len(src0_list)
-
-        if len(inputs_np) < 3 or inputs_np[2] is None:
-            raise ValueError("linear 需要 bias 输入；无 bias 请用 matmul op")
-
-        bias = inputs_np[2]
-        results = []
-        for s0, s1 in zip(src0_list, src1_list):
-            input_flat, weight_flat, M, K, N, orig_M, orig_N = _prepare_2d(s0, s1, dtype_a, dtype_w)
-            dst_flat = np.zeros(M * N, dtype=np.double)
-            bias_pad = np.zeros(N, dtype=bias.dtype)
-            bias_pad[:orig_N] = bias.flatten()[:orig_N]
-            func(dst_flat, input_flat, weight_flat, bias_pad, scale_exp, M, K, N)
-            results.append(dst_flat.reshape(M, N)[:orig_M, :orig_N].copy())
-
-        if not batch_shape:
-            return results[0]
-        return np.stack(results).reshape(*batch_shape, *results[0].shape)
+    def call_c_func(self, func, x, w, bias, *, scale_exp=0, **_):
+        return _loop_matmul(func, x, w, bias.flat, scale_exp)
 
 
 # ============================================================
@@ -162,7 +135,6 @@ def _near_diagonal(m, n, scale=1.0, noise=0.01, seed=42):
 
 
 def _linear_math_strategy(inputs, source_map):
-    # 内存全程 double，无需 dtype 适配
     x, weight, bias = inputs[0], inputs[1], inputs[2]
     from ...core.enums import TensorSource
     x_from_randn = source_map[0] == TensorSource.RANDN
@@ -212,7 +184,9 @@ def _wrap(data, dsp_dtype):
 # ============================================================
 
 @register_op(
+    x=Format.ZZ,
     weight=Format.NN,
+    bias=Format.ND,
     math_strategy=_linear_math_strategy,
 )
 def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.Tensor:
@@ -220,7 +194,7 @@ def linear(x: torch.Tensor, weight: torch.Tensor, bias: torch.Tensor) -> torch.T
     return torch.matmul(x, weight) + bias
 
 
-@register_op(weight=Format.NN)
+@register_op(x=Format.ZZ, weight=Format.NN)
 def matmul(x: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
     """Matmul: out = x @ weight（无 bias 版本）"""
     return torch.matmul(x, weight)

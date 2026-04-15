@@ -105,7 +105,7 @@ class TypeInfo:
 
 BLOCK_TYPES: dict[str, TypeInfo] = {
     DType.DUT.BF8:     TypeInfo(zz=BlockShape(32, 16), nn=BlockShape(16, 32)),
-    DType.DUT.BF16:    TypeInfo(zz=BlockShape(16, 16), nn=BlockShape(16, 32)),
+    DType.DUT.BF16:    TypeInfo(zz=BlockShape(32, 16), nn=BlockShape(16, 32)),
     DType.REAL.DOUBLE:  TypeInfo(zz=BlockShape(4, 4),   nn=BlockShape(4, 4)),
 }
 

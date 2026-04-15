@@ -87,7 +87,7 @@ def set_ops_hooks(**hooks):
 # ============================================================
 
 def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = None,
-                output_fmts: tuple = None, **default_formats):
+                output_fmts: tuple = None, raw: bool = False, **default_formats):
     """注册自定义算子。
 
     Args:
@@ -102,8 +102,20 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
             单输出 op: (Format.NN,) 表示 kernel 写出 NN 布局
             多输出 op: (Format.ZZ, Format.NN, Format.ZZ) 每个 output slot 一个
             未声明时所有 output 默认 Format.ZZ
+        raw: True 表示这个 op 不走框架的 golden_c 预处理。Convention.call_c_func
+            会直接收到 raw double ndarray（未 pad、未 flatten）。用于 transpose 这
+            类需要自己做特殊 pad / re-quant 的 op。默认 False，走自动预处理。
         **default_formats: 参数名→Format 的默认格式标注，选填
-            未标注的参数按自动推断（矩阵→zz，向量→nd）
+            每个 tensor 参数都必须显式声明 fmt（ZZ / NN / ND）；未声明的 tensor
+            参数会按位置默认 ZZ。raw=True 时本字段被忽略。
+
+    golden_c 预处理流程（raw=False 时）:
+        1. 框架把 DSPTensor / torch.Tensor 转 double numpy
+        2. 按 default_formats 里的 Format 对每个 tensor arg 做 pad + flatten
+           （规则见 core/prepare_args.py）
+        3. 把 PreparedArg 列表交给 Convention.call_c_func
+        4. call_c_func 自己决定如何调 C kernel（for 循环或一次 bulk 调用）
+        5. 框架按 conv.output_shape 把 padded 结果 crop 回 orig shape
 
     op_name 自动取函数名。
     output_rules 从 golden_c 的 ComputeKey 自动推导。
@@ -178,11 +190,29 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
                         name = param_names[i] if i < len(param_names) else f"arg{i}"
                         op_params[name] = a
                 op_params.update(kwargs)
+
+                # 解析每个 tensor arg 的 fmt（按 tensor-only 位置 → param_name → fmt）
+                # raw=True 的 op 跳过这步，arg_fmts=None 表示 raw 透传模式
+                if raw:
+                    arg_fmts = None
+                else:
+                    tensor_positions = [
+                        i for i, a in enumerate(args) if isinstance(a, torch.Tensor)
+                    ]
+                    arg_fmts = []
+                    for pos in tensor_positions:
+                        name = param_names[pos] if pos < len(param_names) else None
+                        fmt = active_formats.get(name, Format.ZZ) if name else Format.ZZ
+                        if not isinstance(fmt, Format):
+                            fmt = Format(fmt)
+                        arg_fmts.append(fmt)
+
                 result = dispatch_golden_c(
                     op_name, args, _hooks,
                     compute=call_compute,
                     output_dtype=call_output_dtype,
                     op_params=op_params,
+                    arg_fmts=arg_fmts,
                 )
 
             # --- torch / pseudo_quant ---
@@ -227,6 +257,7 @@ def register_op(_func=None, *, golden_c: dict = None, math_strategy: Callable = 
         wrapper._dsp_param_names = param_names
         wrapper._dsp_default_formats = default_formats
         wrapper._dsp_math_strategy = math_strategy
+        wrapper._dsp_raw = raw
         return wrapper
 
     if _func is not None:

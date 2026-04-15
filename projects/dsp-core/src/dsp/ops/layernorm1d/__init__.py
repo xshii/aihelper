@@ -5,105 +5,72 @@
 mean/var 在最后一维（cols）上求；gamma/beta shape = (cols,)，跨其它维度广播。
 
 C 接口: (dst, input, gamma, beta, batch, matrix, rows, cols)
-    - input / dst 形状 = (batch, matrix, rows, cols_mem), cols_mem = pad_dim(cols, subblock)
-    - gamma / beta 形状 = (cols_mem,)
-    - 每个 (b, m, r) 行在前 cols 个元素上求 mean/var
-    - 总 subblock 数 = batch * matrix * rows * cols_mem / subblock
+    Convention 对任意维度 x 一次性调 kernel：`x.padded_shape[:-2]` 前置维 collapse
+    成 `batch`，`matrix=1`，`rows = pad(M, bh_zz)`，`cols = pad(D, bw_zz)`。
 
-config.hw.golden_c_count_mode 控制 caller 往 cols 参数里传什么：
-    "orig":   cols = 原始 feature 维长度（可非对齐），reduction 只走原始元素
-    "padded": cols = pad_dim(原始长度, subblock)，reduction 走整个 padded 区（含 0）
+Format 声明:
+    x / gamma / beta 全是 Format.ZZ
+    - x (B, M, D) → 保留 B，pad 末 2 维到 `(bh_zz, bw_zz)`，行优先 flatten
+    - gamma / beta 1D (D,) → 走 _pad_1d 到 `bw_zz`
+    （统一由 core/prepare_args.py 的规则处理）
+
+已知的 QSNR WARN:
+    ZZ 规则把 cols pad 到 `bw_zz`（BF16 下 = 16），但 C kernel 内部按 `subblock_size`
+    （BF16 下 = 8）算 stride，两者在 `D not multiple of bw_zz` 时不一致，导致 kernel
+    读 buffer 时 stride 对不上。现象是 layernorm 的 pseudo_quant vs golden_c QSNR
+    显著下降。要彻底修需要 C kernel 加显式 `cols_mem` 参数；这里作为已知 WARN 保留。
 """
 
 import numpy as np
 import torch
 
 from .. import register_op
+from ...core.enums import Format
 from ...core.convention import OpConvention
-from ...core.block import pad_dim
 
-
-# ============================================================
-# C 调用约定
-# ============================================================
 
 class LayerNorm1dConvention(OpConvention, op="layernorm1d"):
-    """把任意 shape 的 input 看成 (batch=1, matrix=1, rows=prod(shape[:-1]), cols=shape[-1])。
+    """一次把整块 `(B, M_pad, D_pad)` 喂给 C kernel。"""
 
-    gamma/beta: 要求 shape == (cols,)（跨外层广播），或 flat 后长度与 input 相同（视为逐元素）。
-    我们只支持前者（标准 LN 约定）。
-    """
-
-    def output_shape(self, *inputs):
+    def output_shape(self, *inputs, **op_params):
         return tuple(inputs[0].shape)
 
-    def call_c_func(self, func, *inputs_np, **params):
-        from ...config import config as cfg
-
-        x = inputs_np[0]
-        gamma = inputs_np[1]
-        beta = inputs_np[2]
-        orig_shape = x.shape
-        orig_cols = orig_shape[-1]
-        rows = int(np.prod(orig_shape[:-1])) if x.ndim >= 2 else 1
-        batch = 1
-        matrix = 1
-
-        key = params.get("compute_key")
-        from ...core.dtype import get_dtype
-        dtype_name = str(key.src0) if key else "bf16"
-        sub = get_dtype(dtype_name).subblock_size
-        cols_mem = pad_dim(orig_cols, sub)
-
-        # 按 golden_c_count_mode 决定传给 C 的 cols 值
-        mode = cfg.hw.golden_c_count_mode
-        if mode == "orig":
-            c_cols = orig_cols
-        elif mode == "padded":
-            c_cols = cols_mem
+    def call_c_func(self, func, x, gamma, beta, **_):
+        # x.padded_shape 拆 batch / rows / cols
+        #   ≥2D: (*outer, rows_pad, cols_pad)，outer collapse 成 batch
+        #   1D : (cols_pad,)，看作 rows=1 的单行
+        if len(x.padded_shape) >= 2:
+            *outer, rows_pad, cols_pad = x.padded_shape
+        elif len(x.padded_shape) == 1:
+            outer, rows_pad, cols_pad = [], 1, x.padded_shape[0]
         else:
-            raise ValueError(f"未知 golden_c_count_mode: {mode}")
+            raise ValueError(f"layernorm1d: 不支持 0-D x, padded_shape={x.padded_shape}")
 
-        # 把 input pad 到 (rows, cols_mem) 再 flat
-        x_2d = x.reshape(rows, orig_cols).astype(np.double)
-        if cols_mem != orig_cols:
-            x_padded = np.zeros((rows, cols_mem), dtype=np.double)
-            x_padded[:, :orig_cols] = x_2d
-        else:
-            x_padded = x_2d
-        input_flat = x_padded.reshape(-1).copy()
+        batch_total = int(np.prod(outer)) if outer else 1
 
-        # gamma / beta: shape (cols,) → pad 到 cols_mem
-        gamma_flat = gamma.flatten().astype(np.double)
-        beta_flat = beta.flatten().astype(np.double)
-        if gamma_flat.size != orig_cols or beta_flat.size != orig_cols:
+        # gamma / beta 末维校验（应等于 x 的 orig cols）
+        orig_cols = x.orig_shape[-1] if x.orig_shape else 0
+        if gamma.orig_shape[-1] != orig_cols or beta.orig_shape[-1] != orig_cols:
             raise ValueError(
-                f"layernorm1d: gamma/beta 形状应是 (cols={orig_cols},), "
-                f"实际 gamma={gamma_flat.shape}, beta={beta_flat.shape}"
+                f"layernorm1d: gamma/beta 末维长度应等于 x.orig_cols={orig_cols}, "
+                f"实际 gamma={gamma.orig_shape}, beta={beta.orig_shape}"
             )
-        if cols_mem != orig_cols:
-            gamma_pad = np.zeros(cols_mem, dtype=np.double)
-            beta_pad = np.zeros(cols_mem, dtype=np.double)
-            gamma_pad[:orig_cols] = gamma_flat
-            beta_pad[:orig_cols] = beta_flat
-        else:
-            gamma_pad = gamma_flat
-            beta_pad = beta_flat
 
-        total_mem = batch * matrix * rows * cols_mem
-        dst_flat = np.zeros(total_mem, dtype=np.double)
-        func(dst_flat, input_flat, gamma_pad, beta_pad, batch, matrix, rows, c_cols)
+        # C kernel 契约：cols 既是 reduction count 又是 stride 推算基础
+        # （kernel 内部 cols_mem = pad(cols, subblock)）
+        # Python 侧 buffer 已按 ZZ 的 bw_zz pad，这里直接把 padded cols 传给 kernel
+        dst = np.zeros(batch_total * rows_pad * cols_pad, dtype=np.double)
+        func(dst, x.flat, gamma.flat, beta.flat,
+             batch_total, 1, rows_pad, cols_pad)
 
-        # 从 padded 2D 中取前 orig_cols 列，reshape 回原 shape
-        dst_2d = dst_flat.reshape(rows, cols_mem)[:, :orig_cols]
-        return dst_2d.reshape(orig_shape).copy()
+        if outer:
+            return dst.reshape(*outer, rows_pad, cols_pad)
+        if rows_pad == 1:
+            return dst.reshape(cols_pad)
+        return dst.reshape(rows_pad, cols_pad)
 
 
-# ============================================================
-# 算子注册
-# ============================================================
-
-@register_op
+@register_op(x=Format.ZZ, gamma=Format.ZZ, beta=Format.ZZ)
 def layernorm1d(x: torch.Tensor, gamma: torch.Tensor, beta: torch.Tensor) -> torch.Tensor:
     """LayerNorm1D: 按最后一维做 normalize。
 

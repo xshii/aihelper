@@ -1,4 +1,4 @@
-"""ops/linear 单元测试 — _pad_and_flatten + torch/golden_c 比数。"""
+"""ops/linear 单元测试 — prepare_args + torch/golden_c 比数。"""
 
 import numpy as np
 import torch
@@ -7,53 +7,68 @@ import pytest
 import dsp
 from dsp.core.enums import Mode, Format
 from dsp.core.block import get_block_shape, pad_dim
+from dsp.core.prepare_args import prepare
 from dsp.data.compare import compute_diff
 from dsp.golden.call import is_available
 
 
-class TestPadAndFlatten:
-    """验证 _pad_and_flatten 的行/列优先。"""
+class TestPrepareArgs:
+    """验证 core/prepare_args 的 ZZ/NN 行/列优先 pad + flatten。"""
 
     def test_zz_row_major_simple(self):
-        from dsp.ops.linear import _pad_and_flatten
         data = np.array([[1, 2], [3, 4]], dtype=np.double)
-        flat = _pad_and_flatten(data, "bf16", Format.ZZ)
+        arg = prepare(data, Format.ZZ, "bf16")
         bh, bw = get_block_shape("bf16", Format.ZZ)
         ph, pw = pad_dim(2, bh), pad_dim(2, bw)
-        assert flat.shape[0] == ph * pw
+        assert arg.flat.shape[0] == ph * pw
         # 行优先: flat[0]=1, flat[1]=2, flat[pw]=3, flat[pw+1]=4
-        assert flat[0] == 1
-        assert flat[1] == 2
-        assert flat[pw] == 3
-        assert flat[pw + 1] == 4
+        assert arg.flat[0] == 1
+        assert arg.flat[1] == 2
+        assert arg.flat[pw] == 3
+        assert arg.flat[pw + 1] == 4
 
     def test_nn_col_major_simple(self):
-        from dsp.ops.linear import _pad_and_flatten
         data = np.array([[1, 2], [3, 4]], dtype=np.double)
-        flat = _pad_and_flatten(data, "bf16", Format.NN)
+        arg = prepare(data, Format.NN, "bf16")
         bh, bw = get_block_shape("bf16", Format.NN)
         ph, pw = pad_dim(2, bh), pad_dim(2, bw)
-        assert flat.shape[0] == ph * pw
+        assert arg.flat.shape[0] == ph * pw
         # 列优先: flat[0]=1, flat[1]=3, flat[ph]=2, flat[ph+1]=4
-        assert flat[0] == 1, f"expected 1, got {flat[0]}"
-        assert flat[1] == 3, f"expected 3, got {flat[1]}"
-        assert flat[ph] == 2, f"expected 2, got {flat[ph]}"
-        assert flat[ph + 1] == 4, f"expected 4, got {flat[ph+1]}"
+        assert arg.flat[0] == 1, f"expected 1, got {arg.flat[0]}"
+        assert arg.flat[1] == 3, f"expected 3, got {arg.flat[1]}"
+        assert arg.flat[ph] == 2, f"expected 2, got {arg.flat[ph]}"
+        assert arg.flat[ph + 1] == 4, f"expected 4, got {arg.flat[ph + 1]}"
 
     def test_nn_col_major_3x2(self):
         """列优先 flatten 验证: [[a,b],[c,d],[e,f]] → [a,c,e,b,d,f]。"""
-        from dsp.ops.linear import _pad_and_flatten
         data = np.array([[10, 20], [30, 40], [50, 60]], dtype=np.double)
-        flat = _pad_and_flatten(data, "bf16", Format.NN)
+        arg = prepare(data, Format.NN, "bf16")
         bh, bw = get_block_shape("bf16", Format.NN)
         ph = pad_dim(3, bh)
         # 列优先: 先第 0 列 [10,30,50], 再第 1 列 [20,40,60]
-        assert flat[0] == 10
-        assert flat[1] == 30
-        assert flat[2] == 50
-        assert flat[ph] == 20
-        assert flat[ph + 1] == 40
-        assert flat[ph + 2] == 60
+        assert arg.flat[0] == 10
+        assert arg.flat[1] == 30
+        assert arg.flat[2] == 50
+        assert arg.flat[ph] == 20
+        assert arg.flat[ph + 1] == 40
+        assert arg.flat[ph + 2] == 60
+
+    def test_nn_1d_pads_to_bw_nn(self):
+        """1D 向量声明 NN 时 pad 到 bw_nn，不变成 2D。"""
+        data = np.arange(20, dtype=np.double)
+        arg = prepare(data, Format.NN, "bf16")
+        _, bw_nn = get_block_shape("bf16", Format.NN)
+        expected_len = pad_dim(20, bw_nn)
+        assert arg.flat.shape[0] == expected_len
+        assert (arg.flat[:20] == data).all()
+        assert (arg.flat[20:] == 0).all()
+
+    def test_nn_1d_wrapped_as_2d_auto_squeezed(self):
+        """(1, N) 形状的 NN 行向量会被 auto-squeeze 成 1D，和纯 1D 结果一致。"""
+        flat_1d = prepare(np.arange(20, dtype=np.double), Format.NN, "bf16").flat
+        flat_2d = prepare(np.arange(20, dtype=np.double).reshape(1, 20), Format.NN, "bf16").flat
+        assert flat_1d.shape == flat_2d.shape
+        assert (flat_1d == flat_2d).all()
 
 
 class TestLinearTorch:
