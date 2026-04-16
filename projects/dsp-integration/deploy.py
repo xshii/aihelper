@@ -27,11 +27,71 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
+
+
+# ══════════════════════════════════════════════
+# 日志辅助：时间戳 + ANSI 颜色 + 线程安全
+# ══════════════════════════════════════════════
+
+_USE_COLOR = sys.stdout.isatty()
+_PRINT_LOCK = threading.Lock()
+
+
+def _c(code: str) -> str:
+    return code if _USE_COLOR else ""
+
+
+DIM = _c("\033[2m")
+RESET = _c("\033[0m")
+RED = _c("\033[31m")
+GREEN = _c("\033[32m")
+YELLOW = _c("\033[33m")
+CYAN = _c("\033[36m")
+BOLD = _c("\033[1m")
+
+_STYLE = {
+    "dim": DIM,
+    "ok": GREEN,
+    "warn": YELLOW,
+    "err": RED + BOLD,
+    "hit": CYAN + BOLD,
+    "section": BOLD,
+}
+
+
+def _ts() -> str:
+    t = time.time()
+    ms = int((t - int(t)) * 1000)
+    return time.strftime("%H:%M:%S") + f".{ms:03d}"
+
+
+def log(msg: str, style: str = "") -> None:
+    """带时间戳前缀的线程安全输出。
+
+    style 可选:
+        ""        默认
+        "dim"     灰（子进程 stdout、详情、info）
+        "ok"      绿（成功）
+        "warn"    黄（需注意）
+        "err"     红粗（错误）
+        "hit"     青粗（keyword 命中等关键事件）
+        "section" 粗体（step 标题）
+    """
+    color = _STYLE.get(style, "")
+    with _PRINT_LOCK:
+        print(f"{DIM}{_ts()}{RESET} {color}{msg}{RESET}", flush=True)
+
+
+def br() -> None:
+    """空行分隔，无时间戳。"""
+    with _PRINT_LOCK:
+        print(flush=True)
 
 
 # ══════════════════════════════════════════════
@@ -42,15 +102,16 @@ STATE_FILE = ".deploy.state"
 def load_manifest(path: str) -> dict:
     if not os.path.exists(path):
         if os.path.exists(EXAMPLE_FILE):
-            print(f"  ✘ 未找到 {path}")
-            print(f"  💡 请先执行: cp {EXAMPLE_FILE} {path}")
+            log(f"  ✘ 未找到 {path}", style="err")
+            log(f"  💡 请先执行: cp {EXAMPLE_FILE} {path}", style="dim")
         raise FileNotFoundError(f"清单文件不存在: {path}")
     with open(path, "r", encoding="utf-8") as f:
         manifest = json.load(f)
+    # 重名校验：dict 查找会让后者覆盖前者，静默吞掉问题
     names = [t["name"] for t in manifest.get("tasks", []) if "name" in t]
     dups = sorted({n for n in names if names.count(n) > 1})
     if dups:
-        raise KeyError(f"任务名重复: {', '.join(dups)}")
+        raise ValueError(f"任务名重复: {', '.join(dups)}")
     return manifest
 
 
@@ -75,7 +136,7 @@ def resolve_variables(manifest: dict) -> dict:
                 break
         for k, v in variables.items():
             if isinstance(v, str) and "${" in v:
-                raise KeyError(f"变量循环引用或未定义: {k} = {v}")
+                raise ValueError(f"变量循环引用或未定义: {k} = {v}")
 
     def replace(text: str, strict: bool) -> str:
         def _sub(m):
@@ -83,7 +144,7 @@ def resolve_variables(manifest: dict) -> dict:
             if key in variables:
                 return variables[key]
             if strict:
-                raise KeyError(f"未定义的变量: ${{{key}}}")
+                raise ValueError(f"未定义的变量: ${{{key}}}")
             return m.group(0)
 
         return re.sub(r"\$\{(\w+)\}", _sub, text)
@@ -112,7 +173,7 @@ def validate(manifest: dict) -> None:
         tname = task["name"]
         for i, kw in enumerate(task.get("keyword", [])):
             if "word" not in kw:
-                raise KeyError(f"[{tname}] keyword[{i}] 缺少 word 字段")
+                raise ValueError(f"[{tname}] keyword[{i}] 缺少 word 字段")
             try:
                 pat = re.compile(kw["word"])
             except re.error as e:
@@ -120,7 +181,7 @@ def validate(manifest: dict) -> None:
             for gname in pat.groupindex:
                 if gname in seen_groups:
                     prev_t, prev_i = seen_groups[gname]
-                    raise KeyError(
+                    raise ValueError(
                         f"命名组冲突: #{{{gname}}} 同时定义在 "
                         f"[{prev_t}].keyword[{prev_i}] 和 [{tname}].keyword[{i}]"
                     )
@@ -137,7 +198,7 @@ def validate(manifest: dict) -> None:
 
     missing = referenced_refs - declared_refs
     if missing:
-        raise KeyError(f"引用的 cont_ref 未定义: {', '.join(sorted(missing))}")
+        raise ValueError(f"引用的 cont_ref 未定义: {', '.join(sorted(missing))}")
 
 
 # ══════════════════════════════════════════════
@@ -244,7 +305,7 @@ class ProcessStream:
                 with self._cond:
                     self.lines.append(line)
                     self._cond.notify_all()
-                print(f"    │ [{self.task_name}] {line}")
+                log(f"    │ [{self.task_name}] {line}", style="dim")
         except Exception:
             pass
         finally:
@@ -333,10 +394,16 @@ class Watcher(threading.Thread):
                 self.cursor = new_cursor
                 self._scan(line)
         except Exception as e:
+            log(
+                f"    ✘ [{self.task['name']}] watcher 异常: {e}",
+                style="err",
+            )
+            log(traceback.format_exc().rstrip(), style="dim")
             self._seal("fail", f"watcher 异常: {e}")
 
     def _scan(self, line: str):
-        for ks in self.keywords:
+        name = self.task["name"]
+        for idx, ks in enumerate(self.keywords):
             if ks.consumed:
                 continue
             m = ks.pattern.search(line)
@@ -344,13 +411,20 @@ class Watcher(threading.Thread):
                 continue
             ks.hit_count += 1
             if ks.hit_count < ks.times:
-                return  # 还没到次数
+                # times > 1 时打进度让用户看到累计
+                if ks.times > 1:
+                    log(
+                        f"    ⚡ [{name}] keyword#{idx} 命中进度 "
+                        f"{ks.hit_count}/{ks.times}",
+                        style="dim",
+                    )
+                return
             ks.consumed = True
 
             # 提取命名组 → 全局
-            for gname, gval in m.groupdict().items():
-                if gval is not None:
-                    self.ctx.set_if_absent(gname, gval)
+            groups = {k: v for k, v in m.groupdict().items() if v is not None}
+            for gname, gval in groups.items():
+                self.ctx.set_if_absent(gname, gval)
 
             kw_type = ks.spec.get("type", "success")
             cont_ref = ks.spec.get("cont_ref")
@@ -358,16 +432,31 @@ class Watcher(threading.Thread):
             if cont_ref:
                 tag = f"{kw_type}→{cont_ref}"
                 self.events.append(tag)
-                print(f"    ⚡ [{self.task['name']}] cont_ref 命中: {tag}")
+                log(
+                    f"    ⚡ [{name}] keyword#{idx} 命中 "
+                    f"→ cont_ref={cont_ref} ({kw_type})",
+                    style="hit",
+                )
+            else:
+                self.events.append(kw_type)
+                log(
+                    f"    ⚡ [{name}] keyword#{idx} 命中 → {kw_type}（终止进程）",
+                    style="hit",
+                )
+            # 展示匹配细节
+            log(f"      matched: {m.group(0)!r}", style="dim")
+            if groups:
+                gs = ", ".join(f"{k}={v}" for k, v in groups.items())
+                log(f"      groups:  {gs}", style="dim")
+
+            if cont_ref:
                 self.stream.detach()
                 self.bus.fire(cont_ref, self.cursor, self.stream)
                 # 不 seal，继续扫后续 keyword
                 return
             else:
-                self.events.append(kw_type)
-                print(f"    ⚡ [{self.task['name']}] {kw_type} 命中，终止进程")
                 self.stream.terminate()
-                self._seal(kw_type, f"keyword({kw_type}) matched")
+                self._seal(kw_type, f"keyword#{idx}({kw_type}) matched")
                 return
 
     def _finalize_on_close(self):
@@ -412,7 +501,11 @@ def state_cleanup(state_path: str):
     if not entries:
         os.remove(state_path)
         return
-    print(f"  ℹ 清理上次留下的 {len(entries)} 个常驻进程")
+    log(f"  ℹ 清理上次留下的 {len(entries)} 个常驻进程", style="dim")
+    for e in entries:
+        pid = e.get("pid")
+        task = e.get("task", "?")
+        log(f"     ─ pid={pid} task={task}", style="dim")
     for e in entries:
         pgid = e.get("pgid") or e.get("pid")
         try:
@@ -449,7 +542,8 @@ def atomic_copy(src: str, dest: str):
 
 def copy_phase(tasks: list, statuses: dict):
     """只处理普通 task (name 不以 # 开头) 的 src → dest。"""
-    print("\n[Step 3] 复制配置文件")
+    br()
+    log("[Step 3] 复制配置文件", style="section")
     for task in tasks:
         name = task["name"]
         if name.startswith("#"):
@@ -459,7 +553,7 @@ def copy_phase(tasks: list, statuses: dict):
         if not src or not dest:
             continue
         if not os.path.exists(src):
-            print(f"  ✘ [{name}] 源文件不存在: {src}")
+            log(f"  ✘ [{name}] 源文件不存在: {src}", style="err")
             statuses[name] = ("fail", f"src not found: {src}")
             continue
         dest_dir = os.path.dirname(dest)
@@ -467,24 +561,21 @@ def copy_phase(tasks: list, statuses: dict):
             os.makedirs(dest_dir, exist_ok=True)
         if os.path.exists(dest):
             if filecmp.cmp(src, dest, shallow=False):
-                print(f"  ✔ [{name}] 内容一致，跳过")
+                log(f"  ✔ [{name}] 内容一致，跳过", style="dim")
                 continue
+            log(f"  ⚠ [{name}] dest 与 src 不一致", style="warn")
             try:
-                answer = (
-                    input(f"  ⚠ [{name}] dest 与 src 不一致，覆盖? (y/n): ")
-                    .strip()
-                    .lower()
-                )
+                answer = input("    覆盖? (y/n): ").strip().lower()
             except EOFError:
                 answer = "n"
             if answer != "y":
-                print("    ⏭ 跳过覆盖")
+                log("    ⏭ 跳过覆盖", style="dim")
                 continue
             atomic_copy(src, dest)
-            print("    ✔ 已覆盖")
+            log("    ✔ 已覆盖", style="ok")
         else:
             atomic_copy(src, dest)
-            print(f"  ✔ [{name}] 已复制")
+            log(f"  ✔ [{name}] 已复制", style="ok")
 
 
 # ══════════════════════════════════════════════
@@ -496,25 +587,28 @@ def run_deploy(manifest_path: str):
     manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
     state_path = os.path.join(manifest_dir, STATE_FILE)
 
-    print("[Step 0] 清理上次遗留进程")
+    log("[Step 0] 清理上次遗留进程", style="section")
     state_cleanup(state_path)
 
-    print(f"\n[Step 1] 加载 {manifest_path}")
+    br()
+    log(f"[Step 1] 加载 {manifest_path}", style="section")
     manifest = load_manifest(manifest_path)
     tasks = manifest.get("tasks", [])
-    print(f"  ✔ 共 {len(tasks)} 个任务")
+    log(f"  ✔ 共 {len(tasks)} 个任务", style="ok")
 
-    print("\n[Step 2] 解析变量 & 校验")
+    br()
+    log("[Step 2] 解析变量 & 校验", style="section")
     manifest = resolve_variables(manifest)
     for k, v in manifest.get("variables", {}).items():
-        print(f"  ${{{k}}} = {v}")
+        log(f"  ${{{k}}} = {v}", style="dim")
     validate(manifest)
-    print("  ✔ 校验通过（命名组无冲突、cont_ref 引用完整）")
+    log("  ✔ 校验通过（命名组无冲突、cont_ref 引用完整）", style="ok")
 
     statuses: dict[str, tuple[str, str]] = {}  # name -> (status, reason)
     copy_phase(tasks, statuses)
 
-    print("\n[Step 4] 调度执行")
+    br()
+    log("[Step 4] 调度执行", style="section")
     ctx = Context()
     bus = EventBus()
     watchers: list[Watcher] = []
@@ -542,14 +636,16 @@ def run_deploy(manifest_path: str):
         cwd = ctx.substitute(cwd_raw)
         note = task.get("note", "")
         order = task.get("order", "-")
-        print(f"\n  ▶ [{order}] {note or task['name']}")
-        print(f"    ▸ 启动: {usage}")
+        br()
+        log(f"  ▶ [{order}] {note or task['name']}")
+        log(f"    ▸ 启动: {usage}", style="dim")
         if cwd:
-            print(f"    ▸ cwd:  {cwd}")
+            log(f"    ▸ cwd:  {cwd}", style="dim")
         try:
             stream = ProcessStream(usage, cwd, task["name"])
         except Exception as e:
             statuses[task["name"]] = ("fail", f"启动失败: {e}")
+            log(f"    ✘ 启动失败: {e}", style="err")
             return
         w = Watcher(task, stream, 0, ctx, bus, on_verdict)
         with watcher_lock:
@@ -560,8 +656,9 @@ def run_deploy(manifest_path: str):
         cursor, stream = bus.wait(ref)  # 已经 fired，立即返回
         note = task.get("note", "")
         order = task.get("order", "-")
-        print(f"\n  ▶ [{order}] {note or task['name']}")
-        print(f"    ▸ 挂载到 pid={stream.pid} (cursor={cursor})")
+        br()
+        log(f"  ▶ [{order}] {note or task['name']}")
+        log(f"    ▸ 挂载到 pid={stream.pid} (cursor={cursor})", style="dim")
         w = Watcher(task, stream, cursor, ctx, bus, on_verdict)
         with watcher_lock:
             watchers.append(w)
@@ -611,7 +708,8 @@ def run_deploy(manifest_path: str):
             with verdict_cond:
                 verdict_cond.wait(timeout=0.3)
     except KeyboardInterrupt:
-        print("\n⏹ Ctrl+C 中断，正在终止非常驻进程")
+        br()
+        log("⏹ Ctrl+C 中断，正在终止非常驻进程", style="warn")
         with watcher_lock:
             for w in watchers:
                 if not w.stream.detached:
@@ -631,47 +729,55 @@ def run_deploy(manifest_path: str):
         ]
     state_write(state_path, detached_entries)
     if detached_entries:
-        print(f"\n  ℹ {len(detached_entries)} 个常驻进程记录到 {STATE_FILE}")
+        br()
+        log(
+            f"  ℹ {len(detached_entries)} 个常驻进程记录到 {STATE_FILE}",
+            style="dim",
+        )
 
     # README 生成（可选）
     readme_config = manifest.get("readme")
     if readme_config:
-        print("\n[Step 5] 生成使用指导文档")
+        br()
+        log("[Step 5] 生成使用指导文档", style="section")
         _render_readme(readme_config, tasks)
 
     # 总结
-    print("\n[Step 6] 执行总结")
-    print("═" * 64)
+    br()
+    log("[Step 6] 执行总结", style="section")
+    log("═" * 60, style="dim")
     succ = [n for n, (s, _) in statuses.items() if s == "success"]
     fail = [n for n, (s, _) in statuses.items() if s == "fail"]
     skip = [n for n, (s, _) in statuses.items() if s == "skip"]
     if succ:
-        print(f"  ✅ 成功 ({len(succ)}):")
+        log(f"  ✅ 成功 ({len(succ)}):", style="ok")
         for n in succ:
-            print(f"     ─ {n}  ({statuses[n][1]})")
+            log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
     if fail:
-        print(f"  ❌ 失败 ({len(fail)}):")
+        log(f"  ❌ 失败 ({len(fail)}):", style="err")
         for n in fail:
-            print(f"     ─ {n}  ({statuses[n][1]})")
+            log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
     if skip:
-        print(f"  ⏭ 跳过 ({len(skip)}):")
+        log(f"  ⏭ 跳过 ({len(skip)}):", style="warn")
         for n in skip:
-            print(f"     ─ {n}  ({statuses[n][1]})")
+            log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
 
     # Watcher 内部事件列表（供调试）
     with watcher_lock:
         detailed = [w for w in watchers if w.events]
     if detailed:
-        print("\n  📜 Watcher 命中事件:")
+        br()
+        log("  📜 Watcher 命中事件:", style="dim")
         for w in detailed:
-            print(f"     ─ {w.task['name']}: {', '.join(w.events)}")
+            log(f"     ─ {w.task['name']}: {', '.join(w.events)}", style="dim")
 
     groups = ctx.snapshot()
     if groups:
-        print("\n  📦 提取的命名组:")
+        br()
+        log("  📦 提取的命名组:", style="dim")
         for k, v in groups.items():
-            print(f"     #{{{k}}} = {v}")
-    print("═" * 64)
+            log(f"     #{{{k}}} = {v}", style="dim")
+    log("═" * 60, style="dim")
 
     if fail:
         sys.exit(1)
@@ -698,7 +804,7 @@ def _render_readme(readme_config: dict, tasks: list):
     lines = [f"# {title}", "", *content_lines, *task_lines, ""]
     with open(output_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    print(f"  ✔ 已生成 {output_path}")
+    log(f"  ✔ 已生成 {output_path}", style="ok")
 
 
 # ══════════════════════════════════════════════
@@ -716,17 +822,24 @@ def main():
         print_help()
         return
     if args:
-        print(f"❌ 未知参数: {args[0]}")
+        log(f"❌ 未知参数: {args[0]}", style="err")
         print_help()
         sys.exit(1)
 
     try:
         run_deploy("manifest.json")
-    except (FileNotFoundError, KeyError, ValueError) as e:
-        print(f"\n❌ 错误: {e}")
+    except (FileNotFoundError, ValueError) as e:
+        br()
+        log(f"❌ 错误: {e}", style="err")
         sys.exit(1)
     except json.JSONDecodeError as e:
-        print(f"\n❌ JSON 解析错误: {e}")
+        br()
+        log(f"❌ JSON 解析错误: {e}", style="err")
+        sys.exit(1)
+    except Exception as e:
+        br()
+        log(f"❌ 未知错误: {e}", style="err")
+        log(traceback.format_exc().rstrip(), style="dim")
         sys.exit(1)
 
 
