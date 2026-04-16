@@ -379,10 +379,8 @@ class ProcessStream:
             env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",  # deploy.py 自己的解码层
-            errors="replace",  # 碰到非法字节用 ? 替代而不是崩溃
-            bufsize=1,
+            # 不用 text=True：读原始字节，自己 decode，
+            # 彻底不依赖子进程的编码设置
             start_new_session=True,  # 独立进程组，方便 killpg
         )
         self.pid = self.proc.pid
@@ -402,8 +400,9 @@ class ProcessStream:
     def _read(self) -> None:
         try:
             assert self.proc.stdout is not None
-            for line in self.proc.stdout:
-                line = line.rstrip("\n")
+            for raw in self.proc.stdout:
+                # 原始字节 → UTF-8 decode（非法字节变 ?），剥掉换行
+                line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                 with self._cond:
                     self.lines.append(line)
                     self._cond.notify_all()
