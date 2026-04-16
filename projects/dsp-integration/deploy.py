@@ -34,6 +34,18 @@ from typing import Callable, Optional
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
 
+# task 里哪些字段走静态 ${var} 替换，strict=True 时未定义的变量会抛错
+TASK_FIELDS: list[tuple[str, bool]] = [
+    ("src", True),
+    ("dest", True),
+    ("note", False),
+    ("usage", False),
+    ("cwd", False),
+]
+
+VAR_RE = re.compile(r"\$\{(\w+)\}")
+DYN_RE = re.compile(r"#\{(\w+)\}")
+
 
 # ══════════════════════════════════════════════
 # 日志辅助：时间戳 + ANSI 颜色 + 线程安全
@@ -95,6 +107,47 @@ def br() -> None:
 
 
 # ══════════════════════════════════════════════
+# 公共小工具
+# ══════════════════════════════════════════════
+
+
+def _killpg_safe(pgid: int, sig: int) -> None:
+    """killpg 并吞掉 ProcessLookupError/PermissionError。"""
+    try:
+        os.killpg(pgid, sig)
+    except (ProcessLookupError, PermissionError):
+        pass
+
+
+def _expand_vars(text: str, variables: dict, strict: bool) -> str:
+    """把 text 里的 ${key} 用 variables[key] 替换。
+
+    strict=True  未定义的 key 直接抛 ValueError
+    strict=False 未定义的 key 原样保留（允许 ${HOME} 这类 shell 变量透传）
+    """
+
+    def _sub(m: re.Match) -> str:
+        key = m.group(1)
+        if key in variables:
+            return variables[key]
+        if strict:
+            raise ValueError(f"未定义的变量: ${{{key}}}")
+        return m.group(0)
+
+    return VAR_RE.sub(_sub, text)
+
+
+def _task_order(task: dict) -> float:
+    return task.get("order", float("inf"))
+
+
+def _compute_cwd(task: dict, ctx: "Context") -> Optional[str]:
+    """优先用 task.cwd，其次回退到 dirname(dest)。动态 #{var} 替换留到运行时。"""
+    raw = task.get("cwd") or os.path.dirname(task.get("dest", "")) or None
+    return ctx.substitute(raw)
+
+
+# ══════════════════════════════════════════════
 # 加载 · 变量替换 · 校验
 # ══════════════════════════════════════════════
 
@@ -118,48 +171,27 @@ def load_manifest(path: str) -> dict:
 def resolve_variables(manifest: dict) -> dict:
     """静态 ${var} 替换。src/dest 严格；note/usage/cwd 宽松（允许 ${HOME} 透传）。"""
     variables = manifest.get("variables", {})
-    if variables:
-        for _ in range(10):
-            changed = False
-            for k, v in variables.items():
-                if not isinstance(v, str) or "${" not in v:
-                    continue
-                new_v = re.sub(
-                    r"\$\{(\w+)\}",
-                    lambda m: variables.get(m.group(1), m.group(0)),
-                    v,
-                )
-                if new_v != v:
-                    variables[k] = new_v
-                    changed = True
-            if not changed:
-                break
+    # 变量间互相引用：反复展开到不动点（上限 10 轮防死循环）
+    for _ in range(10):
+        changed = False
         for k, v in variables.items():
-            if isinstance(v, str) and "${" in v:
-                raise ValueError(f"变量循环引用或未定义: {k} = {v}")
+            if not isinstance(v, str) or "${" not in v:
+                continue
+            new_v = _expand_vars(v, variables, strict=False)
+            if new_v != v:
+                variables[k] = new_v
+                changed = True
+        if not changed:
+            break
+    for k, v in variables.items():
+        if isinstance(v, str) and "${" in v:
+            raise ValueError(f"变量循环引用或未定义: {k} = {v}")
 
-    def replace(text: str, strict: bool) -> str:
-        def _sub(m):
-            key = m.group(1)
-            if key in variables:
-                return variables[key]
-            if strict:
-                raise ValueError(f"未定义的变量: ${{{key}}}")
-            return m.group(0)
-
-        return re.sub(r"\$\{(\w+)\}", _sub, text)
-
+    # 展开到 task 字段
     for task in manifest.get("tasks", []):
-        if "src" in task:
-            task["src"] = replace(task["src"], strict=True)
-        if "dest" in task:
-            task["dest"] = replace(task["dest"], strict=True)
-        if "note" in task:
-            task["note"] = replace(task["note"], strict=False)
-        if "usage" in task:
-            task["usage"] = replace(task["usage"], strict=False)
-        if "cwd" in task:
-            task["cwd"] = replace(task["cwd"], strict=False)
+        for key, strict in TASK_FIELDS:
+            if key in task:
+                task[key] = _expand_vars(task[key], variables, strict=strict)
     return manifest
 
 
@@ -207,13 +239,13 @@ def validate(manifest: dict) -> None:
 
 
 class Context:
-    """全局 #{name} → value。first-write-wins（但 P1 已保证不会冲突）。"""
+    """全局 #{name} → value。first-write-wins（但 validate 已保证不会冲突）。"""
 
     def __init__(self):
         self._d: dict[str, str] = {}
         self._lock = threading.Lock()
 
-    def set_if_absent(self, name: str, value: str):
+    def set_if_absent(self, name: str, value: str) -> None:
         with self._lock:
             if name not in self._d:
                 self._d[name] = value
@@ -221,11 +253,7 @@ class Context:
     def substitute(self, text: Optional[str]) -> Optional[str]:
         if not text or "#{" not in text:
             return text
-
-        def _repl(m):
-            return self._d.get(m.group(1), m.group(0))
-
-        return re.sub(r"#\{(\w+)\}", _repl, text)
+        return DYN_RE.sub(lambda m: self._d.get(m.group(1), m.group(0)), text)
 
     def snapshot(self) -> dict:
         with self._lock:
@@ -239,7 +267,7 @@ class EventBus:
         self._fired: dict[str, tuple[int, "ProcessStream"]] = {}
         self._cond = threading.Condition()
 
-    def fire(self, ref: str, cursor: int, stream: "ProcessStream"):
+    def fire(self, ref: str, cursor: int, stream: "ProcessStream") -> None:
         with self._cond:
             if ref in self._fired:
                 return
@@ -297,7 +325,7 @@ class ProcessStream:
         )
         self._reader.start()
 
-    def _read(self):
+    def _read(self) -> None:
         try:
             assert self.proc.stdout is not None
             for line in self.proc.stdout:
@@ -323,18 +351,16 @@ class ProcessStream:
                 return self.lines[cursor], cursor + 1
             return None, cursor
 
-    def terminate(self):
-        if self.proc.poll() is None:
-            try:
-                os.killpg(self.pgid, signal.SIGTERM)
-                try:
-                    self.proc.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    os.killpg(self.pgid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
+    def terminate(self) -> None:
+        if self.proc.poll() is not None:
+            return
+        _killpg_safe(self.pgid, signal.SIGTERM)
+        try:
+            self.proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            _killpg_safe(self.pgid, signal.SIGKILL)
 
-    def detach(self):
+    def detach(self) -> None:
         self.detached = True
 
 
@@ -358,6 +384,7 @@ class KeywordState:
 
 class Watcher(threading.Thread):
     """一个 task 一个 Watcher，从 stream 的 start_cursor 开始扫 keyword。
+
     - cont_ref 命中：提取组 + 广播 + detach，不 seal verdict，继续扫其他 keyword
     - 非 cont_ref 命中：terminate + seal verdict 结束
     - stream 关闭：按事件历史 + exit code 决定最终 verdict
@@ -384,7 +411,7 @@ class Watcher(threading.Thread):
         self.reason: str = ""
         self.events: list[str] = []  # 所有命中记录
 
-    def run(self):
+    def run(self) -> None:
         try:
             while self.verdict is None:
                 line, new_cursor = self.stream.read_from(self.cursor)
@@ -394,76 +421,73 @@ class Watcher(threading.Thread):
                 self.cursor = new_cursor
                 self._scan(line)
         except Exception as e:
-            log(
-                f"    ✘ [{self.task['name']}] watcher 异常: {e}",
-                style="err",
-            )
+            log(f"    ✘ [{self.task['name']}] watcher 异常: {e}", style="err")
             log(traceback.format_exc().rstrip(), style="dim")
             self._seal("fail", f"watcher 异常: {e}")
 
-    def _scan(self, line: str):
-        name = self.task["name"]
+    def _scan(self, line: str) -> None:
+        """逐 keyword 扫一行；完整命中则分派到 _handle_hit。"""
         for idx, ks in enumerate(self.keywords):
             if ks.consumed:
                 continue
             m = ks.pattern.search(line)
-            if not m:
+            if m is None:
                 continue
             ks.hit_count += 1
             if ks.hit_count < ks.times:
-                # times > 1 时打进度让用户看到累计
                 if ks.times > 1:
                     log(
-                        f"    ⚡ [{name}] keyword#{idx} 命中进度 "
-                        f"{ks.hit_count}/{ks.times}",
+                        f"    ⚡ [{self.task['name']}] keyword#{idx} "
+                        f"命中进度 {ks.hit_count}/{ks.times}",
                         style="dim",
                     )
                 return
             ks.consumed = True
+            if self._handle_hit(idx, ks, m):
+                return  # verdict 已 seal，停止本行扫描
 
-            # 提取命名组 → 全局
-            groups = {k: v for k, v in m.groupdict().items() if v is not None}
-            for gname, gval in groups.items():
-                self.ctx.set_if_absent(gname, gval)
+    def _handle_hit(self, idx: int, ks: KeywordState, m: re.Match) -> bool:
+        """处理一次完整命中。返回 True 表示已 seal verdict 应停止扫描。"""
+        name = self.task["name"]
+        # 提取命名组 → 全局
+        groups = {k: v for k, v in m.groupdict().items() if v is not None}
+        for gname, gval in groups.items():
+            self.ctx.set_if_absent(gname, gval)
 
-            kw_type = ks.spec.get("type", "success")
-            cont_ref = ks.spec.get("cont_ref")
+        kw_type = ks.spec.get("type", "success")
+        cont_ref = ks.spec.get("cont_ref")
 
-            if cont_ref:
-                tag = f"{kw_type}→{cont_ref}"
-                self.events.append(tag)
-                log(
-                    f"    ⚡ [{name}] keyword#{idx} 命中 "
-                    f"→ cont_ref={cont_ref} ({kw_type})",
-                    style="hit",
-                )
-            else:
-                self.events.append(kw_type)
-                log(
-                    f"    ⚡ [{name}] keyword#{idx} 命中 → {kw_type}（终止进程）",
-                    style="hit",
-                )
-            # 展示匹配细节
-            log(f"      matched: {m.group(0)!r}", style="dim")
-            if groups:
-                gs = ", ".join(f"{k}={v}" for k, v in groups.items())
-                log(f"      groups:  {gs}", style="dim")
+        # 记录事件 + 打印命中行
+        tag = f"{kw_type}→{cont_ref}" if cont_ref else kw_type
+        self.events.append(tag)
+        if cont_ref:
+            log(
+                f"    ⚡ [{name}] keyword#{idx} 命中 → cont_ref={cont_ref} ({kw_type})",
+                style="hit",
+            )
+        else:
+            log(
+                f"    ⚡ [{name}] keyword#{idx} 命中 → {kw_type}（终止进程）",
+                style="hit",
+            )
+        log(f"      matched: {m.group(0)!r}", style="dim")
+        if groups:
+            gs = ", ".join(f"{k}={v}" for k, v in groups.items())
+            log(f"      groups:  {gs}", style="dim")
 
-            if cont_ref:
-                self.stream.detach()
-                self.bus.fire(cont_ref, self.cursor, self.stream)
-                # 不 seal，继续扫后续 keyword
-                return
-            else:
-                self.stream.terminate()
-                self._seal(kw_type, f"keyword#{idx}({kw_type}) matched")
-                return
+        # 分派
+        if cont_ref:
+            self.stream.detach()
+            self.bus.fire(cont_ref, self.cursor, self.stream)
+            return False  # 不 seal，继续扫后续 keyword
+        self.stream.terminate()
+        self._seal(kw_type, f"keyword#{idx}({kw_type}) matched")
+        return True
 
-    def _finalize_on_close(self):
+    def _finalize_on_close(self) -> None:
         if self.verdict is not None:
             return
         rc = self.stream.proc.returncode
-        # 按事件历史优先决定
         had_error = any(e.startswith("error") for e in self.events)
         had_success = any(e.startswith("success") for e in self.events)
         if had_error:
@@ -475,7 +499,7 @@ class Watcher(threading.Thread):
         else:
             self._seal("fail", f"exit {rc}, 无 keyword 命中")
 
-    def _seal(self, verdict: str, reason: str):
+    def _seal(self, verdict: str, reason: str) -> None:
         if self.verdict is not None:
             return
         self.verdict = verdict
@@ -488,7 +512,7 @@ class Watcher(threading.Thread):
 # ══════════════════════════════════════════════
 
 
-def state_cleanup(state_path: str):
+def state_cleanup(state_path: str) -> None:
     """Kill 上次运行留下的常驻进程。"""
     if not os.path.exists(state_path):
         return
@@ -501,28 +525,21 @@ def state_cleanup(state_path: str):
     if not entries:
         os.remove(state_path)
         return
+
     log(f"  ℹ 清理上次留下的 {len(entries)} 个常驻进程", style="dim")
     for e in entries:
-        pid = e.get("pid")
-        task = e.get("task", "?")
-        log(f"     ─ pid={pid} task={task}", style="dim")
-    for e in entries:
-        pgid = e.get("pgid") or e.get("pid")
-        try:
-            os.killpg(pgid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
-            pass
+        log(f"     ─ pid={e.get('pid')} task={e.get('task', '?')}", style="dim")
+
+    pgids = [e.get("pgid") or e.get("pid") for e in entries]
+    for pgid in pgids:
+        _killpg_safe(pgid, signal.SIGTERM)
     time.sleep(0.5)
-    for e in entries:
-        pgid = e.get("pgid") or e.get("pid")
-        try:
-            os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
-            pass
+    for pgid in pgids:
+        _killpg_safe(pgid, signal.SIGKILL)
     os.remove(state_path)
 
 
-def state_write(state_path: str, entries: list):
+def state_write(state_path: str, entries: list) -> None:
     if not entries:
         return
     with open(state_path, "w") as f:
@@ -530,17 +547,25 @@ def state_write(state_path: str, entries: list):
 
 
 # ══════════════════════════════════════════════
-# 辅助
+# 复制阶段
 # ══════════════════════════════════════════════
 
 
-def atomic_copy(src: str, dest: str):
+def atomic_copy(src: str, dest: str) -> None:
     tmp = dest + ".tmp"
     shutil.copy2(src, tmp)
     os.replace(tmp, dest)
 
 
-def copy_phase(tasks: list, statuses: dict):
+def _prompt_overwrite(name: str) -> bool:
+    log(f"  ⚠ [{name}] dest 与 src 不一致", style="warn")
+    try:
+        return input("    覆盖? (y/n): ").strip().lower() == "y"
+    except EOFError:
+        return False
+
+
+def copy_phase(tasks: list, statuses: dict) -> None:
     """只处理普通 task (name 不以 # 开头) 的 src → dest。"""
     br()
     log("[Step 3] 复制配置文件", style="section")
@@ -559,212 +584,181 @@ def copy_phase(tasks: list, statuses: dict):
         dest_dir = os.path.dirname(dest)
         if dest_dir:
             os.makedirs(dest_dir, exist_ok=True)
-        if os.path.exists(dest):
-            if filecmp.cmp(src, dest, shallow=False):
-                log(f"  ✔ [{name}] 内容一致，跳过", style="dim")
-                continue
-            log(f"  ⚠ [{name}] dest 与 src 不一致", style="warn")
-            try:
-                answer = input("    覆盖? (y/n): ").strip().lower()
-            except EOFError:
-                answer = "n"
-            if answer != "y":
-                log("    ⏭ 跳过覆盖", style="dim")
-                continue
-            atomic_copy(src, dest)
-            log("    ✔ 已覆盖", style="ok")
-        else:
+        if not os.path.exists(dest):
             atomic_copy(src, dest)
             log(f"  ✔ [{name}] 已复制", style="ok")
+            continue
+        if filecmp.cmp(src, dest, shallow=False):
+            log(f"  ✔ [{name}] 内容一致，跳过", style="dim")
+            continue
+        if not _prompt_overwrite(name):
+            log("    ⏭ 跳过覆盖", style="dim")
+            continue
+        atomic_copy(src, dest)
+        log("    ✔ 已覆盖", style="ok")
 
 
 # ══════════════════════════════════════════════
-# 主调度
+# Scheduler: DAG 调度 + Watcher 线程池
 # ══════════════════════════════════════════════
 
 
-def run_deploy(manifest_path: str):
-    manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
-    state_path = os.path.join(manifest_dir, STATE_FILE)
+class Scheduler:
+    """按 order/depends 推进 task，管理 Watcher 线程池和共享状态。"""
 
-    log("[Step 0] 清理上次遗留进程", style="section")
-    state_cleanup(state_path)
+    def __init__(self, tasks: list, statuses: dict, ctx: Context, bus: EventBus):
+        self.tasks = tasks
+        self.statuses = statuses
+        self.ctx = ctx
+        self.bus = bus
+        self.watchers: list[Watcher] = []
+        self._watcher_lock = threading.Lock()
+        self._verdict_cond = threading.Condition()
+        # 初始 pending：有 usage 或 #task 的，且没在 copy 阶段就 fail 的
+        runnable = [
+            t
+            for t in tasks
+            if (t.get("usage") or t["name"].startswith("#"))
+            and statuses.get(t["name"], ("", ""))[0] != "fail"
+        ]
+        runnable.sort(key=_task_order)
+        self._pending: list[dict] = runnable
 
-    br()
-    log(f"[Step 1] 加载 {manifest_path}", style="section")
-    manifest = load_manifest(manifest_path)
-    tasks = manifest.get("tasks", [])
-    log(f"  ✔ 共 {len(tasks)} 个任务", style="ok")
+    # ──────────── 回调 & 基础操作 ────────────
 
-    br()
-    log("[Step 2] 解析变量 & 校验", style="section")
-    manifest = resolve_variables(manifest)
-    for k, v in manifest.get("variables", {}).items():
-        log(f"  ${{{k}}} = {v}", style="dim")
-    validate(manifest)
-    log("  ✔ 校验通过（命名组无冲突、cont_ref 引用完整）", style="ok")
+    def _on_verdict(self, w: Watcher) -> None:
+        self.statuses[w.task["name"]] = (w.verdict or "fail", w.reason)
+        with self._verdict_cond:
+            self._verdict_cond.notify_all()
 
-    statuses: dict[str, tuple[str, str]] = {}  # name -> (status, reason)
-    copy_phase(tasks, statuses)
-
-    br()
-    log("[Step 4] 调度执行", style="section")
-    ctx = Context()
-    bus = EventBus()
-    watchers: list[Watcher] = []
-    watcher_lock = threading.Lock()
-    verdict_cond = threading.Condition()
-
-    def on_verdict(w: Watcher):
-        statuses[w.task["name"]] = (w.verdict or "fail", w.reason)
-        with verdict_cond:
-            verdict_cond.notify_all()
-
-    runnable = [
-        t
-        for t in tasks
-        if (t.get("usage") or t["name"].startswith("#"))
-        and statuses.get(t["name"], ("", ""))[0] != "fail"
-    ]
-    runnable.sort(key=lambda t: t.get("order", float("inf")))
-    pending = list(runnable)
-    started: set[str] = set()
-
-    def start_normal(task: dict):
-        usage = ctx.substitute(task.get("usage", "")) or ""
-        cwd_raw = task.get("cwd") or os.path.dirname(task.get("dest", "")) or None
-        cwd = ctx.substitute(cwd_raw)
+    def _header(self, task: dict) -> None:
         note = task.get("note", "")
         order = task.get("order", "-")
         br()
         log(f"  ▶ [{order}] {note or task['name']}")
+
+    def _launch(self, task: dict, stream: ProcessStream, cursor: int) -> None:
+        w = Watcher(task, stream, cursor, self.ctx, self.bus, self._on_verdict)
+        with self._watcher_lock:
+            self.watchers.append(w)
+        w.start()
+
+    # ──────────── 两种启动路径 ────────────
+
+    def _start_normal(self, task: dict) -> None:
+        usage = self.ctx.substitute(task.get("usage", "")) or ""
+        cwd = _compute_cwd(task, self.ctx)
+        self._header(task)
         log(f"    ▸ 启动: {usage}", style="dim")
         if cwd:
             log(f"    ▸ cwd:  {cwd}", style="dim")
         try:
             stream = ProcessStream(usage, cwd, task["name"])
         except Exception as e:
-            statuses[task["name"]] = ("fail", f"启动失败: {e}")
+            self.statuses[task["name"]] = ("fail", f"启动失败: {e}")
             log(f"    ✘ 启动失败: {e}", style="err")
             return
-        w = Watcher(task, stream, 0, ctx, bus, on_verdict)
-        with watcher_lock:
-            watchers.append(w)
-        w.start()
+        self._launch(task, stream, 0)
 
-    def start_hash(task: dict, ref: str):
-        cursor, stream = bus.wait(ref)  # 已经 fired，立即返回
-        note = task.get("note", "")
-        order = task.get("order", "-")
-        br()
-        log(f"  ▶ [{order}] {note or task['name']}")
+    def _start_hash(self, task: dict, ref: str) -> None:
+        cursor, stream = self.bus.wait(ref)  # 已 fired，立即返回
+        self._header(task)
         log(f"    ▸ 挂载到 pid={stream.pid} (cursor={cursor})", style="dim")
-        w = Watcher(task, stream, cursor, ctx, bus, on_verdict)
-        with watcher_lock:
-            watchers.append(w)
-        w.start()
+        self._launch(task, stream, cursor)
 
-    def try_start() -> bool:
-        """返回本轮是否有新任务被启动。"""
-        nonlocal pending
+    # ──────────── 调度循环 ────────────
+
+    def _try_start(self) -> None:
         still: list[dict] = []
-        progressed = False
-        for task in pending:
+        for task in self._pending:
             name = task["name"]
-            if name in started:
-                continue
             if name.startswith("#"):
                 ref = name[1:]
-                if bus.fired(ref):
-                    started.add(name)
-                    start_hash(task, ref)
-                    progressed = True
+                if self.bus.fired(ref):
+                    self._start_hash(task, ref)
                 else:
                     still.append(task)
                 continue
             dep = task.get("depends")
-            if dep and not bus.fired(dep):
+            if dep and not self.bus.fired(dep):
                 still.append(task)
                 continue
-            started.add(name)
-            start_normal(task)
-            progressed = True
-        pending = still
-        return progressed
+            self._start_normal(task)
+        self._pending = still
 
-    try:
-        while True:
-            try_start()
-            with watcher_lock:
-                alive = [w for w in watchers if w.verdict is None]
-            if not pending and not alive:
-                break
-            if pending and not alive:
-                # 没有活的 task 可以再触发 cont_ref，剩下的永远等不到
-                for t in pending:
-                    statuses[t["name"]] = ("skip", "依赖的 cont_ref 未命中")
-                pending = []
-                break
-            with verdict_cond:
-                verdict_cond.wait(timeout=0.3)
-    except KeyboardInterrupt:
-        br()
-        log("⏹ Ctrl+C 中断，正在终止非常驻进程", style="warn")
-        with watcher_lock:
-            for w in watchers:
+    def _alive_watchers(self) -> list[Watcher]:
+        with self._watcher_lock:
+            return [w for w in self.watchers if w.verdict is None]
+
+    def _mark_unreachable(self) -> None:
+        for t in self._pending:
+            self.statuses[t["name"]] = ("skip", "依赖的 cont_ref 未命中")
+        self._pending = []
+
+    def _terminate_live_streams(self) -> None:
+        with self._watcher_lock:
+            for w in self.watchers:
                 if not w.stream.detached:
                     w.stream.terminate()
 
-    # 写 state file（脱离的进程留给下次清理）
-    with watcher_lock:
-        detached_entries = [
-            {
-                "pid": w.stream.pid,
-                "pgid": w.stream.pgid,
-                "cmd": w.stream.cmd,
-                "task": w.task["name"],
-            }
-            for w in watchers
-            if w.stream.detached and w.stream.proc.poll() is None
-        ]
-    state_write(state_path, detached_entries)
-    if detached_entries:
-        br()
-        log(
-            f"  ℹ {len(detached_entries)} 个常驻进程记录到 {STATE_FILE}",
-            style="dim",
-        )
+    def run(self) -> None:
+        try:
+            while True:
+                self._try_start()
+                alive = self._alive_watchers()
+                if not self._pending and not alive:
+                    break
+                if self._pending and not alive:
+                    # 没有活的 task 能再触发 cont_ref，剩下的永远等不到
+                    self._mark_unreachable()
+                    break
+                with self._verdict_cond:
+                    self._verdict_cond.wait(timeout=0.3)
+        except KeyboardInterrupt:
+            br()
+            log("⏹ Ctrl+C 中断，正在终止非常驻进程", style="warn")
+            self._terminate_live_streams()
 
-    # README 生成（可选）
-    readme_config = manifest.get("readme")
-    if readme_config:
-        br()
-        log("[Step 5] 生成使用指导文档", style="section")
-        _render_readme(readme_config, tasks)
+    def detached_entries(self) -> list[dict]:
+        with self._watcher_lock:
+            return [
+                {
+                    "pid": w.stream.pid,
+                    "pgid": w.stream.pgid,
+                    "cmd": w.stream.cmd,
+                    "task": w.task["name"],
+                }
+                for w in self.watchers
+                if w.stream.detached and w.stream.proc.poll() is None
+            ]
 
-    # 总结
+
+# ══════════════════════════════════════════════
+# 总结 · README · main
+# ══════════════════════════════════════════════
+
+# summary section 的三类分组：(icon, 中文标签, log 样式, statuses 里的状态值)
+_SUMMARY_GROUPS: list[tuple[str, str, str, str]] = [
+    ("✅", "成功", "ok", "success"),
+    ("❌", "失败", "err", "fail"),
+    ("⏭", "跳过", "warn", "skip"),
+]
+
+
+def _print_summary(statuses: dict, watchers: list, ctx: Context) -> None:
     br()
     log("[Step 6] 执行总结", style="section")
     log("═" * 60, style="dim")
-    succ = [n for n, (s, _) in statuses.items() if s == "success"]
-    fail = [n for n, (s, _) in statuses.items() if s == "fail"]
-    skip = [n for n, (s, _) in statuses.items() if s == "skip"]
-    if succ:
-        log(f"  ✅ 成功 ({len(succ)}):", style="ok")
-        for n in succ:
-            log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
-    if fail:
-        log(f"  ❌ 失败 ({len(fail)}):", style="err")
-        for n in fail:
-            log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
-    if skip:
-        log(f"  ⏭ 跳过 ({len(skip)}):", style="warn")
-        for n in skip:
+
+    for icon, label, style, key in _SUMMARY_GROUPS:
+        names = [n for n, (s, _) in statuses.items() if s == key]
+        if not names:
+            continue
+        log(f"  {icon} {label} ({len(names)}):", style=style)
+        for n in names:
             log(f"     ─ {n}  ({statuses[n][1]})", style="dim")
 
-    # Watcher 内部事件列表（供调试）
-    with watcher_lock:
-        detailed = [w for w in watchers if w.events]
+    detailed = [w for w in watchers if w.events]
     if detailed:
         br()
         log("  📜 Watcher 命中事件:", style="dim")
@@ -779,11 +773,8 @@ def run_deploy(manifest_path: str):
             log(f"     #{{{k}}} = {v}", style="dim")
     log("═" * 60, style="dim")
 
-    if fail:
-        sys.exit(1)
 
-
-def _render_readme(readme_config: dict, tasks: list):
+def _render_readme(readme_config: dict, tasks: list) -> None:
     output_path = readme_config.get("output", "README.md")
     title = readme_config.get("title", "使用指导")
     content_lines = readme_config.get("content", [])
@@ -807,16 +798,59 @@ def _render_readme(readme_config: dict, tasks: list):
     log(f"  ✔ 已生成 {output_path}", style="ok")
 
 
-# ══════════════════════════════════════════════
-# main
-# ══════════════════════════════════════════════
+def run_deploy(manifest_path: str) -> None:
+    manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
+    state_path = os.path.join(manifest_dir, STATE_FILE)
+
+    log("[Step 0] 清理上次遗留进程", style="section")
+    state_cleanup(state_path)
+
+    br()
+    log(f"[Step 1] 加载 {manifest_path}", style="section")
+    manifest = load_manifest(manifest_path)
+    tasks = manifest.get("tasks", [])
+    log(f"  ✔ 共 {len(tasks)} 个任务", style="ok")
+
+    br()
+    log("[Step 2] 解析变量 & 校验", style="section")
+    manifest = resolve_variables(manifest)
+    for k, v in manifest.get("variables", {}).items():
+        log(f"  ${{{k}}} = {v}", style="dim")
+    validate(manifest)
+    log("  ✔ 校验通过（命名组无冲突、cont_ref 引用完整）", style="ok")
+
+    statuses: dict[str, tuple[str, str]] = {}
+    copy_phase(tasks, statuses)
+
+    br()
+    log("[Step 4] 调度执行", style="section")
+    ctx = Context()
+    bus = EventBus()
+    scheduler = Scheduler(tasks, statuses, ctx, bus)
+    scheduler.run()
+
+    detached = scheduler.detached_entries()
+    state_write(state_path, detached)
+    if detached:
+        br()
+        log(f"  ℹ {len(detached)} 个常驻进程记录到 {STATE_FILE}", style="dim")
+
+    readme_config = manifest.get("readme")
+    if readme_config:
+        br()
+        log("[Step 5] 生成使用指导文档", style="section")
+        _render_readme(readme_config, tasks)
+
+    _print_summary(statuses, scheduler.watchers, ctx)
+    if any(s == "fail" for s, _ in statuses.values()):
+        sys.exit(1)
 
 
-def print_help():
+def print_help() -> None:
     print(__doc__)
 
 
-def main():
+def main() -> None:
     args = sys.argv[1:]
     if args and args[0] in ("-h", "--help"):
         print_help()
