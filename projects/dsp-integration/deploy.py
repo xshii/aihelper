@@ -19,6 +19,19 @@
 
 from __future__ import annotations
 
+import os
+import sys
+
+# ── 究极编码方案：强制 Python UTF-8 模式 ──────────────────
+# PYTHONUTF8=1 让 open()/print()/Popen(text=True)/所有 IO 全部默认 UTF-8，
+# 但该变量必须在解释器启动时生效（运行时 os.environ 设了没用）。
+# 所以：检测到未启用时，设好变量 → os.execv 重新启动自身（同进程替换）。
+# 第二次进来时 PYTHONUTF8=1 已生效，跳过此块正常执行。
+if os.environ.get("PYTHONUTF8") != "1":
+    os.environ["PYTHONUTF8"] = "1"
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+# ──────────────────────────────────────────────────────────
+
 import filecmp
 import json
 import os
