@@ -17,18 +17,22 @@ def convert_file(src: str, dst: str, align: int = 8):
     if os.path.exists(dst):
         os.remove(os.path.realpath(dst))
 
-    with open(src, 'rb') as fin, \
-         os.fdopen(os.open(dst, os.O_RDWR | os.O_CREAT, 0o644), 'wb') as fout:
+    with (
+        open(src, "rb") as fin,
+        os.fdopen(os.open(dst, os.O_RDWR | os.O_CREAT, 0o644), "wb") as fout,
+    ):
         data = fin.read()
         file_len = len(data)
 
         if file_len % align != 0:
             pad_len = align - file_len % align
-            print(f"    ⚠ 文件大小 {file_len} 字节，非{align}字节对齐，补充 {pad_len} 字节")
-            data += b'\x00' * pad_len
+            print(
+                f"    ⚠ 文件大小 {file_len} 字节，非{align}字节对齐，补充 {pad_len} 字节"
+            )
+            data += b"\x00" * pad_len
 
         for i in range(0, len(data), 4):
-            fout.write(data[i:i+4][::-1])
+            fout.write(data[i : i + 4][::-1])
 
 
 def convert_dir(src_dir: str, dst_dir: str, excludes: set, align: int = 8):
@@ -52,7 +56,9 @@ def convert_dir(src_dir: str, dst_dir: str, excludes: set, align: int = 8):
 def main():
     args = sys.argv[1:]
     if len(args) < 2:
-        print("用法: python convert.py <input> <output> [--align 4|8] [--exclude .log .tmp ...]")
+        print(
+            "用法: python convert.py <input> <output> [--align 4|8] [--exclude .log .tmp ...]"
+        )
         sys.exit(1)
 
     src, dst = args[0], args[1]

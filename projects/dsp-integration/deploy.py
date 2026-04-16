@@ -38,6 +38,7 @@ STATE_FILE = ".deploy.state"
 # 加载 · 变量替换 · 校验
 # ══════════════════════════════════════════════
 
+
 def load_manifest(path: str) -> dict:
     if not os.path.exists(path):
         if os.path.exists(EXAMPLE_FILE):
@@ -84,6 +85,7 @@ def resolve_variables(manifest: dict) -> dict:
             if strict:
                 raise KeyError(f"未定义的变量: ${{{key}}}")
             return m.group(0)
+
         return re.sub(r"\$\{(\w+)\}", _sub, text)
 
     for task in manifest.get("tasks", []):
@@ -102,9 +104,9 @@ def resolve_variables(manifest: dict) -> dict:
 
 def validate(manifest: dict) -> None:
     """加载期校验：命名组冲突、cont_ref 引用完整。"""
-    seen_groups: dict[str, tuple[str, int]] = {}   # group_name -> (task, kw_index)
-    declared_refs: set[str] = set()                # 所有被 cont_ref 声明的值
-    referenced_refs: set[str] = set()              # 被 depends / #task 引用的
+    seen_groups: dict[str, tuple[str, int]] = {}  # group_name -> (task, kw_index)
+    declared_refs: set[str] = set()  # 所有被 cont_ref 声明的值
+    referenced_refs: set[str] = set()  # 被 depends / #task 引用的
 
     for task in manifest.get("tasks", []):
         tname = task["name"]
@@ -142,6 +144,7 @@ def validate(manifest: dict) -> None:
 # Context · EventBus
 # ══════════════════════════════════════════════
 
+
 class Context:
     """全局 #{name} → value。first-write-wins（但 P1 已保证不会冲突）。"""
 
@@ -157,8 +160,10 @@ class Context:
     def substitute(self, text: Optional[str]) -> Optional[str]:
         if not text or "#{" not in text:
             return text
+
         def _repl(m):
             return self._d.get(m.group(1), m.group(0))
+
         return re.sub(r"#\{(\w+)\}", _repl, text)
 
     def snapshot(self) -> dict:
@@ -195,6 +200,7 @@ class EventBus:
 # ProcessStream: 包装 subprocess + append-only 行缓冲 + 共享 reader
 # ══════════════════════════════════════════════
 
+
 class ProcessStream:
     """一个 subprocess 一个 stream，多个 Watcher 各自用 cursor 从 lines 数组读。
     reader 线程负责把 stdout 拉进数组并回显到终端。"""
@@ -207,9 +213,13 @@ class ProcessStream:
         self.cmd = cmd
         self.task_name = task_name
         self.proc = subprocess.Popen(
-            real_cmd, shell=True, cwd=cwd or None,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
+            real_cmd,
+            shell=True,
+            cwd=cwd or None,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
             start_new_session=True,  # 独立进程组，方便 killpg
         )
         self.pid = self.proc.pid
@@ -271,6 +281,7 @@ class ProcessStream:
 # Watcher: 扫 buffer 匹配 keyword
 # ══════════════════════════════════════════════
 
+
 @dataclass
 class KeywordState:
     spec: dict
@@ -308,9 +319,9 @@ class Watcher(threading.Thread):
         self.bus = bus
         self.on_verdict = on_verdict
         self.keywords = [KeywordState(k) for k in task.get("keyword", [])]
-        self.verdict: Optional[str] = None   # "success" | "fail"
+        self.verdict: Optional[str] = None  # "success" | "fail"
         self.reason: str = ""
-        self.events: list[str] = []           # 所有命中记录
+        self.events: list[str] = []  # 所有命中记录
 
     def run(self):
         try:
@@ -367,11 +378,11 @@ class Watcher(threading.Thread):
         had_error = any(e.startswith("error") for e in self.events)
         had_success = any(e.startswith("success") for e in self.events)
         if had_error:
-            self._seal("fail", f"流关闭, 曾命中 error 事件")
+            self._seal("fail", "流关闭, 曾命中 error 事件")
         elif had_success:
-            self._seal("success", f"流关闭, 曾命中 success 事件")
+            self._seal("success", "流关闭, 曾命中 success 事件")
         elif rc == 0:
-            self._seal("success", f"exit 0, 无 keyword 命中")
+            self._seal("success", "exit 0, 无 keyword 命中")
         else:
             self._seal("fail", f"exit {rc}, 无 keyword 命中")
 
@@ -386,6 +397,7 @@ class Watcher(threading.Thread):
 # ══════════════════════════════════════════════
 # State file: 跨运行的 PID 追踪
 # ══════════════════════════════════════════════
+
 
 def state_cleanup(state_path: str):
     """Kill 上次运行留下的常驻进程。"""
@@ -428,6 +440,7 @@ def state_write(state_path: str, entries: list):
 # 辅助
 # ══════════════════════════════════════════════
 
+
 def atomic_copy(src: str, dest: str):
     tmp = dest + ".tmp"
     shutil.copy2(src, tmp)
@@ -436,7 +449,7 @@ def atomic_copy(src: str, dest: str):
 
 def copy_phase(tasks: list, statuses: dict):
     """只处理普通 task (name 不以 # 开头) 的 src → dest。"""
-    print(f"\n[Step 3] 复制配置文件")
+    print("\n[Step 3] 复制配置文件")
     for task in tasks:
         name = task["name"]
         if name.startswith("#"):
@@ -457,14 +470,18 @@ def copy_phase(tasks: list, statuses: dict):
                 print(f"  ✔ [{name}] 内容一致，跳过")
                 continue
             try:
-                answer = input(f"  ⚠ [{name}] dest 与 src 不一致，覆盖? (y/n): ").strip().lower()
+                answer = (
+                    input(f"  ⚠ [{name}] dest 与 src 不一致，覆盖? (y/n): ")
+                    .strip()
+                    .lower()
+                )
             except EOFError:
                 answer = "n"
             if answer != "y":
-                print(f"    ⏭ 跳过覆盖")
+                print("    ⏭ 跳过覆盖")
                 continue
             atomic_copy(src, dest)
-            print(f"    ✔ 已覆盖")
+            print("    ✔ 已覆盖")
         else:
             atomic_copy(src, dest)
             print(f"  ✔ [{name}] 已复制")
@@ -474,11 +491,12 @@ def copy_phase(tasks: list, statuses: dict):
 # 主调度
 # ══════════════════════════════════════════════
 
+
 def run_deploy(manifest_path: str):
     manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
     state_path = os.path.join(manifest_dir, STATE_FILE)
 
-    print(f"[Step 0] 清理上次遗留进程")
+    print("[Step 0] 清理上次遗留进程")
     state_cleanup(state_path)
 
     print(f"\n[Step 1] 加载 {manifest_path}")
@@ -496,7 +514,7 @@ def run_deploy(manifest_path: str):
     statuses: dict[str, tuple[str, str]] = {}  # name -> (status, reason)
     copy_phase(tasks, statuses)
 
-    print(f"\n[Step 4] 调度执行")
+    print("\n[Step 4] 调度执行")
     ctx = Context()
     bus = EventBus()
     watchers: list[Watcher] = []
@@ -509,7 +527,8 @@ def run_deploy(manifest_path: str):
             verdict_cond.notify_all()
 
     runnable = [
-        t for t in tasks
+        t
+        for t in tasks
         if (t.get("usage") or t["name"].startswith("#"))
         and statuses.get(t["name"], ("", ""))[0] != "fail"
     ]
@@ -538,7 +557,7 @@ def run_deploy(manifest_path: str):
         w.start()
 
     def start_hash(task: dict, ref: str):
-        cursor, stream = bus.wait(ref)   # 已经 fired，立即返回
+        cursor, stream = bus.wait(ref)  # 已经 fired，立即返回
         note = task.get("note", "")
         order = task.get("order", "-")
         print(f"\n  ▶ [{order}] {note or task['name']}")
@@ -617,11 +636,11 @@ def run_deploy(manifest_path: str):
     # README 生成（可选）
     readme_config = manifest.get("readme")
     if readme_config:
-        print(f"\n[Step 5] 生成使用指导文档")
+        print("\n[Step 5] 生成使用指导文档")
         _render_readme(readme_config, tasks)
 
     # 总结
-    print(f"\n[Step 6] 执行总结")
+    print("\n[Step 6] 执行总结")
     print("═" * 64)
     succ = [n for n, (s, _) in statuses.items() if s == "success"]
     fail = [n for n, (s, _) in statuses.items() if s == "fail"]
@@ -643,13 +662,13 @@ def run_deploy(manifest_path: str):
     with watcher_lock:
         detailed = [w for w in watchers if w.events]
     if detailed:
-        print(f"\n  📜 Watcher 命中事件:")
+        print("\n  📜 Watcher 命中事件:")
         for w in detailed:
             print(f"     ─ {w.task['name']}: {', '.join(w.events)}")
 
     groups = ctx.snapshot()
     if groups:
-        print(f"\n  📦 提取的命名组:")
+        print("\n  📦 提取的命名组:")
         for k, v in groups.items():
             print(f"     #{{{k}}} = {v}")
     print("═" * 64)
@@ -674,9 +693,7 @@ def _render_readme(readme_config: dict, tasks: list):
         usage = task.get("usage", "")
         src = task.get("src", "")
         dest = task.get("dest", "")
-        task_lines.append(
-            f"| {task['name']} | `{src}` | `{dest}` | `{usage}` |"
-        )
+        task_lines.append(f"| {task['name']} | `{src}` | `{dest}` | `{usage}` |")
 
     lines = [f"# {title}", "", *content_lines, *task_lines, ""]
     with open(output_path, "w", encoding="utf-8") as f:
@@ -687,6 +704,7 @@ def _render_readme(readme_config: dict, tasks: list):
 # ══════════════════════════════════════════════
 # main
 # ══════════════════════════════════════════════
+
 
 def print_help():
     print(__doc__)
