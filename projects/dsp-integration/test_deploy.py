@@ -819,18 +819,67 @@ def t20(wd):
         },
     )
     rc, out = run_deploy(wd)
-    assert_in("▶ [1] first", out)
-    assert_in("▶ [1.5] inserted", out)
-    assert_in("▶ [2] second", out)
+    assert_in("▶ [order=1] first", out)
+    assert_in("▶ [order=1.5] inserted", out)
+    assert_in("▶ [order=2] second", out)
     # 三个 header 的位置应当按 order 递增
-    p_first = out.find("▶ [1] first")
-    p_inserted = out.find("▶ [1.5] inserted")
-    p_second = out.find("▶ [2] second")
+    p_first = out.find("▶ [order=1] first")
+    p_inserted = out.find("▶ [order=1.5] inserted")
+    p_second = out.find("▶ [order=2] second")
     if not (p_first < p_inserted < p_second):
         raise AssertionError(
             f"order 排序错乱: first={p_first} inserted={p_inserted} second={p_second}"
         )
     return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T22 · order 不同的独立 task 按 wave 串行（1 跑完再跑 2）
+# ════════════════════════════════════════════════════════════
+@case("T22 · 不同 order 的独立 task 按 wave 串行")
+def t22(wd):
+    write_exec(
+        wd / "a.sh",
+        """#!/bin/bash
+sleep 0.3
+date +%s.%N > a.end
+echo "a done"
+""",
+    )
+    write_exec(
+        wd / "b.sh",
+        """#!/bin/bash
+date +%s.%N > b.start
+echo "b done"
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "a",
+                    "order": 1,
+                    "usage": f"bash {wd}/a.sh",
+                    "cwd": str(wd),
+                },
+                {
+                    "name": "b",
+                    "order": 2,
+                    "usage": f"bash {wd}/b.sh",
+                    "cwd": str(wd),
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    assert_in("a done", out)
+    assert_in("b done", out)
+    a_end = float((wd / "a.end").read_text())
+    b_start = float((wd / "b.start").read_text())
+    if b_start < a_end:
+        raise AssertionError(f"b 在 a 结束前就启动了: a.end={a_end} b.start={b_start}")
+    return f"rc={rc}, a→b 串行间隔 {(b_start - a_end) * 1000:.0f}ms"
 
 
 # ════════════════════════════════════════════════════════════

@@ -668,7 +668,7 @@ class Scheduler:
         note = task.get("note", "")
         order = task.get("order", "-")
         br()
-        log(f"  ▶ [{order}] {note or task['name']}")
+        log(f"  ▶ [order={order}] {note or task['name']}")
 
     def _launch(self, task: dict, stream: ProcessStream, cursor: int) -> None:
         w = Watcher(task, stream, cursor, self.ctx, self.bus, self._on_verdict)
@@ -701,10 +701,36 @@ class Scheduler:
 
     # ──────────── 调度循环 ────────────
 
+    def _current_wave(self) -> float:
+        """当前 wave = 所有活跃的独立 task（pending + running）里最小的 order。
+
+        依赖型 task（有 depends 或 # 前缀）不参与 wave 计算——它们靠 cont_ref 触发。
+        独立 task 只在自己的 order <= current_wave 时才能启动，
+        保证 order=1 全部跑完后 order=2 才开始（同 order 并行）。
+        """
+        min_o = float("inf")
+        # 还没启动的独立 task
+        for t in self._pending:
+            if t["name"].startswith("#") or t.get("depends"):
+                continue
+            min_o = min(min_o, t.get("order", float("inf")))
+        # 已启动但还没出结果的独立 task
+        with self._watcher_lock:
+            for w in self.watchers:
+                if w.verdict is not None:
+                    continue
+                t = w.task
+                if t["name"].startswith("#") or t.get("depends"):
+                    continue
+                min_o = min(min_o, t.get("order", float("inf")))
+        return min_o
+
     def _try_start(self) -> None:
+        wave = self._current_wave()
         still: list[dict] = []
         for task in self._pending:
             name = task["name"]
+            # #task：靠 cont_ref 触发，不受 wave 约束
             if name.startswith("#"):
                 ref = name[1:]
                 if self.bus.fired(ref):
@@ -712,8 +738,17 @@ class Scheduler:
                 else:
                     still.append(task)
                 continue
+            # depends task：靠 cont_ref 触发，不受 wave 约束
             dep = task.get("depends")
-            if dep and not self.bus.fired(dep):
+            if dep:
+                if self.bus.fired(dep):
+                    self._start_normal(task)
+                else:
+                    still.append(task)
+                continue
+            # 独立 task：只在当前 wave 里才能启动
+            o = task.get("order", float("inf"))
+            if o > wave:
                 still.append(task)
                 continue
             self._start_normal(task)
