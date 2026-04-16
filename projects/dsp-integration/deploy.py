@@ -340,14 +340,14 @@ class ProcessStream:
     reader 线程负责把 stdout 拉进数组并回显到终端。"""
 
     def __init__(self, cmd: str, cwd: Optional[str], task_name: str):
-        # 有 stdbuf 就强制行缓冲，macOS 的 gstdbuf 也认
+        # shell 命令头部注入 UTF-8 环境变量，确保 && / | 后面的 python 也继承
+        utf8 = "export PYTHONUTF8=1; export PYTHONIOENCODING=utf-8; "
         stdbuf_bin = shutil.which("stdbuf") or shutil.which("gstdbuf")
         real_cmd = f"{stdbuf_bin} -oL -eL {cmd}" if stdbuf_bin else cmd
+        real_cmd = utf8 + real_cmd
 
         self.cmd = cmd
         self.task_name = task_name
-        # Popen 默认继承 os.environ（已含 PYTHONUTF8 + PYTHONIOENCODING）
-        # 不用 text=True：_read() 读原始字节自己 decode，不依赖子进程编码
         self.proc = subprocess.Popen(
             real_cmd,
             shell=True,
