@@ -99,11 +99,17 @@ def _ts() -> str:
 
 
 def log(msg: str, style: str = "") -> None:
-    """带时间戳前缀的线程安全输出。终端带颜色，deploy.log 纯文本。"""
+    """带时间戳前缀的线程安全输出。终端带颜色，deploy.log 纯文本。
+
+    直接写 sys.stdout.buffer（原始字节流），手动 .encode("utf-8")，
+    彻底绕过 Python TextIOWrapper 的编码层，不管 locale 是什么。
+    """
     color = _STYLE.get(style, "")
     ts = _ts()
     with _PRINT_LOCK:
-        print(f"{DIM}{ts}{RESET} {color}{msg}{RESET}", flush=True)
+        line = f"{DIM}{ts}{RESET} {color}{msg}{RESET}\n"
+        sys.stdout.buffer.write(line.encode("utf-8", errors="replace"))
+        sys.stdout.buffer.flush()
         if _LOG_FILE:
             _LOG_FILE.write(f"{ts} {msg}\n")
             _LOG_FILE.flush()
@@ -112,7 +118,8 @@ def log(msg: str, style: str = "") -> None:
 def br() -> None:
     """空行分隔，无时间戳。"""
     with _PRINT_LOCK:
-        print(flush=True)
+        sys.stdout.buffer.write(b"\n")
+        sys.stdout.buffer.flush()
         if _LOG_FILE:
             _LOG_FILE.write("\n")
 
