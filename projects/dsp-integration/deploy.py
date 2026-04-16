@@ -206,9 +206,9 @@ def resolve_variables(manifest: dict) -> dict:
 
 
 def validate(manifest: dict) -> None:
-    """加载期校验：命名组冲突、cont_ref 引用完整。"""
+    """加载期校验：命名组冲突、cont_ref 重名、cont_ref 引用完整。"""
     seen_groups: dict[str, tuple[str, int]] = {}  # group_name -> (task, kw_index)
-    declared_refs: set[str] = set()  # 所有被 cont_ref 声明的值
+    declared_refs: dict[str, tuple[str, int]] = {}  # cont_ref -> (task, kw_index)
     referenced_refs: set[str] = set()  # 被 depends / #task 引用的
 
     for task in manifest.get("tasks", []):
@@ -228,8 +228,15 @@ def validate(manifest: dict) -> None:
                         f"[{prev_t}].keyword[{prev_i}] 和 [{tname}].keyword[{i}]"
                     )
                 seen_groups[gname] = (tname, i)
-            if kw.get("cont_ref"):
-                declared_refs.add(kw["cont_ref"])
+            ref = kw.get("cont_ref")
+            if ref:
+                if ref in declared_refs:
+                    prev_t, prev_i = declared_refs[ref]
+                    raise ValueError(
+                        f"cont_ref 重名: '{ref}' 同时声明于 "
+                        f"[{prev_t}].keyword[{prev_i}] 和 [{tname}].keyword[{i}]"
+                    )
+                declared_refs[ref] = (tname, i)
             kw_type = kw.get("type", "success")
             if kw_type not in ("error", "success"):
                 raise ValueError(f"[{tname}] keyword[{i}] type 只能是 error/success")
@@ -238,7 +245,7 @@ def validate(manifest: dict) -> None:
         if task.get("depends"):
             referenced_refs.add(task["depends"])
 
-    missing = referenced_refs - declared_refs
+    missing = referenced_refs - declared_refs.keys()
     if missing:
         raise ValueError(f"引用的 cont_ref 未定义: {', '.join(sorted(missing))}")
 

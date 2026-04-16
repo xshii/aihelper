@@ -772,6 +772,72 @@ echo "b done"
 
 
 # ════════════════════════════════════════════════════════════
+# T19 · cont_ref 重名应该加载期报错
+# ════════════════════════════════════════════════════════════
+@case("T19 · cont_ref 重名加载期报错")
+def t19(wd):
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "a",
+                    "order": 1,
+                    "usage": "echo a",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "ready", "word": r"a"}
+                    ],
+                },
+                {
+                    "name": "b",
+                    "order": 1,
+                    "usage": "echo b",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "ready", "word": r"b"}
+                    ],
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd)
+    if rc == 0:
+        raise AssertionError(f"期望非零 exit, 实际 0\n{out}")
+    assert_in("cont_ref", out)
+    assert_in("ready", out)
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T20 · order 支持小数（方便中间插入新节点不用整体挪号）
+# ════════════════════════════════════════════════════════════
+@case("T20 · order 支持小数并正确排序")
+def t20(wd):
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {"name": "first", "order": 1, "usage": "echo first"},
+                {"name": "inserted", "order": 1.5, "usage": "echo inserted"},
+                {"name": "second", "order": 2, "usage": "echo second"},
+            ]
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("▶ [1] first", out)
+    assert_in("▶ [1.5] inserted", out)
+    assert_in("▶ [2] second", out)
+    # 三个 header 的位置应当按 order 递增
+    p_first = out.find("▶ [1] first")
+    p_inserted = out.find("▶ [1.5] inserted")
+    p_second = out.find("▶ [2] second")
+    if not (p_first < p_inserted < p_second):
+        raise AssertionError(
+            f"order 排序错乱: first={p_first} inserted={p_inserted} second={p_second}"
+        )
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 
