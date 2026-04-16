@@ -47,23 +47,6 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
-# 强制 stdout/stderr UTF-8，避免非 UTF-8 locale（如 C/POSIX）下中文乱码
-import io as _io
-
-for _name in ("stdout", "stderr"):
-    _stream = getattr(sys, _name)
-    if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8", errors="replace")
-    elif hasattr(_stream, "buffer"):
-        # 某些嵌入式 Python 没有 reconfigure，用 TextIOWrapper 兜底
-        setattr(
-            sys,
-            _name,
-            _io.TextIOWrapper(
-                _stream.buffer, encoding="utf-8", errors="replace", line_buffering=True
-            ),
-        )
-
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
 
@@ -113,11 +96,7 @@ def _ts() -> str:
 
 
 def log(msg: str, style: str = "") -> None:
-    """带时间戳前缀的线程安全输出。终端带颜色，deploy.log 纯文本。
-
-    直接写 sys.stdout.buffer（原始字节流），手动 .encode("utf-8")，
-    彻底绕过 Python TextIOWrapper 的编码层，不管 locale 是什么。
-    """
+    """带时间戳前缀的线程安全输出。终端带颜色，deploy.log 纯文本。"""
     color = _STYLE.get(style, "")
     ts = _ts()
     with _PRINT_LOCK:
@@ -367,21 +346,15 @@ class ProcessStream:
 
         self.cmd = cmd
         self.task_name = task_name
-        # 显式给子进程注入 UTF-8 环境变量，防止子 Python 脚本的 print() 乱码
-        child_env = dict(os.environ)
-        child_env.setdefault("PYTHONUTF8", "1")
-        child_env.setdefault("PYTHONIOENCODING", "utf-8")
-
+        # Popen 默认继承 os.environ（已含 PYTHONUTF8 + PYTHONIOENCODING）
+        # 不用 text=True：_read() 读原始字节自己 decode，不依赖子进程编码
         self.proc = subprocess.Popen(
             real_cmd,
             shell=True,
             cwd=cwd or None,
-            env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            # 不用 text=True：读原始字节，自己 decode，
-            # 彻底不依赖子进程的编码设置
-            start_new_session=True,  # 独立进程组，方便 killpg
+            start_new_session=True,
         )
         self.pid = self.proc.pid
         try:
