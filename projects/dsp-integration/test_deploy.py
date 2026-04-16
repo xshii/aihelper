@@ -718,6 +718,60 @@ def t17(wd):
 
 
 # ════════════════════════════════════════════════════════════
+# T18 · 同 order 无 depends 的 task 会并行启动
+# ════════════════════════════════════════════════════════════
+@case("T18 · 同 order 的 task 并行触发")
+def t18(wd):
+    # 两个脚本各记录自己的启动时刻 + 睡 0.6s + 记录结束时刻
+    # 如果是串行，b.start - a.start 会 >= 0.6s；并行则接近 0
+    write_exec(
+        wd / "a.sh",
+        """#!/bin/bash
+date +%s.%N > a.start
+sleep 0.6
+echo "a done"
+""",
+    )
+    write_exec(
+        wd / "b.sh",
+        """#!/bin/bash
+date +%s.%N > b.start
+sleep 0.6
+echo "b done"
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "a",
+                    "order": 1,
+                    "usage": f"bash {wd}/a.sh",
+                    "cwd": str(wd),
+                },
+                {
+                    "name": "b",
+                    "order": 1,
+                    "usage": f"bash {wd}/b.sh",
+                    "cwd": str(wd),
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    assert_in("a done", out)
+    assert_in("b done", out)
+    a_start = float((wd / "a.start").read_text())
+    b_start = float((wd / "b.start").read_text())
+    delta = abs(a_start - b_start)
+    # 并行应该 < 100ms（实际通常几十 ms），远小于 sleep 0.6
+    if delta > 0.3:
+        raise AssertionError(f"启动间隔 {delta * 1000:.0f}ms，看着不像并行\n{out}")
+    return f"rc={rc}, a/b 启动间隔 {delta * 1000:.0f}ms"
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 
