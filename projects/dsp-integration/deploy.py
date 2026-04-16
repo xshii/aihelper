@@ -341,6 +341,8 @@ class ProcessStream:
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",  # 不依赖 locale，显式 UTF-8
+            errors="replace",  # 碰到非法字节用 ? 替代而不是崩溃
             bufsize=1,
             start_new_session=True,  # 独立进程组，方便 killpg
         )
