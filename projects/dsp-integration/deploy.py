@@ -615,39 +615,6 @@ def _prompt_overwrite(name: str) -> bool:
         return False
 
 
-def copy_phase(tasks: list, statuses: dict) -> None:
-    """只处理普通 task (name 不以 # 开头) 的 src → dest。"""
-    br()
-    log("[Step 3] 复制配置文件", style="section")
-    for task in tasks:
-        name = task["name"]
-        if name.startswith("#"):
-            continue
-        src = task.get("src")
-        dest = task.get("dest")
-        if not src or not dest:
-            continue
-        if not os.path.exists(src):
-            log(f"  ✘ [{name}] 源文件不存在: {src}", style="err")
-            statuses[name] = ("fail", f"src not found: {src}")
-            continue
-        dest_dir = os.path.dirname(dest)
-        if dest_dir:
-            os.makedirs(dest_dir, exist_ok=True)
-        if not os.path.exists(dest):
-            atomic_copy(src, dest)
-            log(f"  ✔ [{name}] 已复制", style="ok")
-            continue
-        if filecmp.cmp(src, dest, shallow=False):
-            log(f"  ✔ [{name}] 内容一致，跳过", style="dim")
-            continue
-        if not _prompt_overwrite(name):
-            log("    ⏭ 跳过覆盖", style="dim")
-            continue
-        atomic_copy(src, dest)
-        log("    ✔ 已覆盖", style="ok")
-
-
 # ══════════════════════════════════════════════
 # Scheduler: DAG 调度 + Watcher 线程池
 # ══════════════════════════════════════════════
@@ -664,12 +631,11 @@ class Scheduler:
         self.watchers: list[Watcher] = []
         self._watcher_lock = threading.Lock()
         self._verdict_cond = threading.Condition()
-        # 初始 pending：有 usage 或 #task 的，且没在 copy 阶段就 fail 的
+        # 初始 pending：有 usage / src / #task 的
         runnable = [
             t
             for t in tasks
-            if (t.get("usage") or t["name"].startswith("#"))
-            and statuses.get(t["name"], ("", ""))[0] != "fail"
+            if t.get("usage") or t.get("src") or t["name"].startswith("#")
         ]
         runnable.sort(key=_task_order)
         self._pending: list[dict] = runnable
@@ -693,12 +659,47 @@ class Scheduler:
             self.watchers.append(w)
         w.start()
 
+    # ──────────── per-task 复制 ────────────
+
+    def _copy_for_task(self, task: dict) -> bool:
+        """启动前复制 src→dest（如果配了的话）。返回 False 表示复制失败。"""
+        name = task["name"]
+        src = task.get("src")
+        dest = task.get("dest")
+        if not src or not dest:
+            return True
+        if not os.path.exists(src):
+            log(f"    ✘ 源文件不存在: {src}", style="err")
+            self.statuses[name] = ("fail", f"src not found: {src}")
+            return False
+        dest_dir = os.path.dirname(dest)
+        if dest_dir:
+            os.makedirs(dest_dir, exist_ok=True)
+        if not os.path.exists(dest):
+            atomic_copy(src, dest)
+            log(f"    ✔ 已复制 {src}", style="dim")
+            return True
+        if filecmp.cmp(src, dest, shallow=False):
+            log("    ✔ 配置一致，跳过复制", style="dim")
+            return True
+        if not _prompt_overwrite(name):
+            log("    ⏭ 跳过覆盖", style="dim")
+            return True
+        atomic_copy(src, dest)
+        log(f"    ✔ 已覆盖 {src}", style="dim")
+        return True
+
     # ──────────── 两种启动路径 ────────────
 
     def _start_normal(self, task: dict) -> None:
-        usage = self.ctx.substitute(task.get("usage", "")) or ""
-        cwd = _compute_cwd(task, self.ctx)
         self._header(task)
+        # 先拷配置，再跑命令（dest 目录可能由前序 task 创建）
+        if not self._copy_for_task(task):
+            return
+        usage = self.ctx.substitute(task.get("usage", "")) or ""
+        if not usage:
+            return  # 纯 copy task，没有 usage
+        cwd = _compute_cwd(task, self.ctx)
         log(f"    ▸ 启动: {usage}", style="dim")
         if cwd:
             log(f"    ▸ cwd:  {cwd}", style="dim")
@@ -834,7 +835,7 @@ _SUMMARY_GROUPS: list[tuple[str, str, str, str]] = [
 
 def _print_summary(statuses: dict, watchers: list, ctx: Context) -> None:
     br()
-    log("[Step 6] 执行总结", style="section")
+    log("[Step 5] 执行总结", style="section")
     log("═" * 60, style="dim")
 
     for icon, label, style, key in _SUMMARY_GROUPS:
@@ -907,10 +908,9 @@ def run_deploy(manifest_path: str) -> None:
 
     tasks = manifest.get("tasks", [])
     statuses: dict[str, tuple[str, str]] = {}
-    copy_phase(tasks, statuses)
 
     br()
-    log("[Step 4] 调度执行", style="section")
+    log("[Step 3] 调度执行（per-task 复制 + 启动）", style="section")
     ctx = Context()
     bus = EventBus()
     scheduler = Scheduler(tasks, statuses, ctx, bus)
@@ -925,7 +925,7 @@ def run_deploy(manifest_path: str) -> None:
     readme_config = manifest.get("readme")
     if readme_config:
         br()
-        log("[Step 5] 生成使用指导文档", style="section")
+        log("[Step 4] 生成使用指导文档", style="section")
         _render_readme(readme_config, tasks)
 
     _print_summary(statuses, scheduler.watchers, ctx)
