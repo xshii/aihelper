@@ -531,6 +531,193 @@ def t12(wd):
 
 
 # ════════════════════════════════════════════════════════════
+# T13 · variables 内部链式引用
+# ════════════════════════════════════════════════════════════
+@case("T13 · variables 链式展开 a→${b}→${c}")
+def t13(wd):
+    write_manifest(
+        wd,
+        {
+            "variables": {
+                "base": "/tmp",
+                "sub": "${base}/deploy",
+                "full": "${sub}/demo-v1",
+            },
+            "tasks": [
+                {
+                    "name": "show",
+                    "usage": "echo 'resolved to: ${full}'",
+                }
+            ],
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("resolved to: /tmp/deploy/demo-v1", out, "链式展开失败")
+    assert_in("${full} = /tmp/deploy/demo-v1", out, "variables 打印没展开")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T14 · variables 循环引用 → 加载期报错
+# ════════════════════════════════════════════════════════════
+@case("T14 · variables 循环引用检测")
+def t14(wd):
+    write_manifest(
+        wd,
+        {
+            "variables": {
+                "a": "${b}_x",
+                "b": "${a}_y",
+            },
+            "tasks": [{"name": "t", "usage": "echo hi"}],
+        },
+    )
+    rc, out = run_deploy(wd)
+    if rc == 0:
+        raise AssertionError(f"期望非零 exit\n{out}")
+    assert_in("循环引用", out)
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T15 · 一次 match 提取多个命名组
+# ════════════════════════════════════════════════════════════
+@case("T15 · 一次 match 提取多个命名组")
+def t15(wd):
+    write_exec(
+        wd / "srv.sh",
+        """#!/bin/bash
+echo "bound to 127.0.0.1:8080 for service api-v1"
+sleep 0.3
+exit 0
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "srv",
+                    "order": 1,
+                    "usage": f"bash {wd}/srv.sh",
+                    "keyword": [
+                        {
+                            "type": "success",
+                            "cont_ref": "bound",
+                            "word": (
+                                r"bound to (?P<host>\S+):(?P<port>\d+) "
+                                r"for service (?P<svc>\S+)"
+                            ),
+                        }
+                    ],
+                },
+                {
+                    "name": "verify",
+                    "order": 2,
+                    "depends": "bound",
+                    "usage": "echo 'host=#{host} port=#{port} svc=#{svc}'",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("host=127.0.0.1 port=8080 svc=api-v1", out, "多命名组提取失败")
+    # 总结里三个命名组都该出现
+    assert_in("#{host} = 127.0.0.1", out)
+    assert_in("#{port} = 8080", out)
+    assert_in("#{svc} = api-v1", out)
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T16 · 三级 cont_ref 链式挂载 (srv → #s1 → #s2 → final)
+# ════════════════════════════════════════════════════════════
+@case("T16 · 三级 cont_ref 链式挂载")
+def t16(wd):
+    write_exec(
+        wd / "multi.sh",
+        """#!/bin/bash
+echo "stage 1 ready"
+sleep 0.2
+echo "stage 2 ready"
+sleep 0.2
+echo "stage 3 ready"
+sleep 0.3
+exit 0
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "srv",
+                    "order": 1,
+                    "usage": f"bash {wd}/multi.sh",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "s1", "word": r"stage 1 ready"}
+                    ],
+                },
+                {
+                    "name": "#s1",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "s2", "word": r"stage 2 ready"}
+                    ],
+                },
+                {
+                    "name": "#s2",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "s3", "word": r"stage 3 ready"}
+                    ],
+                },
+                {
+                    "name": "final",
+                    "depends": "s3",
+                    "usage": "echo 'all three stages done'",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("all three stages done", out, "三级链没推到末端")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T17 · copy phase 真的把 src → dest 落盘 + ${var} 替换路径
+# ════════════════════════════════════════════════════════════
+@case("T17 · copy phase 复制 src→dest + ${var}")
+def t17(wd):
+    (wd / "src_d").mkdir()
+    (wd / "src_d" / "config.txt").write_text("hello from src\n")
+
+    write_manifest(
+        wd,
+        {
+            "variables": {
+                "src_dir": str(wd / "src_d"),
+                "dest_dir": str(wd / "out"),
+            },
+            "tasks": [
+                {
+                    "name": "copy-it",
+                    "order": 1,
+                    "src": "${src_dir}/config.txt",
+                    "dest": "${dest_dir}/config.txt",
+                    "usage": "cat ${dest_dir}/config.txt",
+                }
+            ],
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("已复制", out, "copy phase 没汇报成功")
+    assert_in("hello from src", out, "cat 没读到复制后的内容")
+    if not (wd / "out" / "config.txt").exists():
+        raise AssertionError(f"dest 没真正创建\n{out}")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 
