@@ -17,6 +17,8 @@
 首次使用: cp manifest.json.example manifest.json && vim manifest.json
 """
 
+from __future__ import annotations
+
 import filecmp
 import json
 import os
