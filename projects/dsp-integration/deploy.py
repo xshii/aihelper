@@ -120,6 +120,8 @@ def br() -> None:
 def _open_log(path: str) -> None:
     global _LOG_FILE
     _LOG_FILE = open(path, "wb")  # 二进制模式，write 时自己 encode
+    _LOG_FILE.write("── 日志开始记录 ──\n".encode("utf-8"))
+    _LOG_FILE.flush()
 
 
 def _close_log() -> None:
