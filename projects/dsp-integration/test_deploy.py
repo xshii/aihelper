@@ -784,17 +784,13 @@ def t19(wd):
                     "name": "a",
                     "order": 1,
                     "usage": "echo a",
-                    "keyword": [
-                        {"type": "success", "cont_ref": "ready", "word": r"a"}
-                    ],
+                    "keyword": [{"type": "success", "cont_ref": "ready", "word": r"a"}],
                 },
                 {
                     "name": "b",
                     "order": 1,
                     "usage": "echo b",
-                    "keyword": [
-                        {"type": "success", "cont_ref": "ready", "word": r"b"}
-                    ],
+                    "keyword": [{"type": "success", "cont_ref": "ready", "word": r"b"}],
                 },
             ]
         },
@@ -835,6 +831,32 @@ def t20(wd):
             f"order 排序错乱: first={p_first} inserted={p_inserted} second={p_second}"
         )
     return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T21 · deploy.log 同步写入（纯文本无 ANSI）
+# ════════════════════════════════════════════════════════════
+@case("T21 · deploy_YYYYMMDD_HHMMSS.log 同步写入")
+def t21(wd):
+    import glob
+
+    write_manifest(
+        wd,
+        {"tasks": [{"name": "hi", "order": 1, "usage": "echo hello from log test"}]},
+    )
+    rc, out = run_deploy(wd)
+    # 文件名带时间后缀，用 glob 找
+    logs = sorted(glob.glob(str(wd / "deploy_*.log")))
+    if not logs:
+        raise AssertionError(f"deploy_*.log 未生成\n{out}")
+    log_path = Path(logs[-1])
+    content = log_path.read_text()
+    assert_in("hello from log test", content, "子进程输出未写入 log")
+    assert_in("执行总结", content, "总结未写入 log")
+    # 验证无 ANSI 转义码
+    if "\033[" in content:
+        raise AssertionError(f"log 含 ANSI 转义码\n{content[:300]}")
+    return f"rc={rc}, {log_path.name} {len(content)} bytes"
 
 
 # ════════════════════════════════════════════════════════════

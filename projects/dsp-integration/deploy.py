@@ -50,6 +50,7 @@ DYN_RE = re.compile(r"#\{(\w+)\}")
 
 _USE_COLOR = sys.stdout.isatty()
 _PRINT_LOCK = threading.Lock()
+_LOG_FILE = None  # 运行期由 _open_log 打开，deploy.log 纯文本（无 ANSI）
 
 
 def _c(code: str) -> str:
@@ -81,26 +82,34 @@ def _ts() -> str:
 
 
 def log(msg: str, style: str = "") -> None:
-    """带时间戳前缀的线程安全输出。
-
-    style 可选:
-        ""        默认
-        "dim"     灰（子进程 stdout、详情、info）
-        "ok"      绿（成功）
-        "warn"    黄（需注意）
-        "err"     红粗（错误）
-        "hit"     青粗（keyword 命中等关键事件）
-        "section" 粗体（step 标题）
-    """
+    """带时间戳前缀的线程安全输出。终端带颜色，deploy.log 纯文本。"""
     color = _STYLE.get(style, "")
+    ts = _ts()
     with _PRINT_LOCK:
-        print(f"{DIM}{_ts()}{RESET} {color}{msg}{RESET}", flush=True)
+        print(f"{DIM}{ts}{RESET} {color}{msg}{RESET}", flush=True)
+        if _LOG_FILE:
+            _LOG_FILE.write(f"{ts} {msg}\n")
+            _LOG_FILE.flush()
 
 
 def br() -> None:
     """空行分隔，无时间戳。"""
     with _PRINT_LOCK:
         print(flush=True)
+        if _LOG_FILE:
+            _LOG_FILE.write("\n")
+
+
+def _open_log(path: str) -> None:
+    global _LOG_FILE
+    _LOG_FILE = open(path, "w", encoding="utf-8")
+
+
+def _close_log() -> None:
+    global _LOG_FILE
+    if _LOG_FILE:
+        _LOG_FILE.close()
+        _LOG_FILE = None
 
 
 # ══════════════════════════════════════════════
@@ -879,6 +888,7 @@ def main() -> None:
         print_help()
         sys.exit(1)
 
+    _open_log(f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log")
     try:
         run_deploy("manifest.json")
     except (FileNotFoundError, ValueError) as e:
@@ -894,6 +904,8 @@ def main() -> None:
         log(f"❌ 未知错误: {e}", style="err")
         log(traceback.format_exc().rstrip(), style="dim")
         sys.exit(1)
+    finally:
+        _close_log()
 
 
 if __name__ == "__main__":
