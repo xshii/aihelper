@@ -29,6 +29,7 @@ import sys
 # 第二次进来时 PYTHONUTF8=1 已生效，跳过此块正常执行。
 if os.environ.get("PYTHONUTF8") != "1":
     os.environ["PYTHONUTF8"] = "1"
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")  # 兼容更老的 Python 子进程
     os.execv(sys.executable, [sys.executable] + sys.argv)
 # ──────────────────────────────────────────────────────────
 
@@ -366,14 +367,20 @@ class ProcessStream:
 
         self.cmd = cmd
         self.task_name = task_name
+        # 显式给子进程注入 UTF-8 环境变量，防止子 Python 脚本的 print() 乱码
+        child_env = dict(os.environ)
+        child_env.setdefault("PYTHONUTF8", "1")
+        child_env.setdefault("PYTHONIOENCODING", "utf-8")
+
         self.proc = subprocess.Popen(
             real_cmd,
             shell=True,
             cwd=cwd or None,
+            env=child_env,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            encoding="utf-8",  # 不依赖 locale，显式 UTF-8
+            encoding="utf-8",  # deploy.py 自己的解码层
             errors="replace",  # 碰到非法字节用 ? 替代而不是崩溃
             bufsize=1,
             start_new_session=True,  # 独立进程组，方便 killpg
