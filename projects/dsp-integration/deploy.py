@@ -34,9 +34,21 @@ from dataclasses import dataclass, field
 from typing import Callable, Optional
 
 # 强制 stdout/stderr UTF-8，避免非 UTF-8 locale（如 C/POSIX）下中文乱码
-for _stream in (sys.stdout, sys.stderr):
+import io as _io
+
+for _name in ("stdout", "stderr"):
+    _stream = getattr(sys, _name)
     if hasattr(_stream, "reconfigure"):
-        _stream.reconfigure(encoding="utf-8")
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    elif hasattr(_stream, "buffer"):
+        # 某些嵌入式 Python 没有 reconfigure，用 TextIOWrapper 兜底
+        setattr(
+            sys,
+            _name,
+            _io.TextIOWrapper(
+                _stream.buffer, encoding="utf-8", errors="replace", line_buffering=True
+            ),
+        )
 
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
@@ -554,7 +566,7 @@ def state_cleanup(state_path: str) -> None:
     if not os.path.exists(state_path):
         return
     try:
-        with open(state_path) as f:
+        with open(state_path, encoding="utf-8") as f:
             entries = json.load(f)
     except Exception:
         os.remove(state_path)
@@ -579,8 +591,8 @@ def state_cleanup(state_path: str) -> None:
 def state_write(state_path: str, entries: list) -> None:
     if not entries:
         return
-    with open(state_path, "w") as f:
-        json.dump(entries, f, indent=2)
+    with open(state_path, "w", encoding="utf-8") as f:
+        json.dump(entries, f, indent=2, ensure_ascii=False)
 
 
 # ══════════════════════════════════════════════
