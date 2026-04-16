@@ -834,6 +834,53 @@ def t20(wd):
 
 
 # ════════════════════════════════════════════════════════════
+# T23 · cont_ref task 命中后不阻塞 wave 推进
+# ════════════════════════════════════════════════════════════
+@case("T23 · cont_ref task 命中后不阻塞 wave")
+def t23(wd):
+    # srv(order=1) 发 cont_ref 后进程还 sleep 2s 不退出
+    # next(order=2) 应该不用等 srv 退出就启动
+    write_exec(
+        wd / "srv.sh",
+        """#!/bin/bash
+echo "server ready"
+sleep 2
+echo "server exit"
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "srv",
+                    "order": 1,
+                    "usage": f"bash {wd}/srv.sh",
+                    "keyword": [
+                        {"type": "success", "cont_ref": "up", "word": r"server ready"}
+                    ],
+                },
+                {
+                    "name": "next",
+                    "order": 2,
+                    "usage": "echo 'next started'",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    assert_in("next started", out, "order=2 被 cont_ref task 的 wave 挡住了")
+    # 关键：next 应该在 srv 退出之前就跑了
+    p_next = out.find("next started")
+    p_exit = out.find("server exit")
+    if p_next > p_exit:
+        raise AssertionError(
+            f"next 应该在 server exit 之前出现 (next@{p_next} server_exit@{p_exit})"
+        )
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
 # T22 · order 不同的独立 task 按 wave 串行（1 跑完再跑 2）
 # ════════════════════════════════════════════════════════════
 @case("T22 · 不同 order 的独立 task 按 wave 串行")

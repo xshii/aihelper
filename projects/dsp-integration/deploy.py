@@ -443,6 +443,7 @@ class Watcher(threading.Thread):
         self.verdict: Optional[str] = None  # "success" | "fail"
         self.reason: str = ""
         self.events: list[str] = []  # 所有命中记录
+        self.cont_ref_fired = False  # 有 cont_ref 命中后不再阻塞 wave 推进
 
     def run(self) -> None:
         try:
@@ -510,6 +511,7 @@ class Watcher(threading.Thread):
 
         # 分派
         if cont_ref:
+            self.cont_ref_fired = True
             self.stream.detach()
             self.bus.fire(cont_ref, self.cursor, self.stream)
             return False  # 不 seal，继续扫后续 keyword
@@ -714,11 +716,13 @@ class Scheduler:
             if t["name"].startswith("#") or t.get("depends"):
                 continue
             min_o = min(min_o, t.get("order", float("inf")))
-        # 已启动但还没出结果的独立 task
+        # 已启动但还没出结果的独立 task（cont_ref 已触发的不再阻塞）
         with self._watcher_lock:
             for w in self.watchers:
                 if w.verdict is not None:
                     continue
+                if w.cont_ref_fired:
+                    continue  # 已完成使命，不阻塞 wave
                 t = w.task
                 if t["name"].startswith("#") or t.get("depends"):
                     continue
