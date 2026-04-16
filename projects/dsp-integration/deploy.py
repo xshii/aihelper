@@ -782,11 +782,11 @@ class Scheduler:
             self.statuses[t["name"]] = ("skip", "依赖的 cont_ref 未命中")
         self._pending = []
 
-    def _terminate_live_streams(self) -> None:
+    def _terminate_all(self) -> None:
+        """终止所有子进程（包括 detached 的常驻进程）。"""
         with self._watcher_lock:
             for w in self.watchers:
-                if not w.stream.detached:
-                    w.stream.terminate()
+                w.stream.terminate()
 
     def run(self) -> None:
         try:
@@ -803,8 +803,8 @@ class Scheduler:
                     self._verdict_cond.wait(timeout=0.3)
         except KeyboardInterrupt:
             br()
-            log("⏹ Ctrl+C 中断，正在终止非常驻进程", style="warn")
-            self._terminate_live_streams()
+            log("⏹ Ctrl+C 中断，终止所有进程", style="warn")
+            self._terminate_all()
 
     def detached_entries(self) -> list[dict]:
         with self._watcher_lock:
