@@ -34,7 +34,10 @@ from typing import Callable, Optional
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
 
-# task 里哪些字段走静态 ${var} 替换，strict=True 时未定义的变量会抛错
+# task 里哪些字段走静态 ${var} 替换。
+# strict=True  未定义的 ${x} 直接抛 ValueError（拼错要立刻炸）
+# strict=False 未定义的 ${x} 原样保留（允许 ${HOME} 这类 shell 变量透传）
+# 未列入的字段（name/type/cont_ref/depends/order）是标识符/枚举，不参与替换。
 TASK_FIELDS: list[tuple[str, bool]] = [
     ("src", True),
     ("dest", True),
@@ -42,6 +45,8 @@ TASK_FIELDS: list[tuple[str, bool]] = [
     ("usage", False),
     ("cwd", False),
 ]
+# keyword[].word 嵌套在 list 里，额外单独处理；strict 因为 regex 拼错很难 debug
+KEYWORD_WORD_STRICT = True
 
 VAR_RE = re.compile(r"\$\{(\w+)\}")
 DYN_RE = re.compile(r"#\{(\w+)\}")
@@ -187,11 +192,16 @@ def resolve_variables(manifest: dict) -> dict:
         if isinstance(v, str) and "${" in v:
             raise ValueError(f"变量循环引用或未定义: {k} = {v}")
 
-    # 展开到 task 字段
+    # 展开到 task 字段（顶层字段 + 嵌套的 keyword[].word）
     for task in manifest.get("tasks", []):
         for key, strict in TASK_FIELDS:
             if key in task:
                 task[key] = _expand_vars(task[key], variables, strict=strict)
+        for kw in task.get("keyword", []):
+            if "word" in kw:
+                kw["word"] = _expand_vars(
+                    kw["word"], variables, strict=KEYWORD_WORD_STRICT
+                )
     return manifest
 
 

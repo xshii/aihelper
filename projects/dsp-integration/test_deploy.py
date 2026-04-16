@@ -460,6 +460,77 @@ exit 1
 
 
 # ════════════════════════════════════════════════════════════
+# T11 · keyword.word 支持 ${var} 静态替换
+# ════════════════════════════════════════════════════════════
+@case("T11 · keyword.word 支持 ${var} 替换")
+def t11(wd):
+    write_exec(
+        wd / "emit.sh",
+        """#!/bin/bash
+echo "APP_PROD listening on port 9090"
+sleep 0.3
+exit 0
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "variables": {"prefix": "APP_PROD"},
+            "tasks": [
+                {
+                    "name": "srv",
+                    "order": 1,
+                    "usage": f"bash {wd}/emit.sh",
+                    "keyword": [
+                        {
+                            "type": "success",
+                            "cont_ref": "up",
+                            "word": r"${prefix} listening on port (?P<port>\d+)",
+                        }
+                    ],
+                },
+                {
+                    "name": "after",
+                    "order": 2,
+                    "depends": "up",
+                    "usage": "echo 'caught port #{port}'",
+                },
+            ],
+        },
+    )
+    rc, out = run_deploy(wd)
+    assert_in("caught port 9090", out, "keyword 里的 ${prefix} 没替换或提取失败")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T12 · keyword.word 里的 ${var} 拼错 → 加载期严格报错
+# ════════════════════════════════════════════════════════════
+@case("T12 · keyword.word 未定义变量严格报错")
+def t12(wd):
+    write_manifest(
+        wd,
+        {
+            "variables": {"prefix": "APP"},
+            "tasks": [
+                {
+                    "name": "srv",
+                    "usage": "echo a",
+                    "keyword": [
+                        {"type": "success", "word": r"${preffix} oops (?P<x>\d+)"}
+                    ],
+                }
+            ],
+        },
+    )
+    rc, out = run_deploy(wd)
+    if rc == 0:
+        raise AssertionError(f"期望非零 exit\n{out}")
+    assert_in("preffix", out)
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 
