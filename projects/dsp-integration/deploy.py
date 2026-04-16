@@ -104,7 +104,7 @@ def log(msg: str, style: str = "") -> None:
         sys.stdout.buffer.write(line.encode("utf-8", errors="replace"))
         sys.stdout.buffer.flush()
         if _LOG_FILE:
-            _LOG_FILE.write(f"{ts} {msg}\n")
+            _LOG_FILE.write(f"{ts} {msg}\n".encode("utf-8", errors="replace"))
             _LOG_FILE.flush()
 
 
@@ -114,12 +114,12 @@ def br() -> None:
         sys.stdout.buffer.write(b"\n")
         sys.stdout.buffer.flush()
         if _LOG_FILE:
-            _LOG_FILE.write("\n")
+            _LOG_FILE.write(b"\n")
 
 
 def _open_log(path: str) -> None:
     global _LOG_FILE
-    _LOG_FILE = open(path, "w", encoding="utf-8")
+    _LOG_FILE = open(path, "wb")  # 二进制模式，write 时自己 encode
 
 
 def _close_log() -> None:
