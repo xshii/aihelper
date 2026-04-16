@@ -33,6 +33,11 @@ import traceback
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 
+# 强制 stdout/stderr UTF-8，避免非 UTF-8 locale（如 C/POSIX）下中文乱码
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
 
