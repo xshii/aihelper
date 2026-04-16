@@ -1,0 +1,101 @@
+{
+  "version": "2.0",
+  "description": "配置分发 + keyword 流水线调度清单",
+  "usage": "cp manifest.json.example manifest.json && vim manifest.json && python deploy.py",
+
+  "_schema_notes": {
+    "task.name":       "任务名；若以 # 开头，表示挂载到同名 cont_ref 的进程 stdout 继续监听",
+    "task.order":      "整数，决定相同依赖层级内的启动顺序",
+    "task.depends":    "等该 cont_ref 命中后再启动（并行，不串行）",
+    "task.cwd":        "显式 cwd；未填则回退到 dirname(dest)",
+    "task.keyword[]":  "逐行扫 stdout/stderr 匹配",
+    "keyword.type":    "error | success",
+    "keyword.word":    "正则；(?P<name>...) 提取的命名组可在后续 task 里用 #{name} 引用",
+    "keyword.cont_ref":"设了就表示命中后不 kill 进程，广播 ref 事件让 depends/#task 启动",
+    "keyword.times":   "可选，默认 1；命中 N 次才算一次（用于等 N 个事件）",
+    "vars":            "${var} 静态替换（加载期解析），#{name} 动态替换（运行期从 keyword 提取）"
+  },
+
+  "variables": {
+    "base":     "/home/zhangsan/projects",
+    "base_src": "configs",
+    "app_root": "${base}/app1"
+  },
+
+  "tasks": [
+    {
+      "name": "start-server",
+      "order": 1,
+      "note": "启动服务并捕获监听端口",
+      "src":  "${base_src}/server.sh",
+      "dest": "${app_root}/server.sh",
+      "usage": "bash server.sh",
+      "cwd":  "${app_root}",
+      "keyword": [
+        {
+          "type": "success",
+          "cont_ref": "server_up",
+          "word": "listening on port (?P<port>\\d+)"
+        },
+        {
+          "type": "error",
+          "word": "FATAL: (?P<fatal_reason>.+)"
+        }
+      ]
+    },
+
+    {
+      "name": "call-api",
+      "order": 2,
+      "note": "服务起来后并行调用 API（#{port} 从上面提取）",
+      "depends": "server_up",
+      "src":  "${base_src}/client.sh",
+      "dest": "${app_root}/client.sh",
+      "usage": "curl -sf http://localhost:#{port}/hello",
+      "cwd":  "${app_root}",
+      "keyword": [
+        { "type": "success", "word": "hello world" }
+      ]
+    },
+
+    {
+      "name": "#server_up",
+      "note": "挂载到 start-server 原进程，继续监听后续事件",
+      "keyword": [
+        {
+          "type": "success",
+          "cont_ref": "first_request",
+          "word": "request served: (?P<path>/\\S+)"
+        },
+        { "type": "error", "word": "panic" }
+      ]
+    },
+
+    {
+      "name": "log-analyze",
+      "order": 3,
+      "note": "看到第一个请求后再跑日志分析",
+      "depends": "first_request",
+      "usage": "echo 'first request path was #{path}'"
+    }
+  ],
+
+  "readme": {
+    "output": "README.md",
+    "title": "配置 + 流水线使用指导",
+    "content": [
+      "## 使用说明",
+      "",
+      "本清单使用 keyword 驱动的异步流水线：",
+      "1. `start-server` 启动后匹配 `listening on port N`，提取 `port` 并广播 `server_up` 事件",
+      "2. `call-api` 依赖 `server_up`，被唤醒后用 `#{port}` 拼接 URL 发起请求",
+      "3. `#server_up` 挂载到 `start-server` 的原进程，继续捕获后续请求日志",
+      "4. `log-analyze` 等到首个请求被处理后触发分析流程",
+      "",
+      "### 注意",
+      "- cont_ref 命中的进程不会被 kill，会写入 `.deploy.state`",
+      "- 下次执行 `python deploy.py` 时会先清理上次留下的常驻进程",
+      "- 需要修改配置时请改 `configs/` 下的源文件，然后重新 deploy"
+    ]
+  }
+}
