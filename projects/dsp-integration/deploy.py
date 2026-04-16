@@ -34,20 +34,10 @@ from typing import Callable, Optional
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
 
-# task 里哪些字段走静态 ${var} 替换。
-# strict=True  未定义的 ${x} 直接抛 ValueError（拼错要立刻炸）
-# strict=False 未定义的 ${x} 原样保留（允许 ${HOME} 这类 shell 变量透传）
-# 未列入的字段（name/type/cont_ref/depends/order）是标识符/枚举，不参与替换。
-TASK_FIELDS: list[tuple[str, bool]] = [
-    ("src", True),
-    ("dest", True),
-    ("note", False),
-    ("usage", False),
-    ("cwd", False),
-]
-# keyword[].word 嵌套在 list 里，额外单独处理；strict 因为 regex 拼错很难 debug
-KEYWORD_WORD_STRICT = True
-
+# 变量替换策略：
+# - manifest.variables 内部相互引用用宽松模式，允许分轮展开
+# - 其他所有字符串字段（tasks / readme / ...）用 strict：拼错立刻炸
+# - shell 变量（$HOME 等）请用无括号形式，不走模板引擎
 VAR_RE = re.compile(r"\$\{(\w+)\}")
 DYN_RE = re.compile(r"#\{(\w+)\}")
 
@@ -128,7 +118,7 @@ def _expand_vars(text: str, variables: dict, strict: bool) -> str:
     """把 text 里的 ${key} 用 variables[key] 替换。
 
     strict=True  未定义的 key 直接抛 ValueError
-    strict=False 未定义的 key 原样保留（允许 ${HOME} 这类 shell 变量透传）
+    strict=False 未定义的 key 原样保留（用于变量内部相互引用的分轮展开）
     """
 
     def _sub(m: re.Match) -> str:
@@ -140,6 +130,18 @@ def _expand_vars(text: str, variables: dict, strict: bool) -> str:
         return m.group(0)
 
     return VAR_RE.sub(_sub, text)
+
+
+def _expand_all(node, variables: dict):
+    """递归把任意 JSON-like 结构里的所有字符串都走一遍 ${var} 替换。
+    未定义变量立即抛错（strict）。"""
+    if isinstance(node, str):
+        return _expand_vars(node, variables, strict=True)
+    if isinstance(node, dict):
+        return {k: _expand_all(v, variables) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_expand_all(item, variables) for item in node]
+    return node
 
 
 def _task_order(task: dict) -> float:
@@ -174,9 +176,12 @@ def load_manifest(path: str) -> dict:
 
 
 def resolve_variables(manifest: dict) -> dict:
-    """静态 ${var} 替换。src/dest 严格；note/usage/cwd 宽松（允许 ${HOME} 透传）。"""
+    """静态 ${var} 替换。所有非 variables 字段里的字符串都统一 strict 替换。
+
+    shell 变量（$HOME 等）请用无括号形式，不会被模板引擎拦截。
+    """
     variables = manifest.get("variables", {})
-    # 变量间互相引用：反复展开到不动点（上限 10 轮防死循环）
+    # 先把 variables 内部相互引用展开到不动点（宽松模式，允许分轮）
     for _ in range(10):
         changed = False
         for k, v in variables.items():
@@ -192,16 +197,11 @@ def resolve_variables(manifest: dict) -> dict:
         if isinstance(v, str) and "${" in v:
             raise ValueError(f"变量循环引用或未定义: {k} = {v}")
 
-    # 展开到 task 字段（顶层字段 + 嵌套的 keyword[].word）
-    for task in manifest.get("tasks", []):
-        for key, strict in TASK_FIELDS:
-            if key in task:
-                task[key] = _expand_vars(task[key], variables, strict=strict)
-        for kw in task.get("keyword", []):
-            if "word" in kw:
-                kw["word"] = _expand_vars(
-                    kw["word"], variables, strict=KEYWORD_WORD_STRICT
-                )
+    # 再对 manifest 其他部分做统一递归替换（strict：拼错立即炸）
+    for key in list(manifest.keys()):
+        if key == "variables":
+            continue
+        manifest[key] = _expand_all(manifest[key], variables)
     return manifest
 
 
@@ -818,17 +818,17 @@ def run_deploy(manifest_path: str) -> None:
     br()
     log(f"[Step 1] 加载 {manifest_path}", style="section")
     manifest = load_manifest(manifest_path)
-    tasks = manifest.get("tasks", [])
-    log(f"  ✔ 共 {len(tasks)} 个任务", style="ok")
+    log(f"  ✔ 共 {len(manifest.get('tasks', []))} 个任务", style="ok")
 
     br()
     log("[Step 2] 解析变量 & 校验", style="section")
-    manifest = resolve_variables(manifest)
+    manifest = resolve_variables(manifest)  # _expand_all 返回新对象，tasks 要重新取
     for k, v in manifest.get("variables", {}).items():
         log(f"  ${{{k}}} = {v}", style="dim")
     validate(manifest)
     log("  ✔ 校验通过（命名组无冲突、cont_ref 引用完整）", style="ok")
 
+    tasks = manifest.get("tasks", [])
     statuses: dict[str, tuple[str, str]] = {}
     copy_phase(tasks, statuses)
 
