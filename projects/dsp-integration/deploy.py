@@ -698,7 +698,8 @@ class Scheduler:
             return
         usage = self.ctx.substitute(task.get("usage", "")) or ""
         if not usage:
-            return  # 纯 copy task，没有 usage
+            self.statuses[task["name"]] = ("success", "copy only")
+            return
         cwd = _compute_cwd(task, self.ctx)
         log(f"    ▸ 启动: {usage}", style="dim")
         if cwd:
@@ -745,34 +746,37 @@ class Scheduler:
                 min_o = min(min_o, t.get("order", float("inf")))
         return min_o
 
-    def _try_start(self) -> None:
+    def _try_start(self) -> bool:
+        """尝试启动所有当前可启动的 task。返回是否有 task 被处理（含纯 copy）。"""
         wave = self._current_wave()
         still: list[dict] = []
+        progressed = False
         for task in self._pending:
             name = task["name"]
-            # #task：靠 cont_ref 触发，不受 wave 约束
             if name.startswith("#"):
                 ref = name[1:]
                 if self.bus.fired(ref):
                     self._start_hash(task, ref)
+                    progressed = True
                 else:
                     still.append(task)
                 continue
-            # depends task：靠 cont_ref 触发，不受 wave 约束
             dep = task.get("depends")
             if dep:
                 if self.bus.fired(dep):
                     self._start_normal(task)
+                    progressed = True
                 else:
                     still.append(task)
                 continue
-            # 独立 task：只在当前 wave 里才能启动
             o = task.get("order", float("inf"))
             if o > wave:
                 still.append(task)
                 continue
             self._start_normal(task)
+            progressed = True
         self._pending = still
+        return progressed
 
     def _alive_watchers(self) -> list[Watcher]:
         with self._watcher_lock:
@@ -792,14 +796,16 @@ class Scheduler:
     def run(self) -> None:
         try:
             while True:
-                self._try_start()
+                progressed = self._try_start()
                 alive = self._alive_watchers()
                 if not self._pending and not alive:
                     break
-                if self._pending and not alive:
-                    # 没有活的 task 能再触发 cont_ref，剩下的永远等不到
+                if self._pending and not alive and not progressed:
+                    # 真正的死锁：没 task 被处理，也没活的 watcher 能 fire
                     self._mark_unreachable()
                     break
+                if progressed:
+                    continue  # 有进展（含纯 copy），立即重扫下一波
                 with self._verdict_cond:
                     self._verdict_cond.wait(timeout=0.3)
         except KeyboardInterrupt:
