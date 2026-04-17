@@ -11,8 +11,9 @@
 - cont_ref 命中的进程会继续存活，PID 写 .deploy.state；下次启动先 kill
 
 用法:
-    python deploy.py           # 部署 + 调度
-    python deploy.py -h        # 帮助
+    python deploy.py                        # 部署 + 调度
+    python deploy.py --appid=123 --env=prod # 命令行覆盖 manifest 变量
+    python deploy.py -h                     # 帮助
 
 首次使用: cp manifest.json.example manifest.json && vim manifest.json
 """
@@ -892,7 +893,7 @@ def _render_readme(readme_config: dict, tasks: list) -> None:
     log(f"  ✔ 已生成 {output_path}", style="ok")
 
 
-def run_deploy(manifest_path: str) -> None:
+def run_deploy(manifest_path: str, cli_vars: Optional[dict] = None) -> None:
     manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
     state_path = os.path.join(manifest_dir, STATE_FILE)
 
@@ -904,9 +905,16 @@ def run_deploy(manifest_path: str) -> None:
     manifest = load_manifest(manifest_path)
     log(f"  ✔ 共 {len(manifest.get('tasks', []))} 个任务", style="ok")
 
+    # CLI --key=value 覆盖 manifest.variables
+    if cli_vars:
+        variables = manifest.setdefault("variables", {})
+        variables.update(cli_vars)
+        for k, v in cli_vars.items():
+            log(f"  ⚙ CLI 覆盖: ${{{k}}} = {v}", style="warn")
+
     br()
     log("[Step 2] 解析变量 & 校验", style="section")
-    manifest = resolve_variables(manifest)  # _expand_all 返回新对象，tasks 要重新取
+    manifest = resolve_variables(manifest)
     for k, v in manifest.get("variables", {}).items():
         log(f"  ${{{k}}} = {v}", style="dim")
     validate(manifest)
@@ -948,14 +956,24 @@ def main() -> None:
     if args and args[0] in ("-h", "--help"):
         print_help()
         return
-    if args:
-        log(f"❌ 未知参数: {args[0]}", style="err")
+
+    # 解析 --key=value 作为变量覆盖（CLI 优先于 manifest.variables）
+    cli_vars: dict[str, str] = {}
+    bad_args: list[str] = []
+    for arg in args:
+        if arg.startswith("--") and "=" in arg:
+            key, _, value = arg[2:].partition("=")
+            cli_vars[key] = value
+        else:
+            bad_args.append(arg)
+    if bad_args:
+        log(f"❌ 未知参数: {bad_args[0]}", style="err")
         print_help()
         sys.exit(1)
 
     _open_log(f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log")
     try:
-        run_deploy("manifest.json")
+        run_deploy("manifest.json", cli_vars=cli_vars)
     except (FileNotFoundError, ValueError) as e:
         br()
         log(f"❌ 错误: {e}", style="err")
