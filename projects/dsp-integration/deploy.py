@@ -12,6 +12,7 @@
 
 用法:
     python deploy.py                        # 部署 + 调度
+    python deploy.py -y                     # 覆盖确认全部自动 y
     python deploy.py --appid=123 --env=prod # 命令行覆盖 manifest 变量
     python deploy.py -h                     # 帮助
 
@@ -50,6 +51,7 @@ from typing import Callable, Optional
 
 EXAMPLE_FILE = "manifest.json.example"
 STATE_FILE = ".deploy.state"
+_AUTO_YES = False  # -y/--yes 模式：覆盖确认全部自动 y
 
 # 变量替换策略：
 # - manifest.variables 内部相互引用用宽松模式，允许分轮展开
@@ -610,6 +612,9 @@ def atomic_copy(src: str, dest: str) -> None:
 
 def _prompt_overwrite(name: str) -> bool:
     log(f"  ⚠ [{name}] dest 与 src 不一致", style="warn")
+    if _AUTO_YES:
+        log("    ✔ -y 自动确认覆盖", style="dim")
+        return True
     try:
         return input("    覆盖? (y/n): ").strip().lower() == "y"
     except EOFError:
@@ -701,10 +706,14 @@ class Scheduler:
             log(f"    ✔ 已复制目录 {src}/", style="dim")
             return True
         log(f"  ⚠ [{name}] dest 目录已存在: {dest}", style="warn")
-        try:
-            ok = input("    合并覆盖? (y/n): ").strip().lower() == "y"
-        except EOFError:
-            ok = False
+        if _AUTO_YES:
+            log("    ✔ -y 自动确认合并覆盖", style="dim")
+            ok = True
+        else:
+            try:
+                ok = input("    合并覆盖? (y/n): ").strip().lower() == "y"
+            except EOFError:
+                ok = False
         if not ok:
             log("    ⏭ 跳过覆盖", style="dim")
             return True
@@ -927,6 +936,13 @@ def run_deploy(manifest_path: str, cli_vars: Optional[dict] = None) -> None:
     manifest = load_manifest(manifest_path)
     log(f"  ✔ 共 {len(manifest.get('tasks', []))} 个任务", style="ok")
 
+    # manifest 里 auto_yes: true 等同命令行 -y
+    global _AUTO_YES
+    if manifest.get("auto_yes"):
+        if not _AUTO_YES:
+            log("  ⚙ manifest.auto_yes=true → 覆盖确认全部自动 y", style="warn")
+        _AUTO_YES = True
+
     # CLI --key=value 覆盖 manifest.variables
     if cli_vars:
         variables = manifest.setdefault("variables", {})
@@ -979,11 +995,14 @@ def main() -> None:
         print_help()
         return
 
-    # 解析 --key=value 作为变量覆盖（CLI 优先于 manifest.variables）
+    # 解析参数：-y/--yes 自动确认 + --key=value 变量覆盖
+    global _AUTO_YES
     cli_vars: dict[str, str] = {}
     bad_args: list[str] = []
     for arg in args:
-        if arg.startswith("--") and "=" in arg:
+        if arg in ("-y", "--yes"):
+            _AUTO_YES = True
+        elif arg.startswith("--") and "=" in arg:
             key, _, value = arg[2:].partition("=")
             cli_vars[key] = value
         else:
