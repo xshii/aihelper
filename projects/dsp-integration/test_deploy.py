@@ -941,8 +941,8 @@ def t21(wd):
         {"tasks": [{"name": "hi", "order": 1, "usage": "echo hello from log test"}]},
     )
     rc, out = run_deploy(wd)
-    # 文件名带时间后缀，用 glob 找
-    logs = sorted(glob.glob(str(wd / "deploy_*.log")))
+    # 文件名带时间后缀，现在统一放在 deploy_log/ 目录下
+    logs = sorted(glob.glob(str(wd / "deploy_log" / "deploy_*.log")))
     if not logs:
         raise AssertionError(f"deploy_*.log 未生成\n{out}")
     log_path = Path(logs[-1])

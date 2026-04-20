@@ -713,24 +713,11 @@ class Scheduler:
         return True
 
     def _copy_dir(self, name: str, src: str, dest: str, auto_yes: bool) -> bool:
-        if not os.path.exists(dest):
-            shutil.copytree(src, dest)
-            log(f"    ✔ 已复制目录 {src}/", style="dim")
-            return True
-        log(f"  ⚠ [{name}] dest 目录已存在: {dest}", style="warn")
-        if auto_yes:
-            log("    ✔ 自动确认合并覆盖", style="dim")
-            ok = True
-        else:
-            try:
-                ok = input("    合并覆盖? (y/n): ").strip().lower() == "y"
-            except EOFError:
-                ok = False
-        if not ok:
-            log("    ⏭ 跳过覆盖", style="dim")
-            return True
+        # 目录直接合并覆盖，不 prompt（dest 已存在时的覆盖行为无害）
+        exists = os.path.exists(dest)
         shutil.copytree(src, dest, dirs_exist_ok=True)
-        log(f"    ✔ 已合并覆盖 {src}/", style="dim")
+        verb = "已合并覆盖" if exists else "已复制目录"
+        log(f"    ✔ {verb} {src}/", style="dim")
         return True
 
     # ──────────── 两种启动路径 ────────────
@@ -1024,7 +1011,9 @@ def main() -> None:
         print_help()
         sys.exit(1)
 
-    _open_log(f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log")
+    log_dir = "deploy_log"
+    os.makedirs(log_dir, exist_ok=True)
+    _open_log(os.path.join(log_dir, f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log"))
     try:
         run_deploy("manifest.json", cli_vars=cli_vars)
     except (FileNotFoundError, ValueError) as e:
