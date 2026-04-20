@@ -670,9 +670,14 @@ class Scheduler:
         if not src or not dest:
             return True
         if not os.path.exists(src):
-            log(f"    ✘ 源文件不存在: {src}", style="err")
+            log(f"    ✘ 源路径不存在: {src}", style="err")
             self.statuses[name] = ("fail", f"src not found: {src}")
             return False
+        if os.path.isdir(src):
+            return self._copy_dir(name, src, dest)
+        return self._copy_file(name, src, dest)
+
+    def _copy_file(self, name: str, src: str, dest: str) -> bool:
         dest_dir = os.path.dirname(dest)
         if dest_dir:
             os.makedirs(dest_dir, exist_ok=True)
@@ -681,13 +686,30 @@ class Scheduler:
             log(f"    ✔ 已复制 {src}", style="dim")
             return True
         if filecmp.cmp(src, dest, shallow=False):
-            log("    ✔ 配置一致，跳过复制", style="dim")
+            log("    ✔ 内容一致，跳过复制", style="dim")
             return True
         if not _prompt_overwrite(name):
             log("    ⏭ 跳过覆盖", style="dim")
             return True
         atomic_copy(src, dest)
         log(f"    ✔ 已覆盖 {src}", style="dim")
+        return True
+
+    def _copy_dir(self, name: str, src: str, dest: str) -> bool:
+        if not os.path.exists(dest):
+            shutil.copytree(src, dest)
+            log(f"    ✔ 已复制目录 {src}/", style="dim")
+            return True
+        log(f"  ⚠ [{name}] dest 目录已存在: {dest}", style="warn")
+        try:
+            ok = input("    合并覆盖? (y/n): ").strip().lower() == "y"
+        except EOFError:
+            ok = False
+        if not ok:
+            log("    ⏭ 跳过覆盖", style="dim")
+            return True
+        shutil.copytree(src, dest, dirs_exist_ok=True)
+        log(f"    ✔ 已合并覆盖 {src}/", style="dim")
         return True
 
     # ──────────── 两种启动路径 ────────────
