@@ -713,11 +713,14 @@ class Scheduler:
         return True
 
     def _copy_dir(self, name: str, src: str, dest: str, auto_yes: bool) -> bool:
-        # 目录直接合并覆盖，不 prompt（dest 已存在时的覆盖行为无害）
-        exists = os.path.exists(dest)
-        shutil.copytree(src, dest, dirs_exist_ok=True)
-        verb = "已合并覆盖" if exists else "已复制目录"
-        log(f"    ✔ {verb} {src}/", style="dim")
+        # 目录直接合并覆盖，不 prompt；dest 已存在时用 warn 提醒
+        if os.path.exists(dest):
+            log(f"    ⚠ dest 目录已存在，执行合并覆盖: {dest}", style="warn")
+            shutil.copytree(src, dest, dirs_exist_ok=True)
+            log(f"    ✔ 已合并覆盖 {src}/", style="dim")
+        else:
+            shutil.copytree(src, dest)
+            log(f"    ✔ 已复制目录 {src}/", style="dim")
         return True
 
     # ──────────── 两种启动路径 ────────────
