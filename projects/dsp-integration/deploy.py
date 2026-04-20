@@ -610,10 +610,10 @@ def atomic_copy(src: str, dest: str) -> None:
     os.replace(tmp, dest)
 
 
-def _prompt_overwrite(name: str) -> bool:
+def _prompt_overwrite(name: str, auto_yes: bool) -> bool:
     log(f"  ⚠ [{name}] dest 与 src 不一致", style="warn")
-    if _AUTO_YES:
-        log("    ✔ -y 自动确认覆盖", style="dim")
+    if auto_yes:
+        log("    ✔ 自动确认覆盖", style="dim")
         return True
     try:
         return input("    覆盖? (y/n): ").strip().lower() == "y"
@@ -678,11 +678,23 @@ class Scheduler:
             log(f"    ✘ 源路径不存在: {src}", style="err")
             self.statuses[name] = ("fail", f"src not found: {src}")
             return False
+        # global (-y 或 manifest.auto_yes) 或 per-task auto_yes 任一为真即自动 yes
+        effective_yes = _AUTO_YES or bool(task.get("auto_yes"))
+        # 类型冲突检查：src/dest 必须同类型
+        if os.path.exists(dest):
+            if os.path.isdir(src) and not os.path.isdir(dest):
+                log(f"    ✘ 类型冲突: src 是目录但 dest 是文件 ({dest})", style="err")
+                self.statuses[name] = ("fail", "type mismatch: dir src vs file dest")
+                return False
+            if not os.path.isdir(src) and os.path.isdir(dest):
+                log(f"    ✘ 类型冲突: src 是文件但 dest 是目录 ({dest})", style="err")
+                self.statuses[name] = ("fail", "type mismatch: file src vs dir dest")
+                return False
         if os.path.isdir(src):
-            return self._copy_dir(name, src, dest)
-        return self._copy_file(name, src, dest)
+            return self._copy_dir(name, src, dest, effective_yes)
+        return self._copy_file(name, src, dest, effective_yes)
 
-    def _copy_file(self, name: str, src: str, dest: str) -> bool:
+    def _copy_file(self, name: str, src: str, dest: str, task_yes: bool) -> bool:
         dest_dir = os.path.dirname(dest)
         if dest_dir:
             os.makedirs(dest_dir, exist_ok=True)
@@ -693,21 +705,21 @@ class Scheduler:
         if filecmp.cmp(src, dest, shallow=False):
             log("    ✔ 内容一致，跳过复制", style="dim")
             return True
-        if not _prompt_overwrite(name):
+        if not _prompt_overwrite(name, task_yes):
             log("    ⏭ 跳过覆盖", style="dim")
             return True
         atomic_copy(src, dest)
         log(f"    ✔ 已覆盖 {src}", style="dim")
         return True
 
-    def _copy_dir(self, name: str, src: str, dest: str) -> bool:
+    def _copy_dir(self, name: str, src: str, dest: str, auto_yes: bool) -> bool:
         if not os.path.exists(dest):
             shutil.copytree(src, dest)
             log(f"    ✔ 已复制目录 {src}/", style="dim")
             return True
         log(f"  ⚠ [{name}] dest 目录已存在: {dest}", style="warn")
-        if _AUTO_YES:
-            log("    ✔ -y 自动确认合并覆盖", style="dim")
+        if auto_yes:
+            log("    ✔ 自动确认合并覆盖", style="dim")
             ok = True
         else:
             try:
