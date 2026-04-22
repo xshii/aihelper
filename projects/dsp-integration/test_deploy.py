@@ -956,6 +956,262 @@ def t21(wd):
 
 
 # ════════════════════════════════════════════════════════════
+# T24 · src 路径不存在时中断整条流水线
+# ════════════════════════════════════════════════════════════
+@case("T24 · src 不存在 → 中断流水线 + 终止在跑进程")
+def t24(wd):
+    # 两个 task：order=1 启动一个 sleeper，order=2 引用不存在的 src
+    # 期望：order=1 被 terminate，整条 pipeline abort，exit 非 0
+    write_exec(
+        wd / "sleeper.sh",
+        "#!/bin/bash\necho started\nsleep 30\n",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "sleeper",
+                    "order": 1,
+                    "usage": "./sleeper.sh",
+                    "keyword": [{"word": "started", "cont_ref": "up"}],
+                },
+                {
+                    "name": "bad",
+                    "order": 2,
+                    "src": "does_not_exist.txt",
+                    "dest": "out/x.txt",
+                    "usage": "echo ok",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    if rc == 0:
+        raise AssertionError(f"期望非 0 退出，实际 rc=0\n{out}")
+    assert_in("源路径不存在", out, "缺失 src 错误信息")
+    assert_in("终止所有进程", out, "缺失致命错误终止日志")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T25 · error keyword 命中 → fail-fast，下游 skip + 自己进失败
+# ════════════════════════════════════════════════════════════
+@case("T25 · error keyword fail-fast 下游 skip")
+def t25(wd):
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "boom",
+                    "order": 1,
+                    "usage": "echo HELLO; echo FATAL_X",
+                    "keyword": [{"type": "error", "word": "FATAL_X"}],
+                },
+                {
+                    "name": "next",
+                    "order": 2,
+                    "usage": f"echo NEXT-RAN > {wd}/next.txt",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    if rc == 0:
+        raise AssertionError(f"期望 rc=1，实际 rc=0\n{out}")
+    assert_in("fail-fast 触发", out, "应有 fail-fast 触发日志")
+    assert_in("失败 (1)", out, "boom 应进入失败统计")
+    assert_in("跳过 (1)", out, "next 应进入跳过统计")
+    if (wd / "next.txt").exists():
+        raise AssertionError("next 不应被启动")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T26 · cont_ref task 失败 → 不触发 fail-fast，下游通过 depends 启动
+# ════════════════════════════════════════════════════════════
+@case("T26 · cont_ref task 失败不触发 fail-fast")
+def t26(wd):
+    write_exec(
+        wd / "srv.sh",
+        """#!/bin/bash
+echo "listening on port 8888"
+sleep 0.4
+echo "FATAL crashed"
+sleep 0.5
+""",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "srv",
+                    "order": 1,
+                    "usage": f"bash {wd}/srv.sh",
+                    "keyword": [
+                        {
+                            "type": "success",
+                            "cont_ref": "up",
+                            "word": r"listening on port \d+",
+                        },
+                        {"type": "error", "word": "FATAL"},
+                    ],
+                },
+                {
+                    "name": "downstream",
+                    "depends": "up",
+                    "usage": f"sleep 0.1; echo DOWN-RAN > {wd}/down.txt",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    if rc == 0:
+        raise AssertionError(f"期望 rc=1（srv 失败），实际 rc=0\n{out}")
+    assert_not_in("fail-fast 触发", out, "cont_ref task 失败不应触发 fail-fast")
+    if not (wd / "down.txt").exists():
+        raise AssertionError(f"downstream 应通过 cont_ref 触发并完成\n{out}")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T27 · ★ fail-fast 触发后，同 wave 在跑的无辜 task 显示什么？
+# ════════════════════════════════════════════════════════════
+@case("T27 · fail-fast 强杀同 wave 在跑 task 的状态语义")
+def t27(wd):
+    # 同 wave 两个独立 task：boom 命中 error 触发 fail-fast，
+    # innocent 还在 sleep 中被强杀。
+    # 期望：innocent 不应被记为 ❌ 失败（它没失败，是被中断），
+    # 应该显示为某种"中断/跳过"状态。
+    write_exec(
+        wd / "innocent.sh",
+        "#!/bin/bash\necho INNOCENT_STARTED\nsleep 3\necho SHOULD_NOT_APPEAR\n",
+    )
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "boom",
+                    "order": 1,
+                    "usage": "sleep 0.3; echo FATAL_NOW",
+                    "keyword": [{"type": "error", "word": "FATAL_NOW"}],
+                },
+                {
+                    "name": "innocent",
+                    "order": 1,
+                    "usage": f"bash {wd}/innocent.sh",
+                },
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    assert_not_in("SHOULD_NOT_APPEAR", out, "innocent 进程必须被终止")
+    if rc == 0:
+        raise AssertionError(f"期望 rc=1，实际 rc=0\n{out}")
+    # 关键 assert：innocent 不应在失败统计里被列为"失败"——它是无辜被强杀的
+    if "─ innocent" in out and "失败" in out.split("─ innocent")[0].rsplit("✅", 1)[-1].rsplit("❌", 1)[-1]:
+        # 粗略检查：innocent 后面如果距离 "❌ 失败" 比 "⏭ 跳过" 近，说明它被记 fail
+        idx_inn = out.find("─ innocent")
+        idx_fail = out.rfind("❌ 失败", 0, idx_inn)
+        idx_skip = out.rfind("⏭ 跳过", 0, idx_inn)
+        if idx_fail > idx_skip:
+            raise AssertionError(
+                f"★ BUG: innocent 被强杀后被记为 ❌ 失败，应该是 ⏭ 跳过/中断\n"
+                f"完整输出:\n{out}"
+            )
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T28 · --manifest=path 指定其它清单
+# ════════════════════════════════════════════════════════════
+@case("T28 · --manifest=path 自定义清单路径")
+def t28(wd):
+    custom = wd / "custom-manifest.json"
+    custom.write_text(
+        json.dumps({"tasks": [{"name": "ok", "usage": f"echo OK > {wd}/ok.txt"}]})
+    )
+    result = subprocess.run(
+        [PY, str(DEPLOY), f"--manifest={custom}"],
+        cwd=str(wd),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=15,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"期望 rc=0，实际 {result.returncode}\n{result.stdout}")
+    if not (wd / "ok.txt").exists():
+        raise AssertionError("custom manifest 里的 task 未执行")
+    # 反向：默认 manifest.json 不存在时不应被读
+    if (wd / "manifest.json").exists():
+        raise AssertionError("custom 测试不应留下 manifest.json")
+    return f"rc={result.returncode}"
+
+
+# ════════════════════════════════════════════════════════════
+# T29 · success keyword 不被 verdict 翻译影响（保护现有路径）
+# ════════════════════════════════════════════════════════════
+@case("T29 · success keyword 命中仍应记 success")
+def t29(wd):
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {
+                    "name": "ok",
+                    "order": 1,
+                    "usage": "echo READY",
+                    "keyword": [{"type": "success", "word": "READY"}],
+                },
+                {"name": "next", "order": 2, "usage": "echo continued"},
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    if rc != 0:
+        raise AssertionError(f"期望 rc=0，实际 rc={rc}\n{out}")
+    assert_in("成功 (2)", out, "ok + next 都应在成功列表")
+    assert_not_in("fail-fast", out, "成功路径不应触发 fail-fast")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
+# T30 · 跨 wave fail-fast：wave1 全成功，wave2 失败 → wave3 skip
+# ════════════════════════════════════════════════════════════
+@case("T30 · 跨 wave fail-fast")
+def t30(wd):
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {"name": "w1a", "order": 1, "usage": "echo W1A"},
+                {
+                    "name": "w2-boom",
+                    "order": 2,
+                    "usage": "echo PRE; echo FATAL_BOOM",
+                    "keyword": [{"type": "error", "word": "FATAL_BOOM"}],
+                },
+                {"name": "w3", "order": 3, "usage": f"echo W3 > {wd}/w3.txt"},
+            ]
+        },
+    )
+    rc, out = run_deploy(wd, timeout=10)
+    if rc == 0:
+        raise AssertionError(f"期望 rc=1，实际 rc=0\n{out}")
+    if (wd / "w3.txt").exists():
+        raise AssertionError("w3 不应启动")
+    assert_in("成功 (1)", out, "w1a 应成功")
+    assert_in("失败 (1)", out, "w2-boom 应失败")
+    assert_in("跳过 (1)", out, "w3 应跳过")
+    return f"rc={rc}"
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 

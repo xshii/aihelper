@@ -14,6 +14,7 @@
     python deploy.py                        # 部署 + 调度
     python deploy.py -y                     # 覆盖确认全部自动 y
     python deploy.py --appid=123 --env=prod # 命令行覆盖 manifest 变量
+    python deploy.py --manifest=path/x.json # 指定其它 manifest 路径（默认 manifest.json）
     python deploy.py -h                     # 帮助
 
 首次使用: cp manifest.json.example manifest.json && vim manifest.json
@@ -370,6 +371,10 @@ class ProcessStream:
         self._cond = threading.Condition()
         self.closed = False
         self.detached = False
+        # 区分两种 terminate：
+        # - watcher 自己命中 keyword 后调 terminate() = self-terminate（视为正常 verdict）
+        # - Scheduler._terminate_all 触发的 = force-terminate（视为被中断，标 skip 不是 fail）
+        self.force_terminated = False
         self._reader = threading.Thread(
             target=self._read, daemon=True, name=f"reader-{task_name}"
         )
@@ -534,11 +539,16 @@ class Watcher(threading.Thread):
             self.bus.fire(cont_ref, self.cursor, self.stream)
             return False  # 不 seal，继续扫后续 keyword
         self.stream.terminate()
-        self._seal(kw_type, f"keyword#{idx}({kw_type}) matched")
+        verdict = "fail" if kw_type == "error" else "success"
+        self._seal(verdict, f"keyword#{idx}({kw_type}) matched")
         return True
 
     def _finalize_on_close(self) -> None:
         if self.verdict is not None:
+            return
+        # 被外部强杀（fail-fast / Ctrl+C） → skip，不是 fail
+        if self.stream.force_terminated:
+            self._seal("skip", "被外部中断（fail-fast / 用户中止）")
             return
         rc = self.stream.proc.returncode
         had_error = any(e.startswith("error") for e in self.events)
@@ -637,6 +647,7 @@ class Scheduler:
         self.watchers: list[Watcher] = []
         self._watcher_lock = threading.Lock()
         self._verdict_cond = threading.Condition()
+        self._fail_fast = False  # 任一无 cont_ref 的 task 失败 → 触发，停止启动新 task
         # 初始 pending：有 usage / src / #task 的
         runnable = [
             t
@@ -650,6 +661,19 @@ class Scheduler:
 
     def _on_verdict(self, w: Watcher) -> None:
         self.statuses[w.task["name"]] = (w.verdict or "fail", w.reason)
+        # fail-fast：某 task 失败立即终止所有任务
+        # 例外：定义了 cont_ref 的 task（长跑服务）失败不拖死 pipeline
+        if w.verdict == "fail" and not self._fail_fast:
+            has_cont_ref = any(
+                "cont_ref" in kw for kw in w.task.get("keyword", [])
+            )
+            if not has_cont_ref:
+                self._fail_fast = True
+                log(
+                    f"  ⏹ fail-fast 触发: [{w.task['name']}] 失败，终止所有任务",
+                    style="err",
+                )
+                self._terminate_all()
         with self._verdict_cond:
             self._verdict_cond.notify_all()
 
@@ -675,9 +699,8 @@ class Scheduler:
         if not src or not dest:
             return True
         if not os.path.exists(src):
-            log(f"    ✘ 源路径不存在: {src}", style="err")
-            self.statuses[name] = ("fail", f"src not found: {src}")
-            return False
+            # 源路径缺失是配置错误，不是运行时失败 → 中断整个流水线
+            raise ValueError(f"[{name}] 源路径不存在: {src}")
         # global (-y 或 manifest.auto_yes) 或 per-task auto_yes 任一为真即自动 yes
         effective_yes = _AUTO_YES or bool(task.get("auto_yes"))
         # 类型冲突检查：src/dest 必须同类型
@@ -782,6 +805,13 @@ class Scheduler:
 
     def _try_start(self) -> bool:
         """尝试启动所有当前可启动的 task。返回是否有 task 被处理（含纯 copy）。"""
+        if self._fail_fast:
+            for t in self._pending:
+                self.statuses.setdefault(
+                    t["name"], ("skip", "fail-fast: 前序任务失败")
+                )
+            self._pending = []
+            return False
         wave = self._current_wave()
         still: list[dict] = []
         progressed = False
@@ -822,9 +852,11 @@ class Scheduler:
         self._pending = []
 
     def _terminate_all(self) -> None:
-        """终止所有子进程（包括 detached 的常驻进程）。"""
+        """终止所有子进程（fail-fast / Ctrl+C 触发）。
+        标记 force_terminated 让 watcher 区分"被强杀"和"自己失败"，强杀的标 skip 不是 fail。"""
         with self._watcher_lock:
             for w in self.watchers:
+                w.stream.force_terminated = True
                 w.stream.terminate()
 
     def run(self) -> None:
@@ -846,6 +878,11 @@ class Scheduler:
             br()
             log("⏹ Ctrl+C 中断，终止所有进程", style="warn")
             self._terminate_all()
+        except Exception:
+            br()
+            log("⏹ 致命错误，终止所有进程", style="err")
+            self._terminate_all()
+            raise
 
     def detached_entries(self) -> list[dict]:
         with self._watcher_lock:
@@ -997,13 +1034,16 @@ def main() -> None:
         print_help()
         return
 
-    # 解析参数：-y/--yes 自动确认 + --key=value 变量覆盖
+    # 解析参数：-y/--yes 自动确认 + --manifest=path 指定清单 + --key=value 变量覆盖
     global _AUTO_YES
+    manifest_path = "manifest.json"
     cli_vars: dict[str, str] = {}
     bad_args: list[str] = []
     for arg in args:
         if arg in ("-y", "--yes"):
             _AUTO_YES = True
+        elif arg.startswith("--manifest="):
+            manifest_path = arg.split("=", 1)[1]
         elif arg.startswith("--") and "=" in arg:
             key, _, value = arg[2:].partition("=")
             cli_vars[key] = value
@@ -1018,7 +1058,7 @@ def main() -> None:
     os.makedirs(log_dir, exist_ok=True)
     _open_log(os.path.join(log_dir, f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log"))
     try:
-        run_deploy("manifest.json", cli_vars=cli_vars)
+        run_deploy(manifest_path, cli_vars=cli_vars)
     except (FileNotFoundError, ValueError) as e:
         br()
         log(f"❌ 错误: {e}", style="err")
