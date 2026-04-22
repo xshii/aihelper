@@ -1,0 +1,16 @@
+team_id: team-b
+repo_root: ../team-b-repo
+
+artifacts:
+  binaries:
+    - path: build/output/bin/team-b-core.elf
+      type: elf
+    - path: build/output/lib/libteam-b.so
+      type: shared_lib
+  metadata:
+    version_file: build/output/VERSION
+    commit_source: git
+
+resource_table:
+  excel: resources/source/team-b.xlsx
+  xml: resources/team-b.xml

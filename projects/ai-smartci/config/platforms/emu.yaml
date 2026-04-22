@@ -1,0 +1,19 @@
+platform: emu
+packager: EmuPackager
+
+post_process:
+  - name: image_convert
+    usage: scripts/emu/post_process/convert.sh ${pkg_dir}/work
+    keyword:
+      - { type: success, word: "Convert done" }
+      - { type: error,   word: "ERROR" }
+
+smoke_entry:
+  usage: scripts/emu/smoke/run.sh ${pkg_dir}/work --report ${report_path}
+  keyword:
+    - { type: error,   word: "FATAL" }
+    - { type: success, word: "SMOKE COMPLETE" }
+
+output:
+  format: tar.gz
+  naming: "hw-{platform}-{version}-{commit_short}"

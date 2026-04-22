@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<hardware>
+  <cluster type="cpu_cluster" number="2">
+    <ref table="tbl_a_irq"/>
+    <ref table="tbl_a_mem"/>
+  </cluster>
+  <table name="tbl_a_irq" count="2">
+    <irq id="1" handler="h_a1"/>
+    <irq id="2" handler="h_a2"/>
+  </table>
+  <table name="tbl_a_mem" count="1">
+    <mem id="dram0"/>
+  </table>
+</hardware>

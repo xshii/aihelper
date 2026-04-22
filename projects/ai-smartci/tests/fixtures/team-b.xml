@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<hardware>
+  <cluster type="cpu_cluster" number="1">
+    <ref table="tbl_b_irq"/>
+  </cluster>
+  <table name="tbl_b_irq" count="1">
+    <irq id="3" handler="h_b3"/>
+  </table>
+</hardware>

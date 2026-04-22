@@ -1,0 +1,24 @@
+platform: fpga
+packager: FpgaPackager           # smartci/packaging/packager/fpga_packager.py 里 @register
+
+# 前置加工：smoke 阶段在跑冒烟前按顺序执行
+# 每条直接渲染成 deploy.py 的 task（usage / keyword 透传）
+post_process:
+  - name: address_remap
+    usage: scripts/fpga/post_process/remap.sh ${pkg_dir}/work --mode smoke
+    keyword:
+      - { type: success, word: "Remap done" }
+      - { type: error,   word: "ERROR" }
+  - name: sign
+    usage: python scripts/fpga/post_process/sign.py ${pkg_dir}/work
+
+# 冒烟入口：smartci 调起，脚本必须往 $SMARTCI_REPORT_PATH 写 JSON 报告
+smoke_entry:
+  usage: scripts/fpga/smoke/run.sh ${pkg_dir}/work --report ${report_path}
+  keyword:
+    - { type: error,   word: "FATAL" }
+    - { type: success, word: "SMOKE COMPLETE" }
+
+output:
+  format: tar.gz
+  naming: "hw-{platform}-{version}-{commit_short}"

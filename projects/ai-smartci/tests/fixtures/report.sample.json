@@ -1,0 +1,12 @@
+{
+  "platform": "fpga",
+  "passed": 2,
+  "failed": 1,
+  "skipped": 0,
+  "duration_sec": 42.5,
+  "cases": [
+    {"name": "boot", "status": "pass", "duration_sec": 10.0},
+    {"name": "dma_loopback", "status": "fail", "duration_sec": 5.0, "message": "timeout"},
+    {"name": "reg_rw", "status": "pass", "duration_sec": 27.5}
+  ]
+}

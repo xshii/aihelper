@@ -1,0 +1,15 @@
+platform: test-plat
+packager: TestPackager
+post_process:
+  - name: demo_step
+    usage: scripts/test/demo.sh ${pkg_dir}
+    keyword:
+      - { type: success, word: "done" }
+smoke_entry:
+  usage: scripts/test/run.sh ${pkg_dir} --report ${report_path}
+  keyword:
+    - { type: error,   word: "FATAL" }
+    - { type: success, word: "SMOKE COMPLETE" }
+output:
+  format: tar.gz
+  naming: "hw-{platform}-{version}-{commit_short}"

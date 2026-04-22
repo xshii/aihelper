@@ -1,0 +1,10 @@
+name: ai-smartci
+type: demo
+description: 硬件产品多团队协作工具：资源表合并 + 冒烟打包/执行（复用 dsp-integration/deploy.py 作为流水线引擎）
+language: python
+tags: [smartci, pipeline, hardware, multi-team, oop]
+status: experimental
+difficulty: intermediate
+created: 2026-04-22
+run: python -m smartci --help
+test: pytest tests/

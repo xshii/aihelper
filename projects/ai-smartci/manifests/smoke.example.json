@@ -1,0 +1,51 @@
+{
+  "description": "smartci smoke 阶段手写示例 — 直接给 deploy.py 跑",
+  "_note": "实际跑时由 smartci.manifest_render.SmokeManifestAssembler 动态渲染；本文件用于演示 task schema",
+
+  "variables": {
+    "version": "v1.2.3",
+    "commit": "a4f9d0",
+    "platform": "fpga",
+    "pkg_dir": "/tmp/smartci-work/${version}-${commit}",
+    "report_path": "/tmp/smartci-work/${version}-${commit}/report.json"
+  },
+
+  "tasks": [
+    {
+      "name": "pull",
+      "order": 1,
+      "usage": "echo 'TODO: artifact-cli pull hw-${platform}-${version}-${commit}.tar.gz -o ${pkg_dir}'",
+      "keyword": [
+        { "type": "success", "word": "downloaded" }
+      ]
+    },
+    {
+      "name": "extract",
+      "order": 2,
+      "usage": "mkdir -p ${pkg_dir}/work && echo 'TODO: tar xzf ${pkg_dir}/*.tar.gz -C ${pkg_dir}/work'"
+    },
+    {
+      "name": "address_remap",
+      "order": 3,
+      "usage": "echo 'TODO: scripts/fpga/post_process/remap.sh ${pkg_dir}/work --mode smoke'; echo 'Remap done'",
+      "keyword": [
+        { "type": "success", "word": "Remap done" },
+        { "type": "error",   "word": "ERROR" }
+      ]
+    },
+    {
+      "name": "sign",
+      "order": 4,
+      "usage": "echo 'TODO: python scripts/fpga/post_process/sign.py ${pkg_dir}/work'"
+    },
+    {
+      "name": "smoke-run",
+      "order": 5,
+      "usage": "echo 'TODO: scripts/fpga/smoke/run.sh ${pkg_dir}/work --report ${report_path}'; echo 'SMOKE COMPLETE'",
+      "keyword": [
+        { "type": "error",   "word": "FATAL" },
+        { "type": "success", "word": "SMOKE COMPLETE" }
+      ]
+    }
+  ]
+}

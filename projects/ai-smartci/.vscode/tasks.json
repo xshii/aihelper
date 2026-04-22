@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "smartci: --help",
+      "type": "shell",
+      "command": "python -m smartci --help",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "problemMatcher": []
+    },
+    {
+      "label": "smartci: pip install",
+      "type": "shell",
+      "command": "pip install -r requirements.txt",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "problemMatcher": []
+    },
+    {
+      "label": "smartci: resource merge (local example)",
+      "type": "shell",
+      "command": "python -m smartci resource merge --inputs resources/team-a.xml resources/team-b.xml --output resources/final.xml",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "problemMatcher": []
+    },
+    {
+      "label": "deploy.py: run build.example.json",
+      "type": "shell",
+      "command": "python ../dsp-integration/deploy.py --manifest=manifests/build.example.json -y",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "problemMatcher": []
+    },
+    {
+      "label": "deploy.py: run smoke.example.json",
+      "type": "shell",
+      "command": "python ../dsp-integration/deploy.py --manifest=manifests/smoke.example.json -y",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "problemMatcher": []
+    },
+    {
+      "label": "smartci: pytest",
+      "type": "shell",
+      "command": "pytest tests/ -v",
+      "options": { "cwd": "${workspaceFolder}/projects/ai-smartci" },
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}
