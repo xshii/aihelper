@@ -18,7 +18,8 @@
 6. [与 PAL 的关系](#6-与-pal-的关系)
 7. [从单 FPGA 到多平台的演进路线](#7-从单-fpga-到多平台的演进路线)
 8. [pytest 主体如何融入分层](#8-pytest-主体如何融入分层)
-9. [常见问题](#9-常见问题)
+9. [Autotest 自身的测试策略](#9-autotest-自身的测试策略)
+10. [常见问题](#10-常见问题)
 
 ---
 
@@ -565,7 +566,213 @@ def adapter(request):
 
 ---
 
-## 9. 常见问题
+## 9. Autotest 自身的测试策略
+
+Autotest 是"测试 AI 芯片"的框架，它自己一旦有 bug，所有用例结果都不可信。本章讲 **meta-testing**——Autotest 自己怎么被测试。
+
+### 9.1 为什么需要
+
+- 能力服务层有真实的业务逻辑（比数策略、首发散阶段定位、自动回落等），改错会让"测试通过"变得假
+- Adapter 实现要保证**端口接口契约**（能力服务依赖的接口语义）不破坏
+- 架构演进（加平台、换调度器）时需要回归保护
+
+**没有 meta-testing 的后果**：一次 bug 可能让整轮回归结果集体不可信，而没人能第一时间察觉。
+
+### 9.2 三层测试金字塔
+
+Autotest 的测试策略和被测 AI 芯片的测试策略是两回事，这里说的是**前者**：
+
+```
+            ┌─────────────────────────────┐
+            │  端到端回归（dummy adapter） │   慢，少
+            │  · 全链路跑一遍               │
+            │  · 用 fake 平台 adapter       │
+            └──────────────┬──────────────┘
+                           │
+            ┌──────────────▼──────────────┐
+            │  契约测试（adapter ↔ 端口）  │   中，中
+            │  · 每个 adapter 单独测        │
+            │  · 验证实现了端口接口语义     │
+            └──────────────┬──────────────┘
+                           │
+            ┌──────────────▼──────────────┐
+            │  单元测试（核心领域 + 服务） │   快，多
+            │  · 纯函数 / 纯逻辑            │
+            │  · Mock 所有外部依赖          │
+            └─────────────────────────────┘
+```
+
+### 9.3 单元测试：核心领域 + 能力服务
+
+**核心领域**（用例 / 裁决 / 版本 / 枚举）都是纯数据 + 纯逻辑，单测直接建对象：
+
+```python
+# tests_meta/domain/test_verdict.py
+from autotest.domain import Verdict, BitCompareResult
+
+def test_verdict_bit_exact_pass():
+    result = BitCompareResult(total=1000, diff_count=0)
+    assert result.verdict is Verdict.PASS
+
+def test_verdict_bit_exact_fail_with_single_diff():
+    result = BitCompareResult(total=1000, diff_count=1)
+    assert result.verdict is Verdict.FAIL   # 一个 bit 差就 FAIL（ADR-02）
+```
+
+**能力服务**依赖端口接口，单测用 `unittest.mock` 或手写的 FakeAdapter：
+
+```python
+# tests_meta/services/test_auto_fallback.py
+from autotest.services import AutoFallback
+from tests_meta.fakes import FakeAdapter, FakeCompareExecutor
+
+def test_fallback_on_end_to_end_failure():
+    adapter = FakeAdapter()
+    compare = FakeCompareExecutor(standard_result=Verdict.FAIL)
+    fallback = AutoFallback(adapter=adapter, compare=compare)
+
+    fallback.run(case=perf_case)
+
+    # 标准路径 FAIL 后应该自动切备选路径
+    assert compare.fallback_invoked
+    assert fallback.mode_history == ["end_to_end", "stage_compare"]
+```
+
+**要求**：
+- 速度快（单测总时长 < 30 秒）
+- 不接真实平台
+- 覆盖率目标：核心领域 ≥ 90%，能力服务 ≥ 80%
+
+### 9.4 契约测试：Adapter ↔ 端口
+
+每个 adapter 都要跑同一套"**端口契约测试**"，确认实现符合能力服务的期望：
+
+```python
+# tests_meta/contract/test_adapter_contract.py
+import pytest
+
+ADAPTERS_UNDER_TEST = [FpgaAdapter, LinkAdapter, Rtl2cAdapter, EmuAdapter]
+
+@pytest.fixture(params=ADAPTERS_UNDER_TEST)
+def adapter_cls(request):
+    return request.param
+
+def test_load_version_returns_none(adapter_cls, mock_baseline):
+    adapter = adapter_cls()
+    result = adapter.load_version(mock_baseline)
+    assert result is None                           # 端口契约：返回 None
+
+def test_start_business_returns_start_result(adapter_cls, mock_case):
+    adapter = adapter_cls()
+    result = adapter.start_business(mock_case)
+    assert isinstance(result, StartResult)          # 端口契约：返回领域对象
+
+def test_switch_case_respects_strategy(adapter_cls, mock_case):
+    adapter = adapter_cls()
+    adapter.switch_case(mock_case, SwitchStrategy.SOFT)
+    # adapter 必须能处理三种切换策略
+```
+
+**关键点**：同一套测试**跑每个 adapter**，保证新增 adapter 时自动覆盖。违反契约的 adapter 在契约测试里直接被捕获，而不是等到整轮回归才暴露。
+
+### 9.5 端到端回归：用 Dummy Adapter 验证全链路
+
+写一个 **DummyAdapter**——实现所有端口接口，返回确定性假数据：
+
+```python
+# tests_meta/fakes/dummy_adapter.py
+class DummyAdapter:
+    """用于 Autotest 自测的假 adapter：
+    - load_version / switch_case 等都是 no-op
+    - start_business 返回 StartResult(ready=True)
+    - read_tensor 返回固定的 dummy Tensor
+    - compare 返回配置好的 Verdict
+    """
+    def __init__(self, verdict_plan: list[Verdict]):
+        self._verdict_plan = list(verdict_plan)
+
+    def load_version(self, baseline): pass
+    def start_business(self, case): return StartResult(ready=True)
+    def trigger_stimulus(self): pass
+    # ...
+    def compare(self, golden) -> Verdict:
+        return self._verdict_plan.pop(0)
+```
+
+端到端 meta 回归：
+
+```python
+# tests_meta/e2e/test_regression_flow.py
+def test_first_case_pass_triggers_mode_switch():
+    """验证首用例策略：首用例 PASS 后自动切 end_to_end。"""
+    adapter = DummyAdapter(verdict_plan=[Verdict.PASS, Verdict.PASS, Verdict.PASS])
+    runner = CaseRunner(adapter)
+
+    # 跑一个套件：1 首用例 + 2 常规用例
+    results = runner.run_suite(TEST_SUITE)
+
+    assert all(r.verdict is Verdict.PASS for r in results)
+    # 验证框架行为：首用例用 stage_compare，后续切 end_to_end
+    assert results[0].compare_mode == "stage_compare"
+    assert results[1].compare_mode == "end_to_end"
+    assert results[2].compare_mode == "end_to_end"
+
+def test_perf_end_to_end_fail_triggers_fallback():
+    """验证性能用例失败自动回落阶段性比数。"""
+    adapter = DummyAdapter(verdict_plan=[Verdict.FAIL, Verdict.FAIL])
+    runner = CaseRunner(adapter)
+    result = runner.run_case(PERF_CASE)
+
+    # 第一次 end_to_end FAIL 后自动切 stage_compare 再跑
+    assert result.attempts[0].mode == "end_to_end"
+    assert result.attempts[1].mode == "stage_compare"
+```
+
+**目的**：用假平台验证 Autotest **自己的流程**是否正确，**不依赖真实硬件**。
+
+### 9.6 在 CI 中的位置
+
+```
+开发者提 PR
+   │
+   ▼
+Pre-submit CI
+   ├─ lint / type check
+   ├─ meta 单元测试（9.3）          ← 必过
+   ├─ meta 契约测试（9.4）          ← 必过
+   └─ meta 端到端回归（9.5，dummy）  ← 必过
+   │
+   ▼
+Post-merge CI（按 00 · 4.9）
+   ├─ link 准入
+   ├─ fpga / rtl2c
+   └─ emu
+```
+
+**Meta 测试是 pre-submit 必过项**——pre-submit 不依赖真实硬件，只用 dummy adapter + 单测，所以秒级可跑。这样每个 PR 都能保证 Autotest 自身没被改坏。
+
+### 9.7 覆盖率目标
+
+| 层 | 覆盖率目标 | 工具 |
+|---|---|---|
+| 核心领域 | ≥ 90% (line) | `pytest-cov` |
+| 能力服务 | ≥ 80% (line + branch) | `pytest-cov` |
+| Adapter | 契约测试覆盖所有端口方法 | 契约测试清单 |
+| 端到端（Dummy）| 覆盖 4.9 流水线所有分支 + 自动切换逻辑 | 行为断言 |
+
+### 9.8 meta 测试自己的边界
+
+不要过度测试：
+
+- **不测 pytest 本身**（它是依赖，不是我们的代码）
+- **不测 CMC / LAVA / EMU API 客户端**（它们是外部系统）
+- **不测真实硬件行为**（那是 AI 芯片用例的职责）
+
+meta 测试只保证"**我们写的框架代码自己没 bug**"。
+
+---
+
+## 10. 常见问题
 
 | 问题 | 解答 |
 |---|---|
