@@ -244,7 +244,7 @@ mypy smartci --python-version 3.9
 | manifest 里想跳过某个 task | **做不到**（deploy.py 无 task 级 when）。拆成独立 manifest，CLI if/else 选择调 |
 | 要跨 manifest 传变量 | 动态的 CLI `--key=value`，静态的写 `_shared/vars.json` |
 | 要读运行期 git commit | 在 smartci cli.py 里拿，以 `--commit=...` CLI 参数传 |
-| smartci 跑在另一台机器（scripts/deploy.py 不存在） | 设环境变量 `SMARTCI_DEPLOY_PY=/path/to/deploy.py` |
+| smartci 跑在另一台机器（scripts/deploy.py 不存在） | 把 deploy.py 拷到 `scripts/deploy.py` 即可 |
 
 ---
 

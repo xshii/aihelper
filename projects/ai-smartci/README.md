@@ -91,8 +91,7 @@ manifest.variables  <  platforms/_shared/vars.json  <  CLI --key=value
 ## deploy.py 落点
 
 smartci 需要 `deploy.py`。优先级：
-1. 环境变量 `SMARTCI_DEPLOY_PY`
-2. `scripts/deploy.py`（独立部署时拷贝于此）
-3. monorepo `../dsp-integration/deploy.py`（开发时 fallback）
+1. `scripts/deploy.py`（独立部署时拷贝于此）
+2. monorepo `../dsp-integration/deploy.py`（开发时 fallback）
 
 详见 [scripts/README.md](./scripts/README.md)。

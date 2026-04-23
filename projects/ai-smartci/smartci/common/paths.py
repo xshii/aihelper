@@ -11,7 +11,6 @@ from typing import Optional
 from smartci.const import (
     DEPLOY_PY_FILENAME,
     DEPLOY_PY_RELATIVE,
-    ENV_DEPLOY_PY,
     ENV_ROOT,
     PLATFORMS_DIR_NAME,
     SCRIPTS_DIR_NAME,
@@ -51,15 +50,11 @@ def deploy_py(override: Optional[Path] = None) -> Path:
 
     优先级:
       1. 参数 override
-      2. 环境变量 SMARTCI_DEPLOY_PY
-      3. 本仓 scripts/deploy.py（独立部署时）
-      4. fallback: monorepo 同级 ../dsp-integration/deploy.py（开发便利）
+      2. 本仓 scripts/deploy.py（独立部署时拷进来即生效）
+      3. fallback: monorepo 同级 ../dsp-integration/deploy.py（开发便利）
     """
     if override:
         return Path(override).resolve()
-    env = os.environ.get(ENV_DEPLOY_PY)
-    if env:
-        return Path(env).resolve()
     bundled = project_root() / SCRIPTS_DIR_NAME / DEPLOY_PY_FILENAME
     if bundled.exists():
         return bundled

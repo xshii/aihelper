@@ -16,9 +16,8 @@ cp <path-to>/dsp-integration/deploy.py scripts/deploy.py
 `smartci.common.paths.deploy_py()` 的优先级：
 
 1. 函数参数 override
-2. 环境变量 `SMARTCI_DEPLOY_PY`
-3. **本仓 `scripts/deploy.py`**（独立部署时）
-4. fallback：monorepo `../dsp-integration/deploy.py`（开发时便利）
+2. **本仓 `scripts/deploy.py`**（独立部署时拷进来即生效）
+3. fallback：monorepo `../dsp-integration/deploy.py`（开发时便利）
 
 ## 契约
 
