@@ -11,11 +11,15 @@
 - cont_ref 命中的进程会继续存活，PID 写 .deploy.state；下次启动先 kill
 
 用法:
-    python deploy.py                        # 部署 + 调度
-    python deploy.py -y                     # 覆盖确认全部自动 y
-    python deploy.py --appid=123 --env=prod # 命令行覆盖 manifest 变量
-    python deploy.py --manifest=path/x.json # 指定其它 manifest 路径（默认 manifest.json）
-    python deploy.py -h                     # 帮助
+    python deploy.py                                  # 部署 + 调度
+    python deploy.py -y                               # 覆盖确认全部自动 y
+    python deploy.py --appid=123 --env=prod           # CLI 覆盖 manifest 变量
+    python deploy.py --manifest=path/x.json           # 指定其它 manifest 路径（默认 manifest.json）
+    python deploy.py --vars-file=path/vars.json       # 从 JSON 文件批量加载公共变量
+    python deploy.py -h                               # 帮助
+
+变量优先级（低→高覆盖）:
+    manifest.variables  <  --vars-file  <  --key=value CLI 显式
 
 首次使用: cp manifest.json.example manifest.json && vim manifest.json
 """
@@ -963,7 +967,22 @@ def _render_readme(readme_config: dict, tasks: list) -> None:
     log(f"  ✔ 已生成 {output_path}", style="ok")
 
 
-def run_deploy(manifest_path: str, cli_vars: Optional[dict] = None) -> None:
+def _load_vars_file(path: str) -> dict:
+    """从 JSON 文件加载一组变量（单层 dict，值强转 str）。"""
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"vars-file 不存在: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        raise ValueError(f"vars-file 必须是 JSON 对象 (dict)，实际: {type(data).__name__}")
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def run_deploy(
+    manifest_path: str,
+    cli_vars: Optional[dict] = None,
+    vars_file: Optional[str] = None,
+) -> None:
     manifest_dir = os.path.dirname(os.path.abspath(manifest_path)) or "."
     state_path = os.path.join(manifest_dir, STATE_FILE)
 
@@ -982,7 +1001,15 @@ def run_deploy(manifest_path: str, cli_vars: Optional[dict] = None) -> None:
             log("  ⚙ manifest.auto_yes=true → 覆盖确认全部自动 y", style="warn")
         _AUTO_YES = True
 
-    # CLI --key=value 覆盖 manifest.variables
+    # 变量合并优先级（低 → 高覆盖）:
+    #   manifest.variables  <  --vars-file 文件  <  --key=value CLI 显式
+    if vars_file:
+        file_vars = _load_vars_file(vars_file)
+        variables = manifest.setdefault("variables", {})
+        variables.update(file_vars)
+        for k, v in file_vars.items():
+            log(f"  ⚙ vars-file 覆盖: ${{{k}}} = {v}", style="warn")
+
     if cli_vars:
         variables = manifest.setdefault("variables", {})
         variables.update(cli_vars)
@@ -1034,9 +1061,10 @@ def main() -> None:
         print_help()
         return
 
-    # 解析参数：-y/--yes 自动确认 + --manifest=path 指定清单 + --key=value 变量覆盖
+    # 解析参数：-y/--yes + --manifest=path + --vars-file=path + --key=value
     global _AUTO_YES
     manifest_path = "manifest.json"
+    vars_file: Optional[str] = None
     cli_vars: dict[str, str] = {}
     bad_args: list[str] = []
     for arg in args:
@@ -1044,6 +1072,8 @@ def main() -> None:
             _AUTO_YES = True
         elif arg.startswith("--manifest="):
             manifest_path = arg.split("=", 1)[1]
+        elif arg.startswith("--vars-file="):
+            vars_file = arg.split("=", 1)[1]
         elif arg.startswith("--") and "=" in arg:
             key, _, value = arg[2:].partition("=")
             cli_vars[key] = value
@@ -1058,7 +1088,7 @@ def main() -> None:
     os.makedirs(log_dir, exist_ok=True)
     _open_log(os.path.join(log_dir, f"deploy_{time.strftime('%Y%m%d_%H%M%S')}.log"))
     try:
-        run_deploy(manifest_path, cli_vars=cli_vars)
+        run_deploy(manifest_path, cli_vars=cli_vars, vars_file=vars_file)
     except (FileNotFoundError, ValueError) as e:
         br()
         log(f"❌ 错误: {e}", style="err")

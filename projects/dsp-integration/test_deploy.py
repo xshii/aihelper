@@ -1212,6 +1212,90 @@ def t30(wd):
 
 
 # ════════════════════════════════════════════════════════════
+# T31 · --vars-file 从 JSON 批量加载变量（单层 dict）
+# ════════════════════════════════════════════════════════════
+@case("T31 · --vars-file 批量加载变量")
+def t31(wd):
+    vars_path = wd / "shared.json"
+    vars_path.write_text(json.dumps({"greet": "hello", "who": "world"}))
+    write_manifest(
+        wd,
+        {
+            "tasks": [
+                {"name": "echo", "order": 1, "usage": "echo ${greet} ${who}"},
+            ]
+        },
+    )
+    result = subprocess.run(
+        [PY, str(DEPLOY), f"--vars-file={vars_path}"],
+        cwd=str(wd), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+    )
+    if result.returncode != 0:
+        raise AssertionError(f"期望 rc=0，实际 {result.returncode}\n{result.stdout}")
+    assert_in("hello world", result.stdout, "vars-file 变量未被替换")
+
+
+# ════════════════════════════════════════════════════════════
+# T32 · 变量优先级: manifest < vars-file < CLI --key=value
+# ════════════════════════════════════════════════════════════
+@case("T32 · 变量优先级 manifest < vars-file < CLI")
+def t32(wd):
+    vars_path = wd / "shared.json"
+    vars_path.write_text(json.dumps({"x": "FROM_FILE"}))
+    write_manifest(
+        wd,
+        {
+            "variables": {"x": "FROM_MANIFEST"},
+            "tasks": [{"name": "echo", "order": 1, "usage": "echo x=${x}"}],
+        },
+    )
+    # 只给 vars-file → 覆盖 manifest
+    r1 = subprocess.run(
+        [PY, str(DEPLOY), f"--vars-file={vars_path}"],
+        cwd=str(wd), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+    )
+    assert_in("x=FROM_FILE", r1.stdout, "vars-file 应覆盖 manifest.variables")
+
+    # 再给 CLI --x=FROM_CLI → 进一步覆盖 vars-file
+    r2 = subprocess.run(
+        [PY, str(DEPLOY), f"--vars-file={vars_path}", "--x=FROM_CLI"],
+        cwd=str(wd), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+    )
+    assert_in("x=FROM_CLI", r2.stdout, "CLI --key=value 应覆盖 vars-file")
+
+
+# ════════════════════════════════════════════════════════════
+# T33 · --vars-file 不存在 / 格式错误 → 明确错误
+# ════════════════════════════════════════════════════════════
+@case("T33 · --vars-file 缺失 / 非 dict 报错")
+def t33(wd):
+    write_manifest(wd, {"tasks": [{"name": "t", "order": 1, "usage": "echo ok"}]})
+
+    r1 = subprocess.run(
+        [PY, str(DEPLOY), "--vars-file=nope.json"],
+        cwd=str(wd), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+    )
+    if r1.returncode == 0:
+        raise AssertionError(f"缺失文件应非 0，实际 {r1.returncode}")
+    assert_in("vars-file 不存在", r1.stdout, "缺失文件应有明确错误")
+
+    bad = wd / "bad.json"
+    bad.write_text('["not", "a", "dict"]')
+    r2 = subprocess.run(
+        [PY, str(DEPLOY), f"--vars-file={bad}"],
+        cwd=str(wd), stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=10,
+    )
+    if r2.returncode == 0:
+        raise AssertionError(f"非 dict 应非 0，实际 {r2.returncode}")
+    assert_in("必须是 JSON 对象", r2.stdout, "非 dict 应有明确错误")
+
+
+# ════════════════════════════════════════════════════════════
 # runner
 # ════════════════════════════════════════════════════════════
 
