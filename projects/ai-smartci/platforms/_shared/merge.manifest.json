@@ -1,0 +1,18 @@
+{
+  "description": "公共流程：合并多团队资源表到 resources/final.xml",
+  "variables": {
+    "team_a_xml": "resources/team-a.xml",
+    "team_b_xml": "resources/team-b.xml",
+    "final_xml":  "resources/final.xml"
+  },
+  "tasks": [
+    {
+      "name": "merge-resource",
+      "order": 1,
+      "usage": "python -m smartci resource merge --inputs ${team_a_xml} ${team_b_xml} --output ${final_xml}",
+      "keyword": [
+        { "type": "error", "word": "ERROR|Traceback" }
+      ]
+    }
+  ]
+}

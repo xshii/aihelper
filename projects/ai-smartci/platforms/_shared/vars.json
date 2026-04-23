@@ -1,0 +1,7 @@
+{
+  "_comment": "跨 manifest 共享的静态公参（仓内固化）。smartci 自动 --vars-file 附给每次 deploy.py 调用。按需增删。",
+  "artifact_endpoint": "https://artifacts.example.com",
+  "artifact_namespace": "hw-product",
+  "artifact_tool": "artifact-cli",
+  "workdir_base": "/tmp/smartci"
+}

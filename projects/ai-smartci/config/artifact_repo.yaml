@@ -1,8 +1,0 @@
-# 全局制品仓配置（所有团队共享同一个制品仓）
-endpoint: https://artifacts.example.com
-namespace: hw-product
-tool: artifact-cli         # 已有的二进制工具名（封装在 smartci/artifact/client.py）
-auth:
-  type: env
-  user_var: ARTIFACT_USER
-  token_var: ARTIFACT_TOKEN

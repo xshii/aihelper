@@ -1,0 +1,41 @@
+{
+  "description": "emu 冒烟流水线：拉合并产物 → bundle 脚本（格式转换）→ 跑冒烟入口",
+  "variables": {
+    "pkg_dir":     "${workdir_base}/${version}-${commit_short}",
+    "report_path": "${workdir_base}/${version}-${commit_short}/report.json"
+  },
+  "tasks": [
+    {
+      "name": "pull",
+      "order": 1,
+      "usage": "artifact-cli pull hw-${platform}-${version}-${commit_short}.tar.gz -o ${pkg_dir}",
+      "keyword": [
+        { "type": "success", "word": "downloaded" },
+        { "type": "error",   "word": "404|ERROR" }
+      ]
+    },
+    {
+      "name": "extract",
+      "order": 2,
+      "usage": "mkdir -p ${pkg_dir}/work && tar xzf ${pkg_dir}/hw-*.tar.gz -C ${pkg_dir}/work"
+    },
+    {
+      "name": "image_convert",
+      "order": 3,
+      "usage": "platforms/emu/bundle/convert.sh ${pkg_dir}/work",
+      "keyword": [
+        { "type": "success", "word": "Convert done" },
+        { "type": "error",   "word": "ERROR" }
+      ]
+    },
+    {
+      "name": "smoke-run",
+      "order": 4,
+      "usage": "platforms/emu/smoke/run.sh ${pkg_dir}/work --report ${report_path}",
+      "keyword": [
+        { "type": "error",   "word": "FATAL" },
+        { "type": "success", "word": "SMOKE COMPLETE" }
+      ]
+    }
+  ]
+}

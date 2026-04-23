@@ -1,23 +1,40 @@
 """smartci CLI 入口（click 命令组）
 
-PURPOSE: 顶层动词 build / smoke + 辅助组 resource / artifact。
-PATTERN: click 回调极薄，业务逻辑全部委托给对应 Pipeline / Service 类。
-FOR: 团队成员日常调用；弱 AI 写新子命令时模仿这套结构。
+三组命令:
+  - resource  资源表 Excel ↔ XML 合并校验（独立业务）
+  - bundle    打包流水线（合并 → 平台打包上传）
+  - smoke     冒烟流水线（拉产物 → bundle 脚本 → 跑用例）
+
+bundle/smoke 都是 subprocess 调 deploy.py 跑对应 manifest，
+smartci 不做 task 编排，只做 CLI 参数到 --key=value 的透传 +
+可选附加仓内固化 vars-file（platforms/_shared/vars.json）。
 """
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import click
 
-from smartci.artifact.client import default_client
-from smartci.const import DEFAULT_LIST_LIMIT
-from smartci.packaging.pipeline import BuildPipeline
+from smartci.common.paths import platform_manifest, platforms_dir, shared_manifest
+from smartci.const import SHARED_SUBDIR
 from smartci.resource_merge.converter import ExcelToXmlConverter
 from smartci.resource_merge.merger import XmlMerger
 from smartci.resource_merge.validator import XmlValidator
-from smartci.smoke.pipeline import SmokePipeline
+from smartci.runner import run_deploy
+
+
+SHARED_VARS_FILE = platforms_dir() / SHARED_SUBDIR / "vars.json"
+
+
+def _shared_vars_file() -> Optional[Path]:
+    """返回 platforms/_shared/vars.json 路径（若存在），否则 None。"""
+    return SHARED_VARS_FILE if SHARED_VARS_FILE.exists() else None
+
+
+def _run_with_defaults(manifest: Path, cli_vars: Dict[str, str]) -> int:
+    """统一入口：自动带上 _shared/vars.json（如有）+ 透传 CLI 变量。"""
+    return run_deploy(manifest, cli_vars=cli_vars, vars_file=_shared_vars_file())
 
 
 @click.group()
@@ -55,64 +72,51 @@ def validate(input_path: str) -> None:
     XmlValidator().validate(Path(input_path))
 
 
-# ── 主流程 ─────────────────────────────────────────────
+# ── 打包流水线 ─────────────────────────────────────────
 @cli.command()
+@click.option("--platform", required=True)
 @click.option("--team", required=True)
 @click.option("--peer", required=True)
 @click.option("--peer-version", default="latest")
 @click.option("--peer-commit", default=None)
-@click.option("--platforms", required=True, help="逗号分隔，如 fpga,emu")
-@click.option("--skip-merge", is_flag=True)
-@click.option("--no-upload", is_flag=True)
-def build(
-    team: str, peer: str, peer_version: str, peer_commit: Optional[str],
-    platforms: str, skip_merge: bool, no_upload: bool,
+@click.option("--skip-merge", is_flag=True,
+              help="跳过公共 merge stage（resources/final.xml 已就绪时用）")
+def bundle(
+    platform: str, team: str, peer: str,
+    peer_version: str, peer_commit: Optional[str], skip_merge: bool,
 ) -> None:
-    """构建打包阶段（merge + 联合打包 + 上传）"""
-    pipeline = BuildPipeline(
-        team=team, peer=peer,
-        peer_version=peer_version, peer_commit=peer_commit,
-        platforms=platforms.split(","),
-        skip_merge=skip_merge, no_upload=no_upload,
-    )
-    raise SystemExit(pipeline.run())
+    """打包流水线：合并资源表（可选）→ 平台 bundle（拉对方产物 + 打包 + 上传）"""
+    cli_vars: Dict[str, str] = {
+        "platform": platform, "team": team,
+        "peer": peer, "peer_version": peer_version,
+    }
+    if peer_commit:
+        cli_vars["peer_commit"] = peer_commit
+
+    if not skip_merge:
+        rc = _run_with_defaults(shared_manifest("merge"), cli_vars)
+        if rc != 0:
+            raise SystemExit(rc)
+
+    raise SystemExit(_run_with_defaults(platform_manifest(platform, "bundle"), cli_vars))
 
 
+# ── 冒烟流水线 ─────────────────────────────────────────
 @cli.command()
-@click.option("--version", required=True)
-@click.option("--commit", required=True)
 @click.option("--platform", required=True)
-def smoke(version: str, commit: str, platform: str) -> None:
-    """冒烟执行阶段（拉合并产物 + 加工 + 跑冒烟）"""
-    pipeline = SmokePipeline(version=version, commit=commit, platform=platform)
-    raise SystemExit(pipeline.run())
-
-
-# ── 制品仓 ─────────────────────────────────────────────
-@cli.group()
-def artifact() -> None:
-    """制品仓查询 / 下载（debug 用）"""
-
-
-@artifact.command(name="list")
-@click.option("--team", default=None)
-@click.option("--limit", default=DEFAULT_LIST_LIMIT, type=int)
-def artifact_list(team: Optional[str], limit: int) -> None:
-    """查询制品"""
-    for entry in default_client().list(team=team, limit=limit):
-        click.echo(entry)
-
-
-@artifact.command()
-@click.option("--name", required=True)
 @click.option("--version", required=True)
 @click.option("--commit", required=True)
-@click.option("--output-dir", default=".")
-def pull(name: str, version: str, commit: str, output_dir: str) -> None:
-    """下载产物"""
-    default_client().pull(
-        name=name, version=version, commit=commit, output_dir=Path(output_dir)
-    )
+@click.option("--commit-short", default=None,
+              help="短 commit（默认取 --commit 前 8 位）")
+def smoke(
+    platform: str, version: str, commit: str, commit_short: Optional[str],
+) -> None:
+    """冒烟流水线：拉合并产物 → bundle 脚本 → 跑冒烟入口"""
+    cli_vars: Dict[str, str] = {
+        "platform": platform, "version": version, "commit": commit,
+        "commit_short": commit_short or commit[:8],
+    }
+    raise SystemExit(_run_with_defaults(platform_manifest(platform, "smoke"), cli_vars))
 
 
 if __name__ == "__main__":

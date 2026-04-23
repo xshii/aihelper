@@ -1,0 +1,35 @@
+{
+  "description": "FPGA 打包流水线：拉对方团队产物 + 打包 + 上传",
+  "variables": {
+    "work_dir":   "/tmp/smartci-bundle/${team}-${platform}",
+    "peer_dir":   "/tmp/smartci-bundle/${team}-${platform}/peer",
+    "out_pkg":    "/tmp/smartci-bundle/${team}-${platform}/hw-${platform}-${version}-${commit_short}.tar.gz"
+  },
+  "tasks": [
+    {
+      "name": "fetch-peer",
+      "order": 1,
+      "usage": "mkdir -p ${peer_dir} && echo 'TODO: artifact-cli pull ${peer}-${peer_version}* -o ${peer_dir}'",
+      "keyword": [
+        { "type": "error", "word": "ERROR|404" }
+      ]
+    },
+    {
+      "name": "build-package",
+      "order": 2,
+      "usage": "platforms/fpga/bundle/build.sh ${work_dir} ${out_pkg}",
+      "keyword": [
+        { "type": "success", "word": "PACKAGE OK" },
+        { "type": "error",   "word": "ERROR" }
+      ]
+    },
+    {
+      "name": "upload",
+      "order": 3,
+      "usage": "echo 'TODO: artifact-cli push ${out_pkg}'",
+      "keyword": [
+        { "type": "error", "word": "ERROR|403" }
+      ]
+    }
+  ]
+}

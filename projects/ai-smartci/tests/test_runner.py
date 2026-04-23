@@ -1,55 +1,54 @@
-"""DeployRunner - mock subprocess 验证命令行组装 + manifest 写出"""
+"""run_deploy - mock subprocess 验证命令行组装（cli_vars + vars_file）"""
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest import mock
 
-from smartci.const import (
-    DEPLOY_AUTO_YES_ARG,
-    DEPLOY_MANIFEST_ARG,
-    DEPLOY_MANIFEST_FILENAME,
-)
-from smartci.runner import DeployRunner
+from smartci.runner import run_deploy
 
 
-def test_runner_writes_manifest_and_invokes_deploy_py(tmp_path):
-    workdir = tmp_path / "run"
-    manifest = {"variables": {"v": "1"}, "tasks": [{"name": "t", "usage": "echo"}]}
+def _fake_deploy():
+    return mock.patch("smartci.runner.deploy_py", return_value=Path("/fake/deploy.py"))
 
-    with mock.patch("smartci.runner.subprocess.run") as runfn:
+
+def test_run_deploy_minimal_call(tmp_path):
+    with mock.patch("smartci.runner.subprocess.run") as runfn, _fake_deploy():
         runfn.return_value = mock.Mock(returncode=0)
-        runner = DeployRunner(deploy_py=Path("/fake/deploy.py"))
-        rc = runner.run(manifest, workdir, exec_cwd=tmp_path)
+        rc = run_deploy(tmp_path / "m.json")
 
     assert rc == 0
-    # manifest 被写到 workdir/manifest.json
-    written = workdir / DEPLOY_MANIFEST_FILENAME
-    assert written.exists()
-    assert json.loads(written.read_text()) == manifest
-
-    # subprocess 调用参数：python deploy.py --manifest=<path> -y
     args = runfn.call_args.args[0]
     assert args[1] == "/fake/deploy.py"
-    assert args[2] == f"{DEPLOY_MANIFEST_ARG}={written}"
-    assert DEPLOY_AUTO_YES_ARG in args
+    assert args[2].startswith("--manifest=")
+    assert "-y" in args
 
 
-def test_runner_auto_yes_false_omits_flag(tmp_path):
-    with mock.patch("smartci.runner.subprocess.run") as runfn:
+def test_run_deploy_cli_vars_become_key_value_flags(tmp_path):
+    cli_vars = {"team": "team-a", "platform": "fpga"}
+    with mock.patch("smartci.runner.subprocess.run") as runfn, _fake_deploy():
+        runfn.return_value = mock.Mock(returncode=0)
+        run_deploy(tmp_path / "m.json", cli_vars=cli_vars)
+
+    args = runfn.call_args.args[0]
+    assert "--team=team-a" in args
+    assert "--platform=fpga" in args
+
+
+def test_run_deploy_vars_file_passed(tmp_path):
+    vf = tmp_path / "vars.json"
+    vf.write_text("{}", encoding="utf-8")
+    with mock.patch("smartci.runner.subprocess.run") as runfn, _fake_deploy():
+        runfn.return_value = mock.Mock(returncode=0)
+        run_deploy(tmp_path / "m.json", vars_file=vf)
+
+    args = runfn.call_args.args[0]
+    assert f"--vars-file={vf}" in args
+
+
+def test_run_deploy_auto_yes_false_omits_flag(tmp_path):
+    with mock.patch("smartci.runner.subprocess.run") as runfn, _fake_deploy():
         runfn.return_value = mock.Mock(returncode=2)
-        runner = DeployRunner(deploy_py=Path("/fake/deploy.py"), auto_yes=False)
-        rc = runner.run({"tasks": []}, tmp_path / "run")
+        rc = run_deploy(tmp_path / "m.json", auto_yes=False)
 
     assert rc == 2
-    args = runfn.call_args.args[0]
-    assert DEPLOY_AUTO_YES_ARG not in args
-
-
-def test_runner_default_deploy_py_resolves():
-    """未指定 deploy_py 时 paths.deploy_py() 应返回一个以 deploy.py 结尾的路径。
-
-    可能是 scripts/deploy.py（本仓自包含）或 ../dsp-integration/deploy.py（monorepo fallback）。
-    """
-    runner = DeployRunner()
-    assert str(runner.deploy_py).endswith("deploy.py")
+    assert "-y" not in runfn.call_args.args[0]
