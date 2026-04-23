@@ -27,7 +27,7 @@
     {
       "name": "address_remap",
       "order": 3,
-      "usage": "echo 'TODO: scripts/fpga/post_process/remap.sh ${pkg_dir}/work --mode smoke'; echo 'Remap done'",
+      "usage": "echo 'TODO: platforms/fpga/bundle/remap.sh ${pkg_dir}/work --mode smoke'; echo 'Remap done'",
       "keyword": [
         { "type": "success", "word": "Remap done" },
         { "type": "error",   "word": "ERROR" }
@@ -36,12 +36,12 @@
     {
       "name": "sign",
       "order": 4,
-      "usage": "echo 'TODO: python scripts/fpga/post_process/sign.py ${pkg_dir}/work'"
+      "usage": "echo 'TODO: python platforms/fpga/bundle/sign.py ${pkg_dir}/work'"
     },
     {
       "name": "smoke-run",
       "order": 5,
-      "usage": "echo 'TODO: scripts/fpga/smoke/run.sh ${pkg_dir}/work --report ${report_path}'; echo 'SMOKE COMPLETE'",
+      "usage": "echo 'TODO: platforms/fpga/smoke/run.sh ${pkg_dir}/work --report ${report_path}'; echo 'SMOKE COMPLETE'",
       "keyword": [
         { "type": "error",   "word": "FATAL" },
         { "type": "success", "word": "SMOKE COMPLETE" }

@@ -1,6 +1,6 @@
 platform: test-plat
 packager: TestPackager
-post_process:
+bundle:
   - name: demo_step
     usage: scripts/test/demo.sh ${pkg_dir}
     keyword:

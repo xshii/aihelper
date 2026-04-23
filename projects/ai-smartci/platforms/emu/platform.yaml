@@ -1,15 +1,21 @@
 platform: emu
 packager: EmuPackager
 
-post_process:
+package_entry:
+  usage: platforms/emu/package/build.sh ${intermediate_dir} ${output_dir}
+  keyword:
+    - { type: success, word: "PACKAGE OK" }
+    - { type: error,   word: "ERROR" }
+
+bundle:
   - name: image_convert
-    usage: scripts/emu/post_process/convert.sh ${pkg_dir}/work
+    usage: platforms/emu/bundle/convert.sh ${pkg_dir}/work
     keyword:
       - { type: success, word: "Convert done" }
       - { type: error,   word: "ERROR" }
 
 smoke_entry:
-  usage: scripts/emu/smoke/run.sh ${pkg_dir}/work --report ${report_path}
+  usage: platforms/emu/smoke/run.sh ${pkg_dir}/work --report ${report_path}
   keyword:
     - { type: error,   word: "FATAL" }
     - { type: success, word: "SMOKE COMPLETE" }

@@ -56,17 +56,17 @@ def test_build_manifest_parallel_platforms_share_order():
 
 
 def test_smoke_manifest_threads_platform_config():
-    post_process = [
+    bundle = [
         {"name": "remap", "usage": "scripts/x.sh",
          "keyword": [{"type": "success", "word": "done"}]},
     ]
     smoke_entry = {"usage": "scripts/run.sh", "keyword": [{"type": "error", "word": "F"}]}
     manifest = SmokeManifestAssembler(
         version="v1", commit="abc", platform="fpga",
-        post_process=post_process, smoke_entry=smoke_entry,
+        bundle=bundle, smoke_entry=smoke_entry,
     ).assemble()
     names = [t["name"] for t in manifest["tasks"]]
-    # 必含 pull/extract/remap（透传 post_process）/smoke-run
+    # 必含 pull/extract/remap（透传 bundle）/smoke-run
     assert names[0] == "pull" and names[1] == "extract"
     assert "remap" in names
     assert names[-1] == "smoke-run"

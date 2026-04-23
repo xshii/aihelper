@@ -13,11 +13,11 @@
 smartci 是一个**独立的工具仓库**，被各团队仓库拉取使用。它统一解决两件事：
 
 1. **硬件资源表合并**：Excel → 团队 XML → 合并 XML
-2. **冒烟支撑**：联合打包（多平台）+ 制品仓管理 + 仿真平台前置加工 + 冒烟执行
+2. **冒烟支撑**：联合打包（多平台）+ 制品仓管理 + 仿真平台 bundle + 冒烟执行
 
 冒烟支撑进一步拆为**两个解耦的阶段**：
 - **构建打包阶段（build）**：合并资源表 + 拉对方产物 + 联合打包 + 上传
-- **冒烟执行阶段（smoke）**：拉合并产物 + 前置加工 + 跑冒烟用例
+- **冒烟执行阶段（smoke）**：拉合并产物 + bundle（镜像组装）+ 跑冒烟用例
 
 两阶段独立可调用：同一个合并产物可以被多次冒烟，跑冒烟无需重新构建。
 
@@ -43,7 +43,7 @@ smartci/
 │   │   ├── team-a.yaml             # 团队 A 的配置（产物路径、构建信息等）
 │   │   └── team-b.yaml
 │   ├── platforms/
-│   │   ├── fpga.yaml               # fpga 平台的打包参数 + 前置加工脚本
+│   │   ├── fpga.yaml               # fpga 平台的打包参数 + bundle 脚本
 │   │   └── emu.yaml
 │   └── schema/
 │       └── resource.xsd            # 资源表 XSD
@@ -68,7 +68,7 @@ smartci/
 │   │   └── registry.py
 │   └── pipeline.py                 # 构建打包流程编排
 ├── smoke/                          # 【模块 2B】冒烟执行
-│   ├── post_process/
+│   ├── bundle/
 │   │   └── runner.py               # 执行平台自定义加工脚本
 │   ├── runner.py                   # 调用团队冒烟入口脚本
 │   ├── report.py                   # 解析冒烟 JSON 报告
@@ -224,7 +224,7 @@ hw-fpga-v1.2.3-a4f9d0/
 
 按团队子目录的好处：
 - 不会出现重名冲突（团队各管自己的命名空间）
-- 平台前置加工脚本可以按团队路径精准定位文件
+- 平台 bundle脚本可以按团队路径精准定位文件
 - 排查问题时一眼看出哪个团队的二进制
 
 **平台打包器基类（模板方法）**：
@@ -345,28 +345,28 @@ smartci build \
 ### 5.1 流程
 ```
 1. 从制品仓拉合并产物（按 --version / --commit / --platform）
-2. 平台前置加工（若该平台 yaml 中声明）
+2. 平台 bundle（若该平台 yaml 中声明）
 3. 调用团队冒烟入口脚本
 4. 解析 JSON 报告，输出统一 run-report.json
 ```
 
 冒烟阶段不依赖团队源码、不依赖本地构建产物，只依赖制品仓 + 平台配置 + 冒烟入口脚本。
 
-### 5.2 平台前置加工
+### 5.2 平台 bundle
 
 有些平台在运行前需要对二进制做加工（地址转换、格式转换、加签名等）。
 
 **设计**：加工脚本作为**平台配置的一部分**，由 smartci 调用，不内嵌到 Python 代码。
 
 ```yaml
-# config/platforms/fpga.yaml
+# platforms/fpga/platform.yaml
 platform: fpga
-post_process:
+bundle:
   - name: address_remap
-    script: scripts/fpga/remap.sh
+    script: platforms/fpga/bundle/remap.sh
     args: ["--mode", "smoke"]
   - name: sign
-    script: scripts/fpga/sign.py
+    script: platforms/fpga/bundle/sign.py
 ```
 
 脚本语言任意（Shell / Python），Linux 平台。smartci 负责：
@@ -416,7 +416,7 @@ smartci smoke \
 
 | 配置层 | 位置 | 变更频率 | Owner |
 |--------|------|----------|-------|
-| smartci 全局 | `config/artifact_repo.yaml`、`config/platforms/*.yaml` | 低 | smartci 维护者 |
+| smartci 全局 | `config/artifact_repo.yaml`、`platforms/*/platform.yaml` | 低 | smartci 维护者 |
 | 团队配置 | `config/teams/{team}.yaml` | 中 | 各团队自行维护 |
 | 运行时参数 | CLI 参数 | 每次运行 | 使用者 |
 
@@ -444,12 +444,12 @@ smoke_entry: scripts/smoke/team-a-run.sh   # 可选：团队级冒烟入口
 
 ### 6.3 平台配置示例
 ```yaml
-# config/platforms/fpga.yaml
+# platforms/fpga/platform.yaml
 platform: fpga
 packager: FpgaPackager            # 类名，自动匹配已注册的 packager
-post_process:
+bundle:
   - name: address_remap
-    script: scripts/fpga/remap.sh
+    script: platforms/fpga/bundle/remap.sh
 output:
   format: tar.gz
   naming: "hw-{platform}-{version}-{commit_short}"
@@ -470,7 +470,7 @@ auth:
 
 ### 6.5 流水线引擎：复用 dsp-integration/deploy.py
 
-smartci 不重新发明流水线调度。构建打包、冒烟执行、平台前置加工的「按依赖跑一串子进程 + 监听 stdout 关键字 + 跨步骤状态传递」全部复用 `projects/dsp-integration/deploy.py`。
+smartci 不重新发明流水线调度。构建打包、冒烟执行、平台 bundle的「按依赖跑一串子进程 + 监听 stdout 关键字 + 跨步骤状态传递」全部复用 `projects/dsp-integration/deploy.py`。
 
 **调用方式**：smartci 把 yaml 配置渲染成临时 manifest.json，然后 subprocess 调用：
 
@@ -489,10 +489,10 @@ deploy.py 已支持 `--manifest=path` 参数指定非默认路径，向后兼容
 
 **platform yaml 直接套 manifest task schema**：
 ```yaml
-# config/platforms/fpga.yaml
-post_process:
+# platforms/fpga/platform.yaml
+bundle:
   - name: address_remap
-    usage: scripts/fpga/remap.sh ${pkg_dir}/work --mode smoke
+    usage: platforms/fpga/bundle/remap.sh ${pkg_dir}/work --mode smoke
     keyword:
       - {type: success, word: "Remap done"}
       - {type: error,   word: "ERROR"}
@@ -503,7 +503,7 @@ smoke_entry:
     - {type: success, word: "SMOKE COMPLETE"}
 ```
 
-平台维护者学一次 manifest task 语法，build / smoke / 前置加工三处都用。
+平台维护者学一次 manifest task 语法，build / smoke / bundle三处都用。
 
 **smartci Python 代码相应瘦身**——不实现进程管理 / 关键字监听 / 变量替换 / 并行调度，只保留：
 1. 业务模块：`resource_merge` / `packaging.packager` / `artifact.client`
@@ -621,7 +621,7 @@ python smartci/cli.py smoke --version v1.2.3 --commit a4f9d0 --platform fpga
 5. 制品仓二进制工具的具体接口（上传/下载命令、错误码）
 6. 各团队本地构建产物的具体清单
 7. fpga/emu 平台特定的打包细节（需要哪些文件、目录结构）
-8. 仿真平台前置加工的具体脚本（各平台团队提供）
+8. 仿真平台 bundle的具体脚本（各平台团队提供）
 9. 冒烟入口脚本的位置与参数（团队 / 平台谁优先）
 10. 版本号 `VERSION` 文件的格式约定
 
@@ -648,5 +648,5 @@ python smartci/cli.py smoke --version v1.2.3 --commit a4f9d0 --platform fpga
 | M2 | 资源表 convert + merge 可用（含 1-2 个示例 Strategy） |
 | M3 | 联合打包器框架 + fpga/emu 两个 Packager |
 | M4 | build 流程端到端跑通（含上传） |
-| M5 | smoke 流程端到端跑通（含前置加工 + 报告解析） |
+| M5 | smoke 流程端到端跑通（含bundle + 报告解析） |
 | M6 | 补齐所有资源策略 + 语义校验 + 文档 |

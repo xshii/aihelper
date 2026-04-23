@@ -36,7 +36,7 @@ class ManifestBuilder:
         return self
 
     def raw_task(self, task: Dict[str, Any]) -> "ManifestBuilder":
-        """直接塞 task dict（platform yaml 的 post_process 透传场景）。"""
+        """直接塞 task dict（platform yaml 的 bundle 透传场景）。"""
         self._tasks.append(dict(task))
         return self
 
@@ -101,13 +101,13 @@ class SmokeManifestAssembler:
     """冒烟执行阶段的 manifest 装配器。
 
     接受扁平字段（不依赖 PlatformConfig 等上层类），保持单向依赖：
-      post_process / smoke_entry 由 SmokePipeline 从 yaml 配置解构后传入。
+      bundle / smoke_entry 由 SmokePipeline 从 yaml 配置解构后传入。
     """
 
     version: str
     commit: str
     platform: str
-    post_process: List[Dict[str, Any]] = field(default_factory=list)
+    bundle: List[Dict[str, Any]] = field(default_factory=list)
     smoke_entry: Dict[str, Any] = field(default_factory=dict)
     workdir_template: str = "/tmp/smartci-work/${version}-${commit}"
 
@@ -140,7 +140,7 @@ class SmokeManifestAssembler:
         )
         order += 1
 
-        for step in self.post_process:
+        for step in self.bundle:
             b.raw_task({**step, "order": order})
             order += 1
 

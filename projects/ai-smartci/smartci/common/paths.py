@@ -11,10 +11,13 @@ from typing import Optional
 from smartci.const import (
     CONFIG_DIR_NAME,
     DEFAULT_WORKDIR_BASE,
+    DEPLOY_PY_FILENAME,
     DEPLOY_PY_RELATIVE,
     ENV_DEPLOY_PY,
     ENV_ROOT,
     ENV_WORKDIR,
+    PLATFORMS_DIR_NAME,
+    SCRIPTS_DIR_NAME,
 )
 
 
@@ -36,6 +39,11 @@ def config_dir() -> Path:
     return project_root() / CONFIG_DIR_NAME
 
 
+def platforms_dir() -> Path:
+    """平台自治目录（platforms/{plat}/platform.yaml + package/bundle/smoke 脚本）"""
+    return project_root() / PLATFORMS_DIR_NAME
+
+
 def workdir(run_id: str) -> Path:
     """每次 build/smoke 的临时工作目录（manifest.json + .deploy.state 落地处）。"""
     base = Path(os.environ.get(ENV_WORKDIR, DEFAULT_WORKDIR_BASE))
@@ -43,13 +51,20 @@ def workdir(run_id: str) -> Path:
 
 
 def deploy_py(override: Optional[Path] = None) -> Path:
-    """定位 dsp-integration/deploy.py。
+    """定位 deploy.py。
 
-    优先级：参数 > SMARTCI_DEPLOY_PY 环境变量 > 同级仓库 ../dsp-integration/deploy.py
+    优先级:
+      1. 参数 override
+      2. 环境变量 SMARTCI_DEPLOY_PY
+      3. 本仓 scripts/deploy.py（独立部署时；把 deploy.py 拷进来即生效）
+      4. fallback: monorepo 同级 ../dsp-integration/deploy.py（开发便利）
     """
     if override:
         return Path(override).resolve()
     env = os.environ.get(ENV_DEPLOY_PY)
     if env:
         return Path(env).resolve()
+    bundled = project_root() / SCRIPTS_DIR_NAME / DEPLOY_PY_FILENAME
+    if bundled.exists():
+        return bundled
     return project_root().parent / DEPLOY_PY_RELATIVE

@@ -17,6 +17,6 @@ def test_load_platform_config(fixture_dir):
     cfg = PlatformConfig.load("test-plat", root=fixture_dir)
     assert cfg.platform == "test-plat"
     assert cfg.packager == "TestPackager"
-    assert len(cfg.post_process) == 1
-    assert cfg.post_process[0]["name"] == "demo_step"
+    assert len(cfg.bundle) == 1
+    assert cfg.bundle[0]["name"] == "demo_step"
     assert cfg.smoke_entry["usage"].startswith("scripts/test/run.sh")

@@ -46,8 +46,10 @@ def test_runner_auto_yes_false_omits_flag(tmp_path):
     assert DEPLOY_AUTO_YES_ARG not in args
 
 
-def test_runner_default_deploy_py_resolves(tmp_path):
-    """未指定 deploy_py 时走 paths.deploy_py() 默认路径（monorepo 假设）。"""
+def test_runner_default_deploy_py_resolves():
+    """未指定 deploy_py 时 paths.deploy_py() 应返回一个以 deploy.py 结尾的路径。
+
+    可能是 scripts/deploy.py（本仓自包含）或 ../dsp-integration/deploy.py（monorepo fallback）。
+    """
     runner = DeployRunner()
-    # 路径以 dsp-integration/deploy.py 结尾
-    assert str(runner.deploy_py).endswith("dsp-integration/deploy.py")
+    assert str(runner.deploy_py).endswith("deploy.py")

@@ -12,11 +12,11 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 
-from smartci.common.paths import config_dir
+from smartci.common.paths import config_dir, platforms_dir
 from smartci.const import (
     ARTIFACT_REPO_YAML,
     DEFAULT_ARTIFACT_TOOL,
-    PLATFORMS_SUBDIR,
+    PLATFORM_YAML,
     TEAMS_SUBDIR,
 )
 
@@ -62,22 +62,34 @@ class TeamConfig:
 
 @dataclass(frozen=True)
 class PlatformConfig:
-    """直接保留 post_process / smoke_entry 的原始 dict 列表，
-    渲染 manifest 时透传给 deploy.py（避免重复 schema 设计）。"""
+    """平台配置（加载自 platforms/{platform}/platform.yaml）。
+
+    原始 dict 列表（package_entry / bundle / smoke_entry）直接透传给 deploy.py，
+    避免重复 schema 设计。
+    """
     platform: str
     packager: str
-    post_process: List[Dict[str, Any]] = field(default_factory=list)
-    smoke_entry: Dict[str, Any] = field(default_factory=dict)
+    package_entry: Dict[str, Any] = field(default_factory=dict)      # 脚本打包入口
+    bundle: List[Dict[str, Any]] = field(default_factory=list)    # bundle（冒烟前镜像组装）
+    smoke_entry: Dict[str, Any] = field(default_factory=dict)        # 冒烟入口
     output: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def load(cls, platform: str, root: Optional[Path] = None) -> "PlatformConfig":
-        path = (root or config_dir()) / PLATFORMS_SUBDIR / f"{platform}.yaml"
+    def load(
+        cls, platform: str, root: Optional[Path] = None,
+    ) -> "PlatformConfig":
+        """默认从 platforms/{platform}/platform.yaml 加载；root 指向 platforms/ 父目录。
+
+        传 root 时等价 root / "platforms" / platform / "platform.yaml"（用于测试隔离）。
+        """
+        base = (root / "platforms") if root else platforms_dir()
+        path = base / platform / PLATFORM_YAML
         raw = _load_yaml(path)
         return cls(
             platform=raw["platform"],
-            packager=raw["packager"],
-            post_process=raw.get("post_process", []),
+            packager=raw.get("packager", ""),
+            package_entry=raw.get("package_entry", {}),
+            bundle=raw.get("bundle", []),
             smoke_entry=raw.get("smoke_entry", {}),
             output=raw.get("output", {}),
         )

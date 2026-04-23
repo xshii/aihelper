@@ -47,7 +47,10 @@ ENV_ARTIFACT_TOKEN = "ARTIFACT_TOKEN"
 DEFAULT_WORKDIR_BASE = "/tmp/smartci"
 CONFIG_DIR_NAME = "config"
 TEAMS_SUBDIR = "teams"
-PLATFORMS_SUBDIR = "platforms"
+PLATFORMS_DIR_NAME = "platforms"       # 仓库根下的平台自治目录（含 platform.yaml + 脚本）
+PLATFORM_YAML = "platform.yaml"        # 每个平台目录下的配置文件名
+SCRIPTS_DIR_NAME = "scripts"           # 仓级外部脚本（独立部署时 deploy.py 拷进来的位置）
+DEPLOY_PY_FILENAME = "deploy.py"
 ARTIFACT_REPO_YAML = "artifact_repo.yaml"
 
 # 同仓 monorepo 下 dsp-integration/deploy.py 的相对位置

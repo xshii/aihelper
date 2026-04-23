@@ -25,7 +25,7 @@ class SmokePipeline:
         plat_cfg = PlatformConfig.load(self.platform)
         manifest = SmokeManifestAssembler(
             version=self.version, commit=self.commit, platform=self.platform,
-            post_process=list(plat_cfg.post_process),
+            bundle=list(plat_cfg.bundle),
             smoke_entry=dict(plat_cfg.smoke_entry),
         ).assemble()
         return self.runner.run(
