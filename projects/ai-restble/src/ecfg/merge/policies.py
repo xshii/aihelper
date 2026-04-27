@@ -41,11 +41,14 @@ def parse_merge_rule(raw: str) -> Tuple[str, Optional[str]]:
 
 
 def apply_merge(rule: str, values: List[Any]) -> Any:
-    """按 ``rule`` 合并多个 value；未知 op 抛 ``ValueError``."""
+    """按 ``rule`` 合并多个 value；未知 op / 必填参数缺失抛 ``ValueError``."""
     op, arg = parse_merge_rule(rule)
     if op == "concat":
-        sep = arg if arg is not None else ","
-        return sep.join(str(v) for v in values if v is not None)
+        if arg is None:
+            raise ValueError(
+                f"@merge: concat 必须带带引号的分隔符 (e.g. concat(',')); 实际: {rule!r}"
+            )
+        return arg.join(str(v) for v in values if v is not None)
     if op == "sum":
         return sum(v for v in values if v is not None)
     if op == "max":

@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,8 @@ from ruamel.yaml.scalarint import HexCapsInt, HexInt
 
 from ecfg.schema._comments import trailing_comment
 
+logger = logging.getLogger(__name__)
+
 _YAML_RT = YAML(typ="rt")
 
 _ELEMENT_HEADER = re.compile(r"^#\s*@element:(\S+)\s*$")
@@ -31,26 +34,53 @@ _VARIANT_SUFFIX = re.compile(r"^(.+?)_(0[xX][0-9A-Fa-f]+)$")
 
 
 def pack(fixture_dir: Path) -> str:
-    """把 yaml-tree fixture 拼装为 legacy XML 字符串（无 XML 声明，调用方自加）."""
+    """把 yaml-tree fixture 拼装为 legacy XML 字符串。"""
     fixture_dir = Path(fixture_dir).resolve()
+    logger.info("pack: fixture=%s", fixture_dir)
+
     file_info_path = _find_file_info(fixture_dir)
     children_order = _load_children_order(fixture_dir)
+    logger.debug("pack: FileInfo=%s, children_order=%s", file_info_path.name, children_order)
 
     file_info_data = _load_yaml(file_info_path)
     root = etree.Element("FileInfo")
     for key, value in file_info_data.items():
         root.set(key, _format_scalar(value))
 
-    for child_path in _ordered_children(fixture_dir, children_order):
+    ordered = _ordered_children(fixture_dir, children_order)
+    _warn_on_orphan_files(fixture_dir, ordered)
+
+    emit_count = 0
+    for child_path in ordered:
         child_data = _load_yaml(child_path)
         if isinstance(child_data, list):
             for item in child_data:
                 _emit_element(root, child_path, item)
+                emit_count += 1
         else:
             _emit_element(root, child_path, child_data)
+            emit_count += 1
+    logger.info("pack: emitted %d top-level elements", emit_count)
 
     body = etree.tostring(root, pretty_print=True, encoding="unicode")
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + body
+
+
+def _warn_on_orphan_files(fixture_dir: Path, ordered: list[Path]) -> None:
+    """fixture 里有但 ``_children_order`` 没列的 element yaml → WARNING（避免静默丢失）."""
+    expected = set(ordered)
+    all_data = {
+        p for p in fixture_dir.rglob("*.yaml")
+        if p.name != "FileInfo.yaml"
+        and not p.name.startswith("_")
+        and "template" not in p.parts
+    }
+    orphans = sorted(all_data - expected)
+    for orphan in orphans:
+        logger.warning(
+            "pack: %s 不在 _children_order.yaml 任何 class 下，将被丢弃",
+            orphan.relative_to(fixture_dir),
+        )
 
 
 def _find_file_info(fixture_dir: Path) -> Path:
@@ -98,6 +128,10 @@ def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:
                 elem = _resolve_element_name(p)
                 in_scope = "shared" not in p.parts  # shared/ 排在 scope/ 之前
                 matches.append((in_scope, elem, str(p), p))
+        if not matches:
+            logger.warning(
+                "_children_order 列了 %r 但 fixture 找不到匹配文件", logical,
+            )
         matches.sort()
         result.extend(p for _, _, _, p in matches)
     return result

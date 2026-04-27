@@ -155,6 +155,46 @@ class TestAnnotationConsistency:
                     )
 
 
+class TestPackWarnings:
+    """post-process WARNING 路径必须真实触发（防数据静默丢失）."""
+
+    def test_orphan_yaml_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """fixture 里有但 ``_children_order`` 没列的 yaml → WARNING."""
+        import shutil
+
+        src = FIXTURES_ROOT / "minimal.expected"
+        dst = tmp_path / "minimal.expected"
+        shutil.copytree(src, dst)
+        (dst / "OrphanTbl.yaml").write_text(
+            "# @element:ResTbl\nLineNum: # @related:count(Line)\n",
+            encoding="utf-8",
+        )
+        with caplog.at_level("WARNING", logger="ecfg.legacy.postprocess"):
+            pack(dst)
+        assert "OrphanTbl.yaml" in caplog.text
+        assert "_children_order" in caplog.text
+
+    def test_unused_class_entry_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """``_children_order`` 列了但 fixture 找不到匹配文件 → WARNING."""
+        import shutil
+
+        src = FIXTURES_ROOT / "minimal.expected"
+        dst = tmp_path / "minimal.expected"
+        shutil.copytree(src, dst)
+        order_file = dst / "template" / "_children_order.yaml"
+        order_file.write_text(
+            order_file.read_text(encoding="utf-8") + "- NoSuchTbl\n",
+            encoding="utf-8",
+        )
+        with caplog.at_level("WARNING", logger="ecfg.legacy.postprocess"):
+            pack(dst)
+        assert "NoSuchTbl" in caplog.text
+
+
 class TestRoundTripBytes:
     """字节级 round-trip — 调 ``ecfg.legacy.postprocess.pack`` 把 yaml 树拼回 XML。
 

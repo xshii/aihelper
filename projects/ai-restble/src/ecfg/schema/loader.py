@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
 from typing import Optional
@@ -19,6 +20,8 @@ from ruamel.yaml.comments import CommentedMap
 from ecfg.schema._comments import trailing_comment
 from ecfg.schema.annotations import parse_comment
 from ecfg.schema.model import FieldSchema, TableSchema
+
+logger = logging.getLogger(__name__)
 
 _YAML_RT = YAML(typ="rt")
 
@@ -31,7 +34,9 @@ _FK_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*$")
 def extract_template_text(yaml_text: str) -> Optional[str]:
     """提取 TEMPLATE BEGIN/END 之间的内容，剥每行的 ``# `` 前缀。
 
-    返回 None 表示文件无 TEMPLATE 块。
+    - 找到完整 BEGIN..END：返回剥前缀后的文本
+    - 完全没找到 BEGIN：返回 ``None``
+    - 找到 BEGIN 但缺 END：WARNING + 返回 ``None``（防止把后续真实 record 误吞为 template）
     """
     in_template = False
     out: list[str] = []
@@ -43,20 +48,27 @@ def extract_template_text(yaml_text: str) -> Optional[str]:
             return "\n".join(out)
         if in_template:
             out.append(re.sub(r"^#\s?", "", line))
-    return None  # 没找到 END（或根本没 BEGIN）
+    if in_template:
+        logger.warning(
+            "TEMPLATE BEGIN 找到但缺 END marker；丢弃 %d 行累积内容", len(out),
+        )
+    return None
 
 
 def load_table_schema(yaml_path: Path) -> TableSchema:
     """读 yaml 文件 → 构建 ``TableSchema``；无 TEMPLATE 块时返回空 schema."""
     base_name = yaml_path.stem
+    logger.info("load_table_schema: %s", yaml_path)
     text = yaml_path.read_text(encoding="utf-8")
     template_text = extract_template_text(text)
     schema = TableSchema(base_name=base_name)
     if template_text is None:
-        return schema  # 无 TEMPLATE：所有字段默认无约束/无 merge 规则
+        logger.debug("%s 无 TEMPLATE 块，返回空 schema", base_name)
+        return schema
 
     template_doc = _YAML_RT.load(template_text)
-    if not template_doc:
+    if not template_doc or not template_doc[0]:
+        logger.warning("%s TEMPLATE 块解析为空，返回空 schema", base_name)
         return schema
     record = template_doc[0]  # 占位 record
 
@@ -75,6 +87,11 @@ def load_table_schema(yaml_path: Path) -> TableSchema:
         name: _build_ref_field_schema(name, ref_map)
         for name in ref_map
     }
+    logger.debug(
+        "%s schema: %d index, %d attribute, %d ref",
+        base_name, len(schema.index_fields),
+        len(schema.attribute_fields), len(schema.ref_fields),
+    )
     return schema
 
 

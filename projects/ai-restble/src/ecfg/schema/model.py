@@ -2,9 +2,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 Region = Literal["index", "attribute", "ref"]
+
+
+def to_hashable(value: Any) -> Any:
+    """``CellValue`` → hashable 形式：list → tuple，其他原样（用于 dict key / set 元素）."""
+    if isinstance(value, list):
+        return tuple(value)
+    return value
 
 
 @dataclass

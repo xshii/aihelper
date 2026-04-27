@@ -9,10 +9,13 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ecfg.model import Table
-from ecfg.schema.model import FieldSchema, TableSchema
+from ecfg.schema.model import FieldSchema, TableSchema, to_hashable
+
+logger = logging.getLogger(__name__)
 
 
 class ValidationError(ValueError):
@@ -35,6 +38,11 @@ def validate_schema(schema: TableSchema) -> None:
 
 def validate_table(table: Table, schema: TableSchema) -> None:
     """运行期校验：单张 table 的每条 record 满足 schema 约束."""
+    logger.debug(
+        "validate_table: %s, %d records, schema(idx=%d, attr=%d, ref=%d)",
+        table.base_name, len(table.records),
+        len(schema.index_fields), len(schema.attribute_fields), len(schema.ref_fields),
+    )
     _check_index_uniqueness(table, schema)
     _check_field_constraints(table, schema)
 
@@ -44,7 +52,7 @@ def _check_index_uniqueness(table: Table, schema: TableSchema) -> None:
         return
     seen: set = set()
     for i, rec in enumerate(table.records):
-        idx = tuple(_to_hashable(rec.index.get(f)) for f in schema.index_fields)
+        idx = tuple(to_hashable(rec.index.get(f)) for f in schema.index_fields)
         if idx in seen:
             raise ValidationError(
                 f"{table.base_name}[{i}]: 重复 index {idx}（违反唯一性）"
@@ -82,9 +90,3 @@ def _check_enum(base: str, idx: int, name: str, value: Any, fs: FieldSchema) -> 
         raise ValidationError(
             f"{base}[{idx}].{name}: 值 {value!r} 不在 enum 集 {fs.enum_values}"
         )
-
-
-def _to_hashable(value: Any) -> Any:
-    if isinstance(value, list):
-        return tuple(value)
-    return value

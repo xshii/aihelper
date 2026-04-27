@@ -1,13 +1,16 @@
 """多 ``Table`` 融合引擎：按 schema 的 index 字段分组，组内按 per-field rule 合并."""
 from __future__ import annotations
 
+import logging
 from collections import OrderedDict
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Tuple
 
 from ecfg.merge.policies import apply_merge
 from ecfg.model import CellValue, Record, Table
-from ecfg.schema.model import TableSchema
+from ecfg.schema.model import TableSchema, to_hashable
 from ecfg.schema.validator import validate_schema, validate_table
+
+logger = logging.getLogger(__name__)
 
 
 def merge_tables(
@@ -25,6 +28,11 @@ def merge_tables(
 
     ``validate=False`` 旁路所有校验（仅用于已知干净的 in-memory 测试数据）。
     """
+    total_records = sum(len(t.records) for t in tables)
+    logger.info(
+        "merge_tables: %s, %d tables, %d records total, validate=%s",
+        schema.base_name, len(tables), total_records, validate,
+    )
     if validate:
         validate_schema(schema)
         for t in tables:
@@ -39,23 +47,23 @@ def merge_tables(
             groups.setdefault(key, []).append(r)
 
     merged_records: List[Record] = []
+    multi_group_count = 0
     for records in groups.values():
         if len(records) == 1:
             merged_records.append(records[0])
         else:
             merged_records.append(_merge_record_group(records, schema))
+            multi_group_count += 1
+    logger.info(
+        "merge_tables: %s → %d records (%d groups merged from multi-source)",
+        schema.base_name, len(merged_records), multi_group_count,
+    )
     return Table(base_name=schema.base_name, records=merged_records)
 
 
 def _index_key(rec: Record, index_fields: Iterable[str]) -> Tuple:
     """从 record 的 index 区抽 identity tuple（忽略缺失字段）."""
-    return tuple((f, _to_hashable(rec.index.get(f))) for f in index_fields)
-
-
-def _to_hashable(v: CellValue) -> Any:
-    if isinstance(v, list):
-        return tuple(v)
-    return v
+    return tuple((f, to_hashable(rec.index.get(f))) for f in index_fields)
 
 
 def _merge_record_group(records: List[Record], schema: TableSchema) -> Record:
