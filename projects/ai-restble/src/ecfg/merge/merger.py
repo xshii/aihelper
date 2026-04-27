@@ -1,0 +1,109 @@
+"""多 ``Table`` 融合引擎：按 schema 的 index 字段分组，组内按 per-field rule 合并."""
+from __future__ import annotations
+
+from collections import OrderedDict
+from typing import Any, Dict, Iterable, List, Tuple
+
+from ecfg.merge.policies import apply_merge
+from ecfg.model import CellValue, Record, Table
+from ecfg.schema.model import TableSchema
+from ecfg.schema.validator import validate_schema, validate_table
+
+
+def merge_tables(
+    tables: List[Table], schema: TableSchema, *, validate: bool = True,
+) -> Table:
+    """合并多张同 ``base_name`` 的 Table → 一张 ``Table``.
+
+    流程：
+    0. ``validate=True``（默认）→ 先 ``validate_schema(schema)``
+       和每张 table ``validate_table(table, schema)``，违反约束立即报错
+    1. 按 schema.index_fields 拼出 identity tuple，分组 records
+    2. 单 record 组直接保留
+    3. 多 record 组按 per-field 规则合（attribute 看 schema.attribute_fields；
+       ref 整 entry 默认 conflict 策略）
+
+    ``validate=False`` 旁路所有校验（仅用于已知干净的 in-memory 测试数据）。
+    """
+    if validate:
+        validate_schema(schema)
+        for t in tables:
+            validate_table(t, schema)
+    if not tables:
+        return Table(base_name=schema.base_name, records=[])
+
+    groups: "OrderedDict[Tuple, List[Record]]" = OrderedDict()
+    for t in tables:
+        for r in t.records:
+            key = _index_key(r, schema.index_fields)
+            groups.setdefault(key, []).append(r)
+
+    merged_records: List[Record] = []
+    for records in groups.values():
+        if len(records) == 1:
+            merged_records.append(records[0])
+        else:
+            merged_records.append(_merge_record_group(records, schema))
+    return Table(base_name=schema.base_name, records=merged_records)
+
+
+def _index_key(rec: Record, index_fields: Iterable[str]) -> Tuple:
+    """从 record 的 index 区抽 identity tuple（忽略缺失字段）."""
+    return tuple((f, _to_hashable(rec.index.get(f))) for f in index_fields)
+
+
+def _to_hashable(v: CellValue) -> Any:
+    if isinstance(v, list):
+        return tuple(v)
+    return v
+
+
+def _merge_record_group(records: List[Record], schema: TableSchema) -> Record:
+    """合并一组同 index 的 records；attribute 按 rule，ref 默认 conflict."""
+    merged = Record(index=dict(records[0].index))
+    merged.attribute = _merge_region(
+        [r.attribute for r in records],
+        {n: f.merge_rule for n, f in schema.attribute_fields.items()},
+        default_rule=None,  # 无规则的 attribute 字段 → 取首条 non-None
+    )
+    merged.ref = _merge_region(
+        [r.ref for r in records],
+        {n: (f.merge_rule or "conflict") for n, f in schema.ref_fields.items()},
+        default_rule="conflict",  # ref 默认 conflict（必须等值）
+    )
+    return merged
+
+
+def _merge_region(
+    region_dicts: List[Dict[str, CellValue]],
+    rules: Dict[str, "str | None"],
+    *,
+    default_rule: "str | None",
+) -> Dict[str, CellValue]:
+    """合并多个 region dict 同一字段集合."""
+    all_keys: List[str] = []
+    seen = set()
+    for d in region_dicts:
+        for k in d:
+            if k not in seen:
+                seen.add(k)
+                all_keys.append(k)
+
+    merged: Dict[str, CellValue] = {}
+    for key in all_keys:
+        values = [d.get(key) for d in region_dicts]
+        rule = rules.get(key, default_rule) or default_rule
+        if all(v == values[0] for v in values):
+            merged[key] = values[0]
+            continue
+        if rule is None:
+            # 无规则：取首条 non-None
+            for v in values:
+                if v is not None:
+                    merged[key] = v
+                    break
+            else:
+                merged[key] = None
+        else:
+            merged[key] = apply_merge(rule, values)
+    return merged

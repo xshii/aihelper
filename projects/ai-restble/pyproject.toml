@@ -64,12 +64,12 @@ addopts = "-ra"
 root_package = "ecfg"
 
 [[tool.importlinter.contracts]]
-name = "one-way layers: cli → app → (io | legacy) → schema → model"
+name = "one-way layers: cli → app → (io | legacy | merge) → schema → model"
 type = "layers"
 layers = [
     "ecfg.cli",
     "ecfg.app",
-    "ecfg.io.importers | ecfg.io.exporters | ecfg.legacy",
+    "ecfg.io.importers | ecfg.io.exporters | ecfg.legacy | ecfg.merge",
     "ecfg.schema",
     "ecfg.model",
 ]

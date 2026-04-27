@@ -1,0 +1,40 @@
+"""Schema 内存模型：``TableSchema`` 描述一张表的字段约束 + merge 规则。"""
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Dict, List, Literal, Optional
+
+Region = Literal["index", "attribute", "ref"]
+
+
+@dataclass
+class FieldSchema:
+    """单字段 schema：name + region + 可选约束（range/enum）+ 可选 merge 规则."""
+
+    name: str
+    region: Region
+    merge_rule: Optional[str] = None  # 原始字符串，如 ``concat(',')`` / ``sum`` / ``conflict``
+    range_lo: Optional[float] = None
+    range_hi: Optional[float] = None
+    enum_values: Optional[List[str]] = None
+    fk_target: Optional[str] = None  # ref 区 FK 目标，如 ``Module.moduleType``
+
+
+@dataclass
+class TableSchema:
+    """一张表的 schema：BaseName + 三区域字段 schemas."""
+
+    base_name: str
+    index_fields: List[str] = field(default_factory=list)
+    attribute_fields: Dict[str, FieldSchema] = field(default_factory=dict)
+    ref_fields: Dict[str, FieldSchema] = field(default_factory=dict)
+
+    def merge_rule_for(self, region: Region, name: str) -> Optional[str]:
+        """查找指定 region+name 字段的 merge 规则字符串；查不到返回 None."""
+        if region == "attribute":
+            f = self.attribute_fields.get(name)
+            return f.merge_rule if f else None
+        if region == "ref":
+            f = self.ref_fields.get(name)
+            return f.merge_rule if f else None
+        return None  # index 不参与 merge
