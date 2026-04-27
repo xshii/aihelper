@@ -5,7 +5,7 @@ import logging
 from collections import OrderedDict
 from typing import Dict, Iterable, List, Tuple
 
-from ecfg.merge.policies import apply_merge
+from ecfg.merge.policies import ConflictError, apply_merge
 from ecfg.model import CellValue, Record, Table
 from ecfg.schema.model import TableSchema, to_hashable
 from ecfg.schema.validator import validate_schema, validate_table
@@ -67,17 +67,25 @@ def _index_key(rec: Record, index_fields: Iterable[str]) -> Tuple:
 
 
 def _merge_record_group(records: List[Record], schema: TableSchema) -> Record:
-    """合并一组同 index 的 records；attribute 按 rule，ref 默认 conflict."""
+    """合并一组同 index 的 records；attribute 按 rule，ref 默认 conflict.
+
+    上下文 context 通过 ``_merge_region`` 透传到错误信息：
+    ``<base>[idx_field=val,...].attribute.<field>: <原始 ConflictError>``。
+    """
     merged = Record(index=dict(records[0].index))
+    idx_repr = ", ".join(f"{k}={v!r}" for k, v in records[0].index.items())
+    context = f"{schema.base_name}[{idx_repr}]"
     merged.attribute = _merge_region(
         [r.attribute for r in records],
         {n: f.merge_rule for n, f in schema.attribute_fields.items()},
         default_rule=None,  # 无规则的 attribute 字段 → 取首条 non-None
+        context=f"{context}.attribute",
     )
     merged.ref = _merge_region(
         [r.ref for r in records],
         {n: (f.merge_rule or "conflict") for n, f in schema.ref_fields.items()},
         default_rule="conflict",  # ref 默认 conflict（必须等值）
+        context=f"{context}.ref",
     )
     return merged
 
@@ -87,8 +95,9 @@ def _merge_region(
     rules: Dict[str, "str | None"],
     *,
     default_rule: "str | None",
+    context: str,
 ) -> Dict[str, CellValue]:
-    """合并多个 region dict 同一字段集合."""
+    """合并多个 region dict 同一字段集合；ConflictError 被重抛附加 ``context.<key>``."""
     all_keys: List[str] = []
     seen = set()
     for d in region_dicts:
@@ -113,5 +122,8 @@ def _merge_region(
             else:
                 merged[key] = None
         else:
-            merged[key] = apply_merge(rule, values)
+            try:
+                merged[key] = apply_merge(rule, values)
+            except ConflictError as exc:
+                raise ConflictError(f"{context}.{key}: {exc}") from exc
     return merged

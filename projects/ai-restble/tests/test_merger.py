@@ -122,8 +122,12 @@ class TestMergeTablesTwoTablesSameIndex:
         b = Table(base_name="Test", records=[
             Record(index={"vector": 10}, attribute={"trigger": "level"}),
         ])
-        with pytest.raises(ConflictError):
+        with pytest.raises(ConflictError) as excinfo:
             merge_tables([a, b], schema)
+        # 错误信息应同时包含表名 / index 标识 / region / 字段名 / 实际差异值
+        msg = str(excinfo.value)
+        assert "Test[vector=10].attribute.trigger" in msg
+        assert "edge" in msg and "level" in msg
 
     def test_conflict_field_agreement_kept(self):
         schema = _make_schema(
@@ -183,8 +187,10 @@ class TestRefRegionDefaultConflict:
         b = Table(base_name="Test", records=[
             Record(index={"id": 1}, ref={"owner": "spi"}),
         ])
-        with pytest.raises(ConflictError):
+        with pytest.raises(ConflictError) as excinfo:
             merge_tables([a, b], schema)
+        # ref 区错误信息也应有 region 区分
+        assert "Test[id=1].ref.owner" in str(excinfo.value)
 
 
 class TestMergeValidatesByDefault:
