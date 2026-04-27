@@ -1,0 +1,6 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ChannelId: 0
+  SrcType: "MEM"
+  DstType: "DEV"
+  BurstSize: 16

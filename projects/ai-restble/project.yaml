@@ -1,0 +1,12 @@
+name: ai-restble
+type: demo
+description: YAML-first 嵌入式资源表工具 (ecfg) — Flask 画布、ref 解析、聚合、Excel 互导
+language: python
+tags: [yaml, config, embedded, flask, click, ruamel-yaml, openpyxl]
+difficulty: intermediate
+status: experimental
+created: 2026-04-24
+
+install: pip install -e '.[dev]'
+run: ecfg serve
+test: pytest -q tests/

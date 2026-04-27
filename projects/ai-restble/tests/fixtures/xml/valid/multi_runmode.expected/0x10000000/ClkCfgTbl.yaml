@@ -1,0 +1,5 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ClkName: "SYS_CLK"
+  FreqMHz: 600
+  Source: "PLL0"

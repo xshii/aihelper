@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FileInfo FileName="hex.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" RatType="" Version="1.00" RevisionHistory="">
+    <ResTbl RatVersion="RatVersion" LineNum="1">
+        <Line VVersion="100" RVersion="22" CVersion="10"/>
+    </ResTbl>
+    <ResTbl HexTbl="HexTbl" LineNum="3">
+        <Line Width2="0xAB" Width4="0xABCD" Width8="0xDEADBEEF" Auto="0xFF"/>
+        <Line Width2="0x01" Width4="0x0001" Width8="0x00000001" Auto="0x1"/>
+        <Line Width2="0xFF" Width4="0xFFFF" Width8="0xFFFFFFFF" Auto="0xCAFE"/>
+    </ResTbl>
+</FileInfo>

@@ -1,0 +1,8 @@
+# @element:<self>
+RunModeDesc: "HighPerf"
+RunMode: 0x20000000
+ResAllocMode: 1
+ResTblNum: # @related:count(RunModeItem)
+- ClkCfgTbl: "ClkCfgTbl_0x20000000"
+- DmaCfgTbl: "DmaCfgTbl"          # @use:../shared/DmaCfgTbl.yaml
+- CoreDeployTbl: "CoreDeployTbl_0x20000000"

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FileInfo FileName="bad-ref.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" RatType="" Version="1.00" RevisionHistory="">
+    <CapacityRunModeMapTbl CapacityID="0x0001" RunModeValue="0x10000000" ResTblNum="0"/>
+    <RunModeTbl RunModeDesc="X" RunMode="0x10000000" ResAllocMode="0" ResTblNum="1">
+        <RunModeItem GhostTbl="NonexistentTbl"/>
+    </RunModeTbl>
+</FileInfo>

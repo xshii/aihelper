@@ -1,0 +1,8 @@
+# FileInfo children emit order — logical-class 顺序
+# 同 class 内多个 instance 排序：(1) shared/ 优先 → (2) element 名升序 → (3) 全路径升序
+- RatVersion
+- CapacityRunModeMapTbl
+- RunModeTbl
+- ClkCfgTbl
+- DmaCfgTbl
+- CoreDeployTbl

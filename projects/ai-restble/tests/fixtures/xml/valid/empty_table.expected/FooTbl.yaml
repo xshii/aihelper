@@ -1,0 +1,3 @@
+# @element:ResTbl
+# 空 wrapper：LineNum 派生为 0，无 Line 子元素 → emit 自闭合 <ResTbl FooTbl="FooTbl" LineNum="0"/>
+LineNum: # @related:count(Line)

@@ -1,0 +1,5 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- VVersion: 0             # @range:0-999
+  RVersion: 0             # @range:0-999
+  CVersion: 0             # @range:0-999

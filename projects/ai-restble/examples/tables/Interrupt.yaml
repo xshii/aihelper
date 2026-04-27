@@ -1,0 +1,62 @@
+# Interrupt.yaml — 中断向量表（示例，非真实硬件数据）
+#
+# 本文件演示 ecfg 三区域数据模型 + `@` 注释承载的 schema。
+# 规则参考：docs/merge-spec.md
+#
+# ----- TEMPLATE BEGIN -----
+# - index:
+#     vector: 0                   # @range: 0-255
+#     owner_team: a               # @enum: a, b
+#   attribute:
+#     handler: h0                 # @merge: concat(',')
+#     priority: 0                 # @merge: concat(','); @range: 0-15
+#     retry: 0                    # @merge: sum
+#     trigger: edge               # @enum: edge, level
+#     description:
+#   ref:
+#     owner_module:               # @merge: conflict
+#       moduleType: uart          # Module.moduleType
+#       moduleIndex: 0            # Module.moduleIndex
+# ----- TEMPLATE END -----
+
+- index:
+    vector: 10
+    owner_team: a
+  attribute:
+    handler: h_uart_rx
+    priority: 2
+    retry: 3
+    trigger: edge
+    description: "UART RX data ready"
+  ref:
+    owner_module:
+      moduleType: uart
+      moduleIndex: 0
+
+- index:
+    vector: 11
+    owner_team: a
+  attribute:
+    handler: h_uart_tx
+    priority: 2
+    retry: 1
+    trigger: edge
+    description: "UART TX complete"
+  ref:
+    owner_module:
+      moduleType: uart
+      moduleIndex: 0
+
+- index:
+    vector: 20
+    owner_team: b
+  attribute:
+    handler: h_spi
+    priority: 5
+    retry: 2
+    trigger: level
+    description: "SPI transfer complete"
+  ref:
+    owner_module:
+      moduleType: spi
+      moduleIndex: 0

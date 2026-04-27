@@ -1,0 +1,16 @@
+# @element:ResTbl
+# Hex 宽度 round-trip 契约（emit 必须保留原写法宽度）：
+#   Width2 → 2 hex digits   Width4 → 4    Width8 → 8    Auto → 最短匹配
+LineNum: # @related:count(Line)
+- Width2: 0xAB
+  Width4: 0xABCD
+  Width8: 0xDEADBEEF
+  Auto: 0xFF
+- Width2: 0x01
+  Width4: 0x0001
+  Width8: 0x00000001
+  Auto: 0x1
+- Width2: 0xFF
+  Width4: 0xFFFF
+  Width8: 0xFFFFFFFF
+  Auto: 0xCAFE

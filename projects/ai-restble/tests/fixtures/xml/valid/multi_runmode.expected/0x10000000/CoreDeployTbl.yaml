@@ -1,0 +1,18 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- CoreId: 0
+  CoreType: "A53"
+  FreqMHz: 600
+  Cluster: 0
+- CoreId: 1
+  CoreType: "A53"
+  FreqMHz: 600
+  Cluster: 0
+- CoreId: 2
+  CoreType: "A53"
+  FreqMHz: 600
+  Cluster: 0
+- CoreId: 3
+  CoreType: "A53"
+  FreqMHz: 600
+  Cluster: 0

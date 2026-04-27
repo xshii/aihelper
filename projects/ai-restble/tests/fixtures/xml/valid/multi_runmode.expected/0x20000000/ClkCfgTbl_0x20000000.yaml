@@ -1,0 +1,8 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ClkName: "SYS_CLK"
+  FreqMHz: 1200
+  Source: "PLL2"
+- ClkName: "DDR_CLK"
+  FreqMHz: 2400
+  Source: "PLL3"

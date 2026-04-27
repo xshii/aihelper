@@ -1,0 +1,14 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ChipType: 10
+  CoreNum: 4
+  Frequency: 600
+  DdrSize: 512
+  CapacityID: 0x0001
+  RunModeValue: 0x10000000
+- ChipType: 10
+  CoreNum: 8
+  Frequency: 800
+  DdrSize: 1024
+  CapacityID: 0x0002
+  RunModeValue: 0x20000000

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FileInfo FileName="NR_BBMNG_DEMO.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" RatType="" Version="3.00" RevisionHistory="">
+
+    <ResTbl RatVersion="RatVersion" LineNum="1">
+        <Line VVersion="100" RVersion="22" CVersion="10"/>
+    </ResTbl>
+
+    <ResTbl CapacityRunModeMapTbl="CapacityRunModeMapTbl" LineNum="2">
+        <Line ChipType="10" CoreNum="8" Frequency="800" DdrSize="1024" CapacityID="0x5328" RunModeValue="0x40000000"/>
+        <Line ChipType="10" CoreNum="8" Frequency="800" DdrSize="2048" CapacityID="0x5329" RunModeValue="0x40000000"/>
+    </ResTbl>
+
+    <CapacityRunModeMapTbl CapacityID="0x5328" RunModeValue="0x40000000" ResTblNum="0"/>
+    <CapacityRunModeMapTbl CapacityID="0x5329" RunModeValue="0x40000000" ResTblNum="0"/>
+
+    <RunModeTbl RunModeDesc="2 TDD 32T" RunMode="0x40000000" ResAllocMode="0" ResTblNum="5">
+        <RunModeItem GroupIDCfgTbl="GroupIDTbl"/>
+        <RunModeItem MpuGrpMapTbl="MpuGrpMapTbl"/>
+        <RunModeItem IntCtrlTbl="IntCtrlTbl"/>
+        <RunModeItem DmaCfgTbl="DmaCfgTbl"/>
+        <RunModeItem ClkCfgTbl="ClkCfgTbl"/>
+    </RunModeTbl>
+
+    <ResTbl GroupIDTbl="GroupIDTbl" LineNum="3">
+        <Line GroupId="0" GroupName="SYS" Priority="0"/>
+        <Line GroupId="1" GroupName="UL" Priority="1"/>
+        <Line GroupId="2" GroupName="DL" Priority="2"/>
+    </ResTbl>
+
+    <ResTbl MpuGrpMapTbl="MpuGrpMapTbl" LineNum="6">
+        <Line IpName="CHE" LogicGroupId="1" AddrExtFlag="0"/>
+        <Line IpName="DEC" LogicGroupId="1" AddrExtFlag="0"/>
+        <Line IpName="ENC" LogicGroupId="2" AddrExtFlag="0"/>
+        <Line IpName="DMA" LogicGroupId="0" AddrExtFlag="1"/>
+        <Line IpName="MAC" LogicGroupId="2" AddrExtFlag="0"/>
+        <Line IpName="PHY" LogicGroupId="1" AddrExtFlag="1"/>
+    </ResTbl>
+
+    <ResTbl IntCtrlTbl="IntCtrlTbl" LineNum="4">
+        <Line IntId="0" IntName="UART_RX" Priority="5" Trigger="edge"/>
+        <Line IntId="1" IntName="UART_TX" Priority="5" Trigger="edge"/>
+        <Line IntId="2" IntName="DMA_DONE" Priority="3" Trigger="level"/>
+        <Line IntId="3" IntName="TIMER_OVF" Priority="7" Trigger="edge"/>
+    </ResTbl>
+
+    <ResTbl DmaCfgTbl="DmaCfgTbl" LineNum="2">
+        <Line ChannelId="0" SrcType="MEM" DstType="DEV" BurstSize="16"/>
+        <Line ChannelId="1" SrcType="DEV" DstType="MEM" BurstSize="32"/>
+    </ResTbl>
+
+    <ResTbl ClkCfgTbl="ClkCfgTbl" LineNum="3">
+        <Line ClkName="SYS_CLK" FreqMHz="800" Source="PLL0"/>
+        <Line ClkName="DDR_CLK" FreqMHz="1600" Source="PLL1"/>
+        <Line ClkName="UART_CLK" FreqMHz="100" Source="OSC"/>
+    </ResTbl>
+
+</FileInfo>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FileInfo FileName="empty.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" RatType="" Version="1.00" RevisionHistory="">
+    <ResTbl RatVersion="RatVersion" LineNum="1">
+        <Line VVersion="100" RVersion="22" CVersion="10"/>
+    </ResTbl>
+    <ResTbl FooTbl="FooTbl" LineNum="0"/>
+    <ResTbl BarTbl="BarTbl" LineNum="1">
+        <Line Id="0" Value="hello"/>
+    </ResTbl>
+</FileInfo>

@@ -1,0 +1,119 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ecfg"
+version = "0.0.1"
+description = "YAML-first embedded resource configuration tool"
+requires-python = ">=3.8"
+dependencies = [
+    "flask>=2.3",
+    "click>=8.1",
+    "ruamel.yaml>=0.18",
+    "openpyxl>=3.1",
+    "lxml>=4.9",
+    "jinja2>=3.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff>=0.5",
+    "pyright>=1.1.350",
+    "pylint>=3.0",
+    "import-linter>=2.0",
+    "radon>=6.0",
+    "vulture>=2.10",
+    "lxml-stubs>=0.5",
+]
+
+[project.scripts]
+ecfg = "ecfg.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ecfg = ["templates/*.html", "static/**/*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py38"
+
+[tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
+# 默认 E/F/W + 启用 PLW1514（禁 unspecified-encoding，preview）
+select = ["E", "F", "W", "PLW1514"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+# ============================================================
+# import-linter: 单向依赖契约
+#   cli  ──▶  app  ──▶  importers
+# 同层不允许交叉，下层不允许反向依赖上层。
+# ============================================================
+[tool.importlinter]
+root_package = "ecfg"
+
+[[tool.importlinter.contracts]]
+name = "one-way layers: cli → app → (io | legacy) → schema → model"
+type = "layers"
+layers = [
+    "ecfg.cli",
+    "ecfg.app",
+    "ecfg.io.importers | ecfg.io.exporters | ecfg.legacy",
+    "ecfg.schema",
+    "ecfg.model",
+]
+
+# ============================================================
+# pylint
+# ============================================================
+[tool.pylint.main]
+py-version = "3.8"
+source-roots = ["src"]
+extension-pkg-allow-list = ["lxml"]
+
+[tool.pylint.format]
+max-line-length = 100
+
+[tool.pylint."messages control"]
+# docstring 规则保持开启（仓库约定：一行即可）
+disable = [
+    "too-few-public-methods",     # NamedTuple / 小工具类
+    "import-outside-toplevel",    # cli 故意用 lazy import 避免启动慢
+    "fixme",
+    "redefined-outer-name",       # pytest fixture 命名惯例（fixture 函数与参数同名）
+]
+
+[tool.pylint.design]
+max-args = 7
+max-locals = 15
+
+# ============================================================
+# vulture: 死代码扫描
+# ============================================================
+[tool.vulture]
+paths = ["src", "tests"]
+min_confidence = 80
+# 框架装饰器注册的函数（vulture 看不到反射调用）
+ignore_decorators = [
+    "@*.route", "@*.get", "@*.post", "@*.put", "@*.delete", "@*.patch",  # flask
+    "@*.command", "@*.group",                                              # click
+    "@*.before_request", "@*.errorhandler",                                # flask hooks
+    "@pytest.fixture",                                                     # pytest
+]
+# ruamel YAML 实例属性（赋值即配置，无后续显式读取）
+ignore_names = ["preserve_quotes"]
+
+# ============================================================
+# pyright（文件级别设置在 pyrightconfig.json）
+# ============================================================

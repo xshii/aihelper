@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FileInfo FileName="multi.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" RatType="" Version="1.00" RevisionHistory="">
+
+    <ResTbl RatVersion="RatVersion" LineNum="1">
+        <Line VVersion="100" RVersion="22" CVersion="10"/>
+    </ResTbl>
+
+    <ResTbl CapacityRunModeMapTbl="CapacityRunModeMapTbl" LineNum="2">
+        <Line ChipType="10" CoreNum="4" Frequency="600" DdrSize="512" CapacityID="0x0001" RunModeValue="0x10000000"/>
+        <Line ChipType="10" CoreNum="8" Frequency="800" DdrSize="1024" CapacityID="0x0002" RunModeValue="0x20000000"/>
+    </ResTbl>
+
+    <CapacityRunModeMapTbl CapacityID="0x0001" RunModeValue="0x10000000" ResTblNum="0"/>
+    <CapacityRunModeMapTbl CapacityID="0x0002" RunModeValue="0x20000000" ResTblNum="0"/>
+
+    <RunModeTbl RunModeDesc="LowPower" RunMode="0x10000000" ResAllocMode="0" ResTblNum="3">
+        <RunModeItem ClkCfgTbl="ClkCfgTbl"/>
+        <RunModeItem DmaCfgTbl="DmaCfgTbl"/>
+        <RunModeItem CoreDeployTbl="CoreDeployTbl"/>
+    </RunModeTbl>
+
+    <RunModeTbl RunModeDesc="HighPerf" RunMode="0x20000000" ResAllocMode="1" ResTblNum="3">
+        <RunModeItem ClkCfgTbl="ClkCfgTbl_0x20000000"/>
+        <RunModeItem DmaCfgTbl="DmaCfgTbl"/>
+        <RunModeItem CoreDeployTbl="CoreDeployTbl_0x20000000"/>
+    </RunModeTbl>
+
+    <ResTbl ClkCfgTbl="ClkCfgTbl" LineNum="1">
+        <Line ClkName="SYS_CLK" FreqMHz="600" Source="PLL0"/>
+    </ResTbl>
+
+    <ResTbl ClkCfgTbl="ClkCfgTbl_0x20000000" LineNum="2">
+        <Line ClkName="SYS_CLK" FreqMHz="1200" Source="PLL2"/>
+        <Line ClkName="DDR_CLK" FreqMHz="2400" Source="PLL3"/>
+    </ResTbl>
+
+    <ResTbl DmaCfgTbl="DmaCfgTbl" LineNum="1">
+        <Line ChannelId="0" SrcType="MEM" DstType="DEV" BurstSize="16"/>
+    </ResTbl>
+
+    <ResTbl CoreDeployTbl="CoreDeployTbl" LineNum="4">
+        <Line CoreId="0" CoreType="A53" FreqMHz="600" Cluster="0"/>
+        <Line CoreId="1" CoreType="A53" FreqMHz="600" Cluster="0"/>
+        <Line CoreId="2" CoreType="A53" FreqMHz="600" Cluster="0"/>
+        <Line CoreId="3" CoreType="A53" FreqMHz="600" Cluster="0"/>
+    </ResTbl>
+
+    <ResTbl CoreDeployTbl="CoreDeployTbl_0x20000000" LineNum="8">
+        <Line CoreId="0" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="1" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="2" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="3" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="4" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="5" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="6" CoreType="A53" FreqMHz="800" Cluster="0"/>
+        <Line CoreId="7" CoreType="A53" FreqMHz="800" Cluster="0"/>
+    </ResTbl>
+
+</FileInfo>
