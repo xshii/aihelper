@@ -14,7 +14,7 @@ ruamel 行为（本模块已验证并 doctest 固化）：
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from ruamel.yaml.comments import CommentedMap
 
@@ -26,7 +26,6 @@ def trailing_comment(cmap: CommentedMap, key: str) -> Optional[str]:
     """返回 ``cmap[key]`` 的**同行尾随注释**（去掉 ``#`` 和首尾空白）。
 
     当 key 没有注释 / 注释在下一行（standalone）/ key 不存在时返回 ``None``。
-    standalone 注释请走 :func:`subsequent_comments`。
 
     >>> from ruamel.yaml import YAML
     >>> yaml = YAML(typ="rt")
@@ -72,68 +71,6 @@ def trailing_comment(cmap: CommentedMap, key: str) -> Optional[str]:
     if raw is None or raw.startswith("\n"):
         return None
     return _strip_hash(raw.split("\n", 1)[0])
-
-
-def subsequent_comments(cmap: CommentedMap, key: str) -> List[str]:
-    """返回**紧跟在 ``cmap[key]`` 之后**的 standalone 注释行（按出现顺序，去 ``#``）。
-
-    ruamel 把 standalone 注释（独占一行的 ``# ...``）挂到前一条 key 的 EOL 槽。
-    本函数识别"原始字符串以 ``\\n`` 开头"这一标志，按行拆 ``#`` 并返回。
-
-    >>> from ruamel.yaml import YAML
-    >>> yaml = YAML(typ="rt")
-
-    单条 standalone：
-
-    >>> src = 'priority: 0\\n# @range: 0-15\\n'
-    >>> doc = yaml.load(src)
-    >>> subsequent_comments(doc, "priority")
-    ['@range: 0-15']
-
-    多条连续 standalone：
-
-    >>> src = '''priority: 0
-    ... # first note
-    ... # second note
-    ... # @flag: x
-    ... '''
-    >>> doc = yaml.load(src)
-    >>> subsequent_comments(doc, "priority")
-    ['first note', 'second note', '@flag: x']
-
-    同行尾随注释**不**被此函数返回：
-
-    >>> doc = yaml.load("priority: 0  # @merge: sum\\n")
-    >>> subsequent_comments(doc, "priority")
-    []
-
-    同行尾随 + 下一行 standalone 混合（ruamel 把两者合并到一个 value，
-    但本函数只返回 standalone 部分）：
-
-    >>> src = '''priority: 0  # @merge: sum
-    ... # @range: 0-15
-    ... '''
-    >>> doc = yaml.load(src)
-    >>> subsequent_comments(doc, "priority")
-    ['@range: 0-15']
-
-    上面这个 case 的同行尾随仍然可以取到（两者互不干扰）：
-
-    >>> trailing_comment(doc, "priority")
-    '@merge: sum'
-    """
-    raw = _raw_eol(cmap, key)
-    if raw is None:
-        return []
-    # raw 形态：
-    #   "\n# A\n# B\n"          —— 纯 standalone（无 EOL）
-    #   "  # eol\n# A\n# B\n"   —— EOL + standalone（ruamel 把两者合并）
-    #   "  # eol\n"              —— 仅 EOL（无 standalone）
-    nl = raw.find("\n")
-    if nl < 0:
-        return []  # 仅 EOL，无 standalone
-    standalone = raw[nl + 1:]
-    return [_strip_hash(line) for line in standalone.splitlines() if line.strip().startswith("#")]
 
 
 def _raw_eol(cmap: CommentedMap, key: str) -> Optional[str]:

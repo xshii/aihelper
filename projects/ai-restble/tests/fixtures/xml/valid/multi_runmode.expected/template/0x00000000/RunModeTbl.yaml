@@ -1,8 +1,0 @@
-# @element:<self>
-RunModeDesc: ""
-RunMode: 0x0                           # @related:CapacityRunModeMapTbl.RunModeValue
-ResAllocMode: 0                        # @range:0-3
-ResTblNum: # @related:count(RunModeItem)
-- ClkCfgTbl: ""                        # @related:ClkCfgTbl       role 槽位 - 单 attribute container
-- DmaCfgTbl: ""                        # @related:DmaCfgTbl
-- CoreDeployTbl: ""                    # @related:CoreDeployTbl

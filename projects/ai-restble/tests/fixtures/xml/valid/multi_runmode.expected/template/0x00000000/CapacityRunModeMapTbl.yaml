@@ -1,5 +1,0 @@
-# @element:<self>
-# flat 形态：每个文件单实例，记录一个 (CapacityID, RunModeValue) 锚点 + ResTblNum 计数
-CapacityID: 0x0                        # @related:CapacityRunModeMapTbl.CapacityID    # 指向 wrapper 形态
-RunModeValue: 0x0                      # @related:CapacityRunModeMapTbl.RunModeValue
-ResTblNum: 0                           # @range:0-32

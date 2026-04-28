@@ -1,9 +1,0 @@
-# @element:ResTbl
-# wrapper 形态：每行描述一个 (CapacityID, RunModeValue) 组合的物理参数
-LineNum: # @related:count(Line)
-- ChipType: 0             # @range:0-255
-  CoreNum: 0              # @range:1-32
-  Frequency: 0            # @range:1-3000; 单位 MHz
-  DdrSize: 0              # @range:1-65536; 单位 MB
-  CapacityID: 0x0         # @related:CapacityRunModeMapTbl.CapacityID    # 指向 flat 形态
-  RunModeValue: 0x0       # @related:CapacityRunModeMapTbl.RunModeValue

@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import pytest
 
-from ecfg.merge import ConflictError, apply_merge, merge_tables, parse_merge_rule
+from ecfg.merge import ConflictError, apply_merge, merge_tables
+from ecfg.merge.policies import parse_merge_rule  # 内部 helper，不在 facade
 from ecfg.model import Record, Table
 from ecfg.schema.model import FieldSchema, TableSchema
 from ecfg.schema.validator import ValidationError

@@ -1,6 +1,0 @@
-FileName: ""              # 来源 xlsx 文件名
-Date: ""                  # YYYY/MM 格式
-XmlConvToolsVersion: ""   # 转换工具版本号
-RatType: ""               # RAT 类型（可空字符串）
-Version: ""               # 数据版本号
-RevisionHistory: ""       # 修订历史（可空字符串）

@@ -3,4 +3,4 @@
 入口：``merge_tables(tables, schema) -> Table``。规则参考 ``docs/merge-spec.md``。
 """
 from ecfg.merge.merger import merge_tables  # noqa: F401
-from ecfg.merge.policies import ConflictError, apply_merge, parse_merge_rule  # noqa: F401
+from ecfg.merge.policies import ConflictError, apply_merge  # noqa: F401

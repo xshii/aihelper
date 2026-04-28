@@ -1,6 +1,0 @@
-# @element:ResTbl
-LineNum: # @related:count(Line)
-- CoreId: 0               # @range:0-31
-  CoreType: ""
-  FreqMHz: 0              # @range:1-3000
-  Cluster: 0              # @range:0-7

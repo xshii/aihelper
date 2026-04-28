@@ -141,8 +141,6 @@ ref:
 | `@range: min-max` | index / attribute | 数值范围约束 | Phase 1 |
 | `@enum: v1, v2, ...` | index / attribute | 枚举值约束 | Phase 1 |
 | `@merge: <rule>` | attribute / ref 条目键后（仅形态 A） | 融合规则，见 §4 | Phase 1 |
-| `@level: basic/advanced/expert` | index / attribute | UI 渐进披露级别（画布是否默认展开） | Phase 2 |
-| `@unit: <str>` | index / attribute | 单位说明，如 `Hz`, `MHz`, `byte`（仅文档用，不校验） | Phase 2 |
 
 ### ref 区：两种形态
 

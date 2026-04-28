@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from ecfg.merge.policies import ConflictError, apply_merge
 from ecfg.model import CellValue, Record, Table
@@ -92,9 +92,9 @@ def _merge_record_group(records: List[Record], schema: TableSchema) -> Record:
 
 def _merge_region(
     region_dicts: List[Dict[str, CellValue]],
-    rules: Dict[str, "str | None"],
+    rules: Dict[str, Optional[str]],
     *,
-    default_rule: "str | None",
+    default_rule: Optional[str],
     context: str,
 ) -> Dict[str, CellValue]:
     """合并多个 region dict 同一字段集合；ConflictError 被重抛附加 ``context.<key>``."""

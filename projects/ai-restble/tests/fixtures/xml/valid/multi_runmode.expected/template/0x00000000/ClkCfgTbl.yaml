@@ -1,5 +1,0 @@
-# @element:ResTbl
-LineNum: # @related:count(Line)
-- ClkName: ""
-  FreqMHz: 0              # @range:1-3000
-  Source: ""

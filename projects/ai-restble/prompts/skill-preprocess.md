@@ -4,12 +4,15 @@
 你是 ai-restble 的**预处理 skill** 实现者。任务是把 legacy XML 拆解成符合 ai-restble schema 的 yaml 文件树。
 
 ## Task
-读取一个 legacy XML 文件，输出一个目录树，目录里是若干 yaml 文件。每个 XML 顶层 element 对应一个 yaml 文件（flat 多实例例外，多个同名实例合并为 list-of-mappings）。
+读取**一份或多份** legacy XML 文件，输出一个目录树，目录里是若干 yaml 文件。
+- **单 XML 输入**（常见）：每个顶层 element 对应一个 yaml 文件（flat 多实例例外，多个同名实例合并为 list-of-mappings）
+- **多 XML 输入合一**（次要）：把 N 份 XML 在 yaml 树这一层合并成一份目录树。冲突解析规则：相同 `<element, type-attr>` tuple 的实例必须**完全相同**（幂等去重），否则 raise；不冲突的（来自不同 source 的不同 elements）正常并入同一份 yaml 树。
 
 ## Context
 - **权威协议**：`docs/yaml-schema.md`（必读）。包括 R1-R11 规则、注解全集、文件命名公式、目录布局。
 - **参考样例**：`tests/fixtures/xml/valid/multi_runmode.expected/`（最丰富，含 wrapper / 自命名 / flat / 多 scope / 多 variant 各情形）。
 - **简单样例**：`tests/fixtures/xml/valid/{minimal,empty_table,hex_widths}.expected/`（无 scope 平铺根目录）。
+- **多 XML 合一**典型场景：两份 legacy XML 描述同一系统的不同切片（如 baseline + 增量补丁），需要先 union 再 round-trip。跟 merge-spec 的多 team yaml 合并是**两个独立机制**——这里是 XML→YAML 阶段做的简单去重 union，不引入 `@merge` 注解。
 
 ## Rules（编号同 yaml-schema.md，便于对照）
 

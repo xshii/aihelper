@@ -84,7 +84,11 @@ class TestLoadTableSchemaFromInterruptFixture:
     def test_owner_module_ref_merge_conflict(self, schema):
         f = schema.ref_fields["owner_module"]
         assert f.merge_rule == "conflict"
-        assert f.fk_target == "Module.moduleType"
+        # fk_targets 收集 ref entry 内每个 leaf 子字段的 FK 目标
+        assert f.fk_targets == {
+            "moduleType": "Module.moduleType",
+            "moduleIndex": "Module.moduleIndex",
+        }
 
 
 class TestEmptyOrAbsentTemplate:

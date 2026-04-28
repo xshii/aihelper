@@ -139,21 +139,19 @@ def _build_field_schema(name: str, region: str, parent: CommentedMap) -> FieldSc
 
 
 def _build_ref_field_schema(name: str, ref_map: CommentedMap) -> FieldSchema:
-    """ref 区子项：尾随 ``@merge`` 在 entry-level；FK 目标在更深的 leaf 子注释（MVP 暂不展开）."""
+    """ref 区子项：entry-level ``@merge`` + 每个 leaf 子字段的 FK 目标 ``Table.col``."""
     fs = FieldSchema(name=name, region="ref")
     comment = trailing_comment(ref_map, name) or ""
     parsed = parse_comment(comment)
     for ann in parsed.annotations:
         if ann.key == "merge":
             fs.merge_rule = ann.value
-    # FK 目标：扫子 mapping 的尾随注释（不带 @ 的裸 BaseName.field 形式）
+    # 每个 leaf 子字段的 FK 目标（``Module.moduleType`` 形式裸文本注释）
     entry = ref_map.get(name)
     if isinstance(entry, CommentedMap):
         for sub in entry:
             sub_comment = trailing_comment(entry, sub) or ""
             m = _FK_RE.match(sub_comment)
             if m:
-                # MVP：FK 信息聚合到 entry 级；只记一个目标 BaseName
-                fs.fk_target = f"{m.group(1)}.{m.group(2)}"
-                break
+                fs.fk_targets[sub] = f"{m.group(1)}.{m.group(2)}"
     return fs

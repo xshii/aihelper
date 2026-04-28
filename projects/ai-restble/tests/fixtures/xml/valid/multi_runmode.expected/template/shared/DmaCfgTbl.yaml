@@ -1,6 +1,0 @@
-# @element:ResTbl
-LineNum: # @related:count(Line)
-- ChannelId: 0            # @range:0-31
-  SrcType: ""
-  DstType: ""
-  BurstSize: 0

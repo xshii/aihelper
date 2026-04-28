@@ -16,7 +16,12 @@ def to_hashable(value: Any) -> Any:
 
 @dataclass
 class FieldSchema:
-    """单字段 schema：name + region + 可选约束（range/enum）+ 可选 merge 规则."""
+    """单字段 schema：name + region + 可选约束（range/enum）+ 可选 merge 规则.
+
+    ``fk_targets``：仅 ref 区有意义。形如 ``{"moduleType": "Module.moduleType",
+    "moduleIndex": "Module.moduleIndex"}``，每个子字段记一个 FK 目标。FK 闭包校验
+    （所有 ``T.c`` 必须解析到现存数据）是后续工作，目前数据结构已就绪。
+    """
 
     name: str
     region: Region
@@ -24,7 +29,7 @@ class FieldSchema:
     range_lo: Optional[float] = None
     range_hi: Optional[float] = None
     enum_values: Optional[List[str]] = None
-    fk_target: Optional[str] = None  # ref 区 FK 目标，如 ``Module.moduleType``
+    fk_targets: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

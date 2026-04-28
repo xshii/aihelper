@@ -11,7 +11,7 @@ import doctest
 from ruamel.yaml import YAML
 
 from ecfg.schema import _comments
-from ecfg.schema._comments import subsequent_comments, trailing_comment
+from ecfg.schema._comments import trailing_comment
 
 
 def test_doctests_all_pass():
@@ -78,51 +78,13 @@ class TestEmptyAndMissing:
         assert trailing_comment(doc, "name") is None
 
 
-class TestSubsequentComments:
-    def test_none_when_no_standalone(self):
-        doc = _load("priority: 0  # @merge: sum\n")
-        assert subsequent_comments(doc, "priority") == []
+class TestTrailingNotPickedUpFromStandalone:
+    """同行尾随注释 + 下一行 standalone 共存时，trailing_comment 只取尾随部分."""
 
-    def test_single_standalone(self):
-        src = "priority: 0\n# @range: 0-15\n"
-        doc = _load(src)
-        assert subsequent_comments(doc, "priority") == ["@range: 0-15"]
-
-    def test_multiple_standalones(self):
-        src = (
-            "priority: 0\n"
-            "# note one\n"
-            "# @flag: x\n"
-            "# note two\n"
-        )
-        doc = _load(src)
-        assert subsequent_comments(doc, "priority") == [
-            "note one", "@flag: x", "note two",
-        ]
-
-    def test_standalone_attaches_to_last_key_of_inner_mapping(self):
-        """ruamel 把 standalone 挂到前一条 key —— 最深 mapping 的最后 key。"""
-        src = (
-            "items:\n"
-            "  - ref:\n"
-            "      owner:\n"
-            "        moduleType: uart\n"
-            "        moduleIndex: 0\n"
-            "# @flag: top\n"
-        )
-        doc = _load(src)
-        inner = doc["items"][0]["ref"]["owner"]
-        assert subsequent_comments(inner, "moduleIndex") == ["@flag: top"]
-
-
-class TestCoexistence:
-    """同行 trailing + 下行 standalone 同时出现时两者互不干扰。"""
-
-    def test_trailing_plus_standalone(self):
+    def test_trailing_isolated_from_standalone(self):
         src = (
             "priority: 0  # @merge: sum\n"
             "# @range: 0-15\n"
         )
         doc = _load(src)
         assert trailing_comment(doc, "priority") == "@merge: sum"
-        assert subsequent_comments(doc, "priority") == ["@range: 0-15"]
