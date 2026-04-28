@@ -55,14 +55,14 @@ flowchart TD
 1. **扫描目录**：找出所有 element yaml（排除 FileInfo / `template/` / 下划线 meta）。
 2. **加载 `template/_children_order.yaml`** —— element-class entries + `<element>:<stem>` 特例 list。
 3. **拼装 XML**：
-   a. **FileInfo 是文档根** —— attributes 来自 `(shared/)?FileInfo.yaml`，无 `@element:` 头（特殊豁免）。
+   a. **FileInfo 是文档根** —— attributes 来自 `(shared/)?FileInfo.yaml`（首行 `# @element:FileInfo`，与其他 data yaml 统一）。
    b. **逐 entry 展开**：按 list 顺序，每条 entry **只有两种形式**：
       - 不含 `:` → **`<Element>` element-class catch-all**：匹配 `resolved element name == entry` 的所有未消费文件，按 `(stem, full path)` 字母序排列。
       - 含 `:` → **`<element>:<stem>` 特例**：精确匹配 (resolved element name + 完整 stem)，pin 单个 instance 到此位置。
       
       匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，catch-all 后兜底）。**协议契约**：同 element 类内 `(stem, full path)` 字母序 == XML idx 序——XML 不一致时必须用特例显式 pin。**文件夹位置通过 path 进入 tiebreak**，不单独优先。
 4. **每个文件 emit XML**：
-   - 读首行 `@element:<X>` 决定 element name（FileInfo 例外）
+   - 读首行 `@element:<X>` 决定 element name（含 FileInfo）
    - 按**数据 yaml 自身**字段 insertion order 输出 attributes
    - 派生字段（`@related:count(C)`）—— scalar attribute 值 = `len(list)`；list items 作为 sibling children 平级挂父元素下（**不**嵌套）
    - list item mapping 中的每个 key-value → child element 的一个 attribute
@@ -154,7 +154,7 @@ emit：
 | 情况 | 处理 |
 |---|---|
 | yaml 文件首行 = `# @element:<self>` | element name = file stem 去 `_<variant>` 后缀 |
-| FileInfo.yaml 无 `# @element:` 头 | element name 固定为 `FileInfo`（文档根特殊豁免） |
+| FileInfo.yaml 含 `# @element:FileInfo` 头 | 与其他 data yaml 统一处理 |
 | yaml 主体仅首行（空 element） | emit 自闭合 element，无 attribute 无 children |
 | list 为 null（`LineNum: # @related:count(Line)` 后无 `-` items） | 派生值 = 0，emit 自闭合 element |
 | 同 stem 同 element 在不同 scope folder 都存在 | **正常**——多 RunMode 数据；按 `_children_order` 顺序逐个 emit |

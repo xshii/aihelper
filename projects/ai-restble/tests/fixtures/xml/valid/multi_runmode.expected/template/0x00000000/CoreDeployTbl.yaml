@@ -1,0 +1,6 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- CoreId:
+  CoreType:
+  FreqMHz:
+  Cluster:

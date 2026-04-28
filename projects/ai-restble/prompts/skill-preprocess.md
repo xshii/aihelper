@@ -13,6 +13,7 @@
 - **参考样例**：`tests/fixtures/xml/valid/multi_runmode.expected/`（最丰富，含 wrapper / 自命名 / flat / 多 scope / 多 variant 各情形）。
 - **简单样例**：`tests/fixtures/xml/valid/{minimal,empty_table,hex_widths}.expected/`（无 scope 平铺根目录）。
 - **多 XML 合一**典型场景：两份 legacy XML 描述同一系统的不同切片（如 baseline + 增量补丁），需要先 union 再 round-trip。跟 merge-spec 的多 team yaml 合并是**两个独立机制**——这里是 XML→YAML 阶段做的简单去重 union，不引入 `@merge` 注解。
+- **template scaffold 是独立 skill**：本 skill 只生成 ``_children_order.yaml`` 这一个 meta 文件，**不产** ``template/<Element>.yaml`` schema scaffold。后者由 ``prompts/skill-scaffold.md`` 描述、``ecfg.legacy.scaffold.generate_scaffolds`` 显式按需调用，与主流程解耦。
 
 ## Rules（编号同 yaml-schema.md，便于对照）
 
@@ -21,13 +22,13 @@
 | R1 | 一文件一实例 | 顶层 element → 一个 yaml 文件。flat 多实例（如多个 `<CapacityRunModeMapTbl />`）合并为 list 主体 |
 | R2 | 目录 = scope | 有 RunMode 维度 → 用 `shared/` + `<RunMode>/` 子目录；无 RunMode → flat 根目录 |
 | R3 | 文件 stem = XML literal | wrapper `<ResTbl X="Y">` → 文件名 `Y.yaml`；自命名 `<X .../>` → 文件名 `X.yaml`。**绝不带 `ResTbl_` 前缀** |
-| R4 | 首行 `# @element:<X>` | 自命名 → `# @element:<self>`；wrapper → `# @element:ResTbl`（实际 element 名）。**FileInfo.yaml 例外**：无首行注解 |
+| R4 | 首行 `# @element:<X>` | 所有 data yaml 都含。自命名 → `# @element:<self>`；wrapper → `# @element:ResTbl`；FileInfo → `# @element:FileInfo` |
 | R6 | 顶层扁平 mapping | XML attribute 直接平铺到 yaml 顶层，不要 `attribute:` 包裹 |
 | R7 | 派生字段 → `# @related:count(<Child>)` | 该字段 emit 时算 `len(children)`；yaml 里其值是 children list |
 | R8 | list item = child element 的 attribute set | mapping 每个 key-value 对 = child 的一个 attribute |
 | R9 | 引用 value 永远 = 文件 stem | RunModeItem `<X="Y"/>` → yaml 写 `- X: "Y"` |
 | R10 | 同目录 ref 默认；跨目录加 `# @use:<path>` | 自动判断 |
-| **生成 meta** | `template/_children_order.yaml` | 必须产出 list。**只有两种 entry**：(1) `<Element>` element-class catch-all（匹配该 element 的所有剩余文件，按 `(stem, path)` 字母序）；(2) `<element>:<stem>` 特例（精确 pin 单个 instance）。同 element 跨 XML 出现多次时：仅末尾 block 可用 catch-all 且块内字母序 == XML idx 序，前面 block 用特例；同 class 多 element 形态（wrapper + flat 混合）也用特例 pin |
+| **生成 meta** | `template/_children_order.yaml` | 顶层 ``{FileInfo: [<children>]}`` 嵌套 mapping —— yaml 自身表达"FileInfo 是根，list 是其 children"。``children`` list 仅两种 entry：(1) `<Element>` element-class catch-all（按 `(stem, path)` 字母序匹配剩余文件）；(2) `<element>:<stem>` 特例（精确 pin 单个 instance）。同 element 跨 XML 出现多次：仅末尾 block 可用 catch-all 且块内字母序 == XML idx 序，前面 block 用特例 |
 
 ## Steps
 
@@ -50,7 +51,7 @@ flowchart TD
 
 1. **解析 XML**，得到 element 树（**多 XML 输入**则全部解析为 element 序列）。
 2. **遍历顶层 element**（按 XML 文档顺序）：
-   - 若 `<FileInfo>` —— 拆出其自身 attributes 写一个 yaml 文件（无 `@element:` 头，文档根特殊豁免），**children 各自递归拆分**
+   - 若 `<FileInfo>` —— 拆出其自身 attributes 写一个 yaml 文件（首行 `# @element:FileInfo`），**children 各自递归拆分**
    - 若 `<ResTbl X="Y" .../>` —— wrapper，stem = Y，首行 `# @element:ResTbl`
    - 若其他自命名 element —— stem = element name，首行 `# @element:<self>`
 3. **决定 scope**：

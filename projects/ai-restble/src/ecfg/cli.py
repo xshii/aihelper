@@ -119,6 +119,50 @@ def export_excel(input_dir: str, output: str, force: bool) -> None:
 
 # endregion
 
+# region legacy XML round-trip ─────────────────────────────────────────────
+@main.command("unpack")
+@click.argument("xml_files", type=click.Path(exists=True, dir_okay=False), nargs=-1,
+                required=True)
+@click.argument("output_dir", type=click.Path(file_okay=False))
+def unpack_cmd(xml_files: Tuple[str, ...], output_dir: str) -> None:
+    """Legacy XML → YAML 文件树（拆解到 OUTPUT_DIR/）；多 XML 幂等去重合一."""
+    from ecfg.legacy.preprocess import unpack_many
+
+    unpack_many([Path(f) for f in xml_files], Path(output_dir))
+    click.echo(f"unpack: {len(xml_files)} XML(s) → {output_dir}/")
+
+
+@main.command("pack")
+@click.argument("fixture_dir", type=click.Path(exists=True, file_okay=False))
+@click.option("-o", "--output", type=click.Path(dir_okay=False), required=True,
+              help="输出 XML 文件路径")
+@click.option("--force/--no-force", default=False)
+def pack_cmd(fixture_dir: str, output: str, force: bool) -> None:
+    """YAML 文件树 → legacy XML（字节级稳定）."""
+    from ecfg.legacy.postprocess import pack
+
+    out_path = Path(output)
+    if out_path.exists() and not force:
+        raise click.ClickException(f"{out_path} 已存在；用 --force 覆盖")
+    out_path.write_text(pack(Path(fixture_dir)), encoding="utf-8")
+    click.echo(f"pack: {fixture_dir}/ → {output}")
+
+
+@main.command("scaffold")
+@click.argument("xml_files", type=click.Path(exists=True, dir_okay=False), nargs=-1,
+                required=True)
+@click.option("-o", "--output-dir", type=click.Path(file_okay=False), required=True,
+              help="输出根目录；scaffold 写到 OUTPUT_DIR/template/ 下")
+def scaffold_cmd(xml_files: Tuple[str, ...], output_dir: str) -> None:
+    """从 XML 生成 template/<scope>/<Element>.yaml schema scaffold（无约束注解）."""
+    from ecfg.legacy.scaffold import generate_scaffolds
+
+    generate_scaffolds([Path(f) for f in xml_files], Path(output_dir))
+    click.echo(f"scaffold: {len(xml_files)} XML(s) → {output_dir}/template/")
+
+
+# endregion
+
 # region helpers ───────────────────────────────────────────────────────────
 def _parse_index_specs(specs: Tuple[str, ...]) -> Dict[str, List[str]]:
     """把 ``("Sheet:col1,col2", ...)`` 解析成 ``{"Sheet": [col1, col2]}``。"""

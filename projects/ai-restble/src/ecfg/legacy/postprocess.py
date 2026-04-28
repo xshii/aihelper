@@ -19,9 +19,9 @@ from pathlib import Path
 from typing import Any
 
 from lxml import etree
-from ruamel.yaml import YAML
 from ruamel.yaml.scalarint import HexCapsInt, HexInt
 
+from ecfg.legacy._yaml import YAML_RT
 from ecfg.legacy.const import (
     ANNOT_ELEMENT,
     ANNOT_RELATED_COUNT,
@@ -38,19 +38,21 @@ from ecfg.schema._comments import trailing_comment
 
 logger = logging.getLogger(__name__)
 
-_YAML_RT = YAML(typ="rt")
-
 _ELEMENT_HEADER = re.compile(rf"^#\s*{re.escape(ANNOT_ELEMENT)}(\S+)\s*$")
 _RELATED_COUNT = re.compile(rf"{re.escape(ANNOT_RELATED_COUNT)}\(([^)]+)\)")
 
 
 def pack(fixture_dir: Path) -> str:
-    """把 yaml-tree fixture 拼装为 legacy XML 字符串。"""
+    """把 yaml-tree fixture 拼装为 legacy XML 字符串.
+
+    ``_children_order.yaml`` 顶层是 ``{FileInfo: [<children>]}`` 嵌套结构 — yaml
+    自身表达"FileInfo 是根，list 是其 children 的 emit 顺序"。
+    """
     fixture_dir = Path(fixture_dir).resolve()
     logger.info("pack: fixture=%s", fixture_dir)
 
-    file_info_path = _find_file_info(fixture_dir)
     children_order = _load_children_order(fixture_dir)
+    file_info_path = _find_file_info(fixture_dir)
     logger.debug("pack: FileInfo=%s, children_order=%s", file_info_path.name, children_order)
 
     file_info_data = _load_yaml(file_info_path)
@@ -108,15 +110,21 @@ def _find_file_info(fixture_dir: Path) -> Path:
 
 
 def _load_yaml(path: Path) -> Any:
-    return _YAML_RT.load(path.read_text(encoding="utf-8"))
+    return YAML_RT.load(path.read_text(encoding="utf-8"))
 
 
 def _load_children_order(fixture_dir: Path) -> list[str]:
+    """读 ``_children_order.yaml`` — 顶层 ``{FileInfo: [<children>]}``，返回 children list."""
     meta = fixture_dir / TEMPLATE_FOLDER / CHILDREN_ORDER_YAML
     if not meta.is_file():
         raise FileNotFoundError(f"Missing {meta}")
-    loaded = _YAML_RT.load(meta.read_text(encoding="utf-8"))
-    return [str(x) for x in loaded]
+    loaded = YAML_RT.load(meta.read_text(encoding="utf-8"))
+    if not isinstance(loaded, dict) or ROOT_TAG not in loaded:
+        raise ValueError(
+            f"{meta}: 顶层必须是 ``{{ {ROOT_TAG}: [<children>] }}`` 嵌套结构；"
+            f"实际：{type(loaded).__name__}"
+        )
+    return [str(x) for x in loaded[ROOT_TAG]]
 
 
 def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:

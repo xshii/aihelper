@@ -1,0 +1,6 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- Width2:
+  Width4:
+  Width8:
+  Auto:

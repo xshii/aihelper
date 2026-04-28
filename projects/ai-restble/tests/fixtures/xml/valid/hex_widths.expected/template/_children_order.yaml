@@ -1,2 +1,3 @@
-# FileInfo children emit order
+# Top-level emit order — FileInfo (root) → list of child entries
+FileInfo:
 - ResTbl

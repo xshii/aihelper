@@ -12,6 +12,7 @@ from ruamel.yaml import YAML, YAMLError
 
 from ecfg.legacy.postprocess import pack
 from ecfg.legacy.preprocess import unpack, unpack_many
+from ecfg.legacy.scaffold import generate_scaffolds
 
 _yaml = YAML(typ="safe")
 
@@ -104,14 +105,20 @@ class TestChildrenOrder:
         meta = fixture_dir / "template" / "_children_order.yaml"
         assert meta.is_file(), f"{fixture_dir.name} 缺少 {meta.relative_to(fixture_dir)}"
 
-    def test_children_order_is_list_of_strings(self, fixture_dir: Path) -> None:
-        """meta 文件必须是 yaml list-of-strings."""
+    def test_children_order_is_fileinfo_mapping(self, fixture_dir: Path) -> None:
+        """meta 文件顶层必须是 ``{FileInfo: [<children entries>]}`` 嵌套结构."""
         meta = fixture_dir / "template" / "_children_order.yaml"
         if not meta.is_file():
             pytest.skip("_children_order.yaml 不存在（前一个 test 应已报错）")
         loaded = _yaml.load(meta.read_text(encoding="utf-8"))
-        assert isinstance(loaded, list) and all(isinstance(x, str) for x in loaded), (
-            f"{meta.relative_to(FIXTURES_ROOT)} 必须是 yaml list-of-strings，实际：{loaded!r}"
+        assert isinstance(loaded, dict) and "FileInfo" in loaded, (
+            f"{meta.relative_to(FIXTURES_ROOT)} 顶层必须 ``FileInfo: [...]`` 形态，"
+            f"实际：{loaded!r}"
+        )
+        children = loaded["FileInfo"]
+        assert isinstance(children, list) and all(isinstance(x, str) for x in children), (
+            f"{meta.relative_to(FIXTURES_ROOT)} FileInfo 值必须是 list-of-strings，"
+            f"实际：{children!r}"
         )
 
 
@@ -169,6 +176,7 @@ class TestChildrenOrderSpecificEntry:
         order_file = dst / "template" / "_children_order.yaml"
         # 三条 element-class 入口：CapacityRunModeMapTbl flat / ResTbl wrappers / RunModeTbl
         order_file.write_text(
+            "FileInfo:\n"
             "- CapacityRunModeMapTbl\n"
             "- ResTbl\n"
             "- RunModeTbl\n",
@@ -518,3 +526,166 @@ class TestUnpackManyExtra:
         )
         with pytest.raises(ValueError, match="root must be <FileInfo>"):
             unpack(bad, tmp_path / "out")
+
+
+def _hash_template_dir(tmpl_dir: Path) -> dict[str, bytes]:
+    """收集 template/ 下所有 ``<E>.yaml`` 文件路径 → 字节内容映射（排除 _children_order.yaml）."""
+    return {
+        str(f.relative_to(tmpl_dir)): f.read_bytes()
+        for f in sorted(tmpl_dir.rglob("*.yaml"))
+        if f.name != "_children_order.yaml"
+    }
+
+
+class TestScaffoldGeneration:
+    """``generate_scaffolds`` — schema scaffold 生成（独立于 unpack 主流程）."""
+
+    def test_unpack_does_not_generate_scaffolds(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """主流程 unpack 解耦 — 只生成 ``_children_order.yaml``，不生成 element scaffold."""
+        unpack(fixture_dir.with_suffix(".xml"), tmp_path / "out")
+        tmpl = tmp_path / "out" / "template"
+        assert (tmpl / "_children_order.yaml").is_file()
+        elem_scaffolds = [p for p in tmpl.rglob("*.yaml") if p.name != "_children_order.yaml"]
+        assert not elem_scaffolds, f"unpack 不该生成 element scaffold: {elem_scaffolds}"
+
+    def test_generate_scaffolds_creates_expected_files(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """``generate_scaffolds`` 显式调用 → 产出 element + FileInfo scaffolds."""
+        out = tmp_path / "out"
+        generate_scaffolds([fixture_dir.with_suffix(".xml")], out)
+        tmpl = out / "template"
+        scaffolds = [p for p in tmpl.rglob("*.yaml") if p.name != "_children_order.yaml"]
+        assert scaffolds, f"应生成 element scaffolds：{tmpl}"
+        # 每份 scaffold 首行必须是 # @element:<X>
+        for sc in scaffolds:
+            first = sc.read_text(encoding="utf-8").splitlines()[0]
+            assert first.startswith("# @element:"), f"{sc.name} 首行应是 @element 头：{first!r}"
+
+    def test_generate_scaffolds_idempotent(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """同一 XML 多次生成 → 字节级一致（幂等）."""
+        out_a = tmp_path / "a"
+        out_b = tmp_path / "b"
+        generate_scaffolds([fixture_dir.with_suffix(".xml")], out_a)
+        generate_scaffolds([fixture_dir.with_suffix(".xml")], out_b)
+        assert _hash_template_dir(out_a / "template") == _hash_template_dir(out_b / "template")
+
+    def test_generate_scaffolds_round_trip_consistent(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """``XML → unpack → pack → XML' → scaffold(XML') == scaffold(XML)``（不含用户注释）."""
+        xml1 = fixture_dir.with_suffix(".xml")
+        out1 = tmp_path / "scaffold1"
+        generate_scaffolds([xml1], out1)
+
+        # round-trip XML
+        intermediate = tmp_path / "intermediate"
+        unpack(xml1, intermediate)
+        emitted = pack(intermediate)
+        xml2 = tmp_path / "round.xml"
+        xml2.write_text(emitted, encoding="utf-8")
+
+        out2 = tmp_path / "scaffold2"
+        generate_scaffolds([xml2], out2)
+        assert _hash_template_dir(out1 / "template") == _hash_template_dir(out2 / "template")
+
+    def test_generate_scaffolds_layout_for_scoped_fixture(
+        self, tmp_path: Path,
+    ) -> None:
+        """multi_runmode：scope 元素去 ``template/0x00000000/``，shared 去 ``template/shared/``."""
+        out = tmp_path / "out"
+        generate_scaffolds([FIXTURES_ROOT / "multi_runmode.xml"], out)
+        tmpl = out / "template"
+        assert (tmpl / "shared" / "FileInfo.yaml").is_file()
+        assert (tmpl / "shared" / "DmaCfgTbl.yaml").is_file()
+        assert (tmpl / "0x00000000" / "RunModeTbl.yaml").is_file()
+        assert (tmpl / "0x00000000" / "ClkCfgTbl.yaml").is_file()
+        # CapacityRunModeMapTbl 两种形态：shared 一份 (wrapper) + 0x00000000 一份 (flat)
+        assert (tmpl / "shared" / "CapacityRunModeMapTbl.yaml").is_file()
+        assert (tmpl / "0x00000000" / "CapacityRunModeMapTbl.yaml").is_file()
+
+    def test_generate_scaffolds_layout_for_flat_fixture(self, tmp_path: Path) -> None:
+        """无 scope fixture（minimal）：scaffold 平铺在 ``template/`` 下，无子文件夹."""
+        out = tmp_path / "out"
+        generate_scaffolds([FIXTURES_ROOT / "minimal.xml"], out)
+        tmpl = out / "template"
+        assert (tmpl / "FileInfo.yaml").is_file()
+        assert (tmpl / "RatVersion.yaml").is_file()
+        assert (tmpl / "FooTbl.yaml").is_file()
+        assert not (tmpl / "shared").exists()
+        assert not (tmpl / "0x00000000").exists()
+
+    def test_generate_scaffolds_empty_input_raises(self, tmp_path: Path) -> None:
+        """空 xml_paths → ValueError，不静默."""
+        with pytest.raises(ValueError, match="不能为空"):
+            generate_scaffolds([], tmp_path / "out")
+
+    def test_multi_instance_flat_same_scope_merged_to_list(
+        self, tmp_path: Path,
+    ) -> None:
+        """R1：多个 flat ``<X .../>`` 同 scope（同 file path）→ 合并为 list-of-mappings 主体.
+
+        防范回归：之前每个 child 独立写一份会被后者 overwrite，第一个 instance 数据丢失。
+        """
+        from ecfg.legacy.preprocess import unpack
+        xml = tmp_path / "x.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<FileInfo FileName="x" Date="" XmlConvToolsVersion="" RatType="" '
+            'Version="" RevisionHistory="">\n'
+            '    <RunModeTbl RunMode="0xAA" ResAllocMode="0" ResTblNum="0"/>\n'
+            '    <FlatTbl Id="1" Name="alpha" RunModeValue="0xAA"/>\n'
+            '    <FlatTbl Id="2" Name="beta"  RunModeValue="0xAA"/>\n'  # 同 scope
+            '    <FlatTbl Id="3" Name="gamma" RunModeValue="0xAA"/>\n'
+            '</FileInfo>\n',
+            encoding="utf-8",
+        )
+        out = tmp_path / "out"
+        unpack(xml, out)
+        merged = (out / "0xAA" / "FlatTbl.yaml").read_text(encoding="utf-8")
+        # 三条 instance 都在；list-of-mappings 形态
+        for name in ("alpha", "beta", "gamma"):
+            assert name in merged, f"instance {name!r} 缺席：\n{merged}"
+        # 顶层是 list（首字符跳过 # 注释行后是 ``-``）
+        assert "\n- Id:" in merged or merged.lstrip("#").lstrip().startswith("-"), (
+            f"应为 list-of-mappings 形态：\n{merged}"
+        )
+        # round-trip 还原 3 个 element
+        emitted = pack(out)
+        assert emitted.count('<FlatTbl ') == 3, f"应 emit 3 个 FlatTbl：\n{emitted}"
+
+    def test_generate_scaffolds_field_set_union_across_instances(
+        self, tmp_path: Path,
+    ) -> None:
+        """同 (bare, scope) 多 instance（variant）→ 字段集**有序 union**，非首条独占."""
+        # 两个 ResTbl variant 各被一个 RunModeTbl 引用 → 同 bare class T 在 scope 0x1/0x2
+        xml = tmp_path / "x.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<FileInfo FileName="x" Date="" XmlConvToolsVersion="" RatType="" '
+            'Version="" RevisionHistory="">\n'
+            '    <RunModeTbl RunMode="0x1" ResAllocMode="0" ResTblNum="1">\n'
+            '        <RunModeItem T="T"/>\n'
+            '    </RunModeTbl>\n'
+            '    <RunModeTbl RunMode="0x2" ResAllocMode="0" ResTblNum="1">\n'
+            '        <RunModeItem T="T_0x2"/>\n'
+            '    </RunModeTbl>\n'
+            '    <ResTbl T="T" LineNum="1">\n'
+            '        <Line FieldA="1" FieldB="2"/>\n'
+            '    </ResTbl>\n'
+            '    <ResTbl T="T_0x2" LineNum="1">\n'
+            '        <Line FieldA="3" FieldC="4"/>\n'  # FieldC 是新字段
+            '    </ResTbl>\n'
+            '</FileInfo>\n',
+            encoding="utf-8",
+        )
+        out = tmp_path / "out"
+        generate_scaffolds([xml], out)
+        scaffold = (out / "template" / "0x00000000" / "T.yaml").read_text(encoding="utf-8")
+        # 三个字段都应出现（按出现序：A, B, C）
+        for f in ("FieldA:", "FieldB:", "FieldC:"):
+            assert f in scaffold, f"字段 {f!r} 缺席：\n{scaffold}"

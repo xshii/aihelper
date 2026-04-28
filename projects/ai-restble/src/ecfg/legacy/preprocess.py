@@ -8,20 +8,23 @@
 """
 from __future__ import annotations
 
-import io
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from lxml import etree
-from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.scalarint import HexCapsInt, HexInt
 from ruamel.yaml.scalarstring import DoubleQuotedScalarString
 
+from ecfg.legacy._parse import (
+    build_runmode_xref,
+    classify,
+    collect_and_dedup,
+    detect_count_attr,
+    scope_for,
+)
+from ecfg.legacy._yaml import attach_count_anchor, dump_yaml, element_header
 from ecfg.legacy.const import (
-    ANNOT_ELEMENT,
-    ANNOT_RELATED_COUNT,
     ANNOT_USE,
     CHILDREN_ORDER_YAML,
     DEFAULT_CHILD_TAG,
@@ -30,36 +33,17 @@ from ecfg.legacy.const import (
     HEX_PREFIX_LEN,
     HEX_RE,
     INT_RE,
-    KEY_VAL_SEP_LEN,
     LINE_COUNT_ATTR,
     ROOT_TAG,
     ROOT_YAML,
-    RUNMODE_ATTR,
-    RUNMODE_ITEM_TAG,
     RUNMODE_TBL_TAG,
-    RUNMODE_VALUE_ATTR,
     SHARED_FOLDER,
     TEMPLATE_FOLDER,
     WRAPPER_TAG,
-    XML_ERR_TRUNC_LEN,
-    YAML_INDENT_MAPPING,
-    YAML_INDENT_OFFSET,
-    YAML_INDENT_SEQUENCE,
-    YAML_LINE_WIDTH,
     strip_variant,
 )
 
 logger = logging.getLogger(__name__)
-
-_YAML_RT = YAML(typ="rt")
-# 紧凑序列：``- `` 与父 key 同列，list item 内嵌 mapping 字段缩进 2
-_YAML_RT.indent(
-    mapping=YAML_INDENT_MAPPING,
-    sequence=YAML_INDENT_SEQUENCE,
-    offset=YAML_INDENT_OFFSET,
-)
-_YAML_RT.preserve_quotes = True
-_YAML_RT.width = YAML_LINE_WIDTH
 
 
 def unpack(xml_path: Path, out_dir: Path) -> None:
@@ -78,15 +62,15 @@ def unpack_many(xml_paths: List[Path], out_dir: Path) -> None:
     out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    file_info_root, children = _collect_and_dedup(xml_paths)
+    file_info_root, children = collect_and_dedup(xml_paths)
     has_scope = any(c.tag == RUNMODE_TBL_TAG for c in children)
-    xref = _build_runmode_xref(children) if has_scope else {}
+    xref = build_runmode_xref(children) if has_scope else {}
 
     classifications: List[Tuple[int, Any, str, str, Optional[str]]] = []
     stem_folders: Dict[str, Set[Optional[str]]] = {}
     for idx, child in enumerate(children):
-        elem_name, stem = _classify(child)
-        scope_folder = _scope_for(child, elem_name, stem, xref, has_scope)
+        elem_name, stem = classify(child)
+        scope_folder = scope_for(child, elem_name, stem, xref, has_scope)
         classifications.append((idx, child, elem_name, stem, scope_folder))
         stem_folders.setdefault(stem, set()).add(scope_folder)
 
@@ -95,14 +79,26 @@ def unpack_many(xml_paths: List[Path], out_dir: Path) -> None:
     _write_file_info(file_info_dir / ROOT_YAML, file_info_root)
 
     instances: List[Tuple[int, str, str, Optional[str]]] = []
+    file_groups: Dict[Path, List[Tuple[Any, str, str, Optional[str]]]] = {}
     for idx, child, elem_name, stem, scope_folder in classifications:
         dest_dir = (out_dir / scope_folder) if scope_folder else out_dir
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        _write_element_yaml(
-            dest_dir / f"{stem}.yaml", child, elem_name, stem,
-            scope_folder, stem_folders,
+        dest_path = dest_dir / f"{stem}.yaml"
+        file_groups.setdefault(dest_path, []).append(
+            (child, elem_name, stem, scope_folder),
         )
         instances.append((idx, elem_name, stem, scope_folder))
+
+    # 同 (file_path) 多 instance（如多 flat ``<CapacityRunModeMapTbl/>`` 同 scope）→
+    # 合并为 list-of-mappings 主体（R1）；单 instance 走扁平 mapping（R6）
+    for dest_path, group in file_groups.items():
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        if len(group) == 1:
+            child, elem_name, stem, scope_folder = group[0]
+            _write_element_yaml(
+                dest_path, child, elem_name, stem, scope_folder, stem_folders,
+            )
+        else:
+            _write_multi_instance_flat(dest_path, group, stem_folders)
 
     _write_children_order(
         out_dir / TEMPLATE_FOLDER / CHILDREN_ORDER_YAML, instances,
@@ -112,124 +108,36 @@ def unpack_many(xml_paths: List[Path], out_dir: Path) -> None:
     )
 
 
-def _collect_and_dedup(xml_paths: List[Path]) -> Tuple[Any, List[Any]]:
-    """解析所有 XML，合并 children 并幂等去重；返回 (FileInfo root, children list).
+def _write_multi_instance_flat(
+    path: Path,
+    group: List[Tuple[Any, str, str, Optional[str]]],
+    stem_folders: Dict[str, Set[Optional[str]]],
+) -> None:
+    """同 (file path) 多 flat instance（R1）→ 单文件首行 ``# @element`` + list-of-mappings 主体.
 
-    身份键：wrapper = ``(ResTbl, stem)``；自命名带 RunMode = ``(tag, RunMode-value)``；
-    其他多实例 flat = 结构指纹（全内容匹配）。同 key 异内容 → raise。
+    所有 instance 共享 ``elem_name`` 和 ``stem``（同名 flat 在同 scope 才会同 path）。
+    每个 instance 走 ``_build_self_named_body`` 拿 mapping，aggregate 成 ``CommentedSeq``。
     """
-    file_info_attrs: Optional[Dict[str, str]] = None
-    file_info_root: Any = None
-    seen: Dict[Tuple, Tuple] = {}  # identity → structural fingerprint
-    children: List[Any] = []
-
-    for xml_path in xml_paths:
-        xml_path = Path(xml_path).resolve()
-        logger.info("unpack: 解析 %s", xml_path)
-        tree = etree.parse(str(xml_path))
-        root = tree.getroot()
-        if root.tag != ROOT_TAG:
-            raise ValueError(f"{xml_path}: root must be <{ROOT_TAG}>, got <{root.tag}>")
-
-        attrs = dict(root.attrib)
-        if file_info_attrs is None:
-            file_info_attrs, file_info_root = attrs, root
-        elif file_info_attrs != attrs:
-            raise ValueError(
-                f"{xml_path}: FileInfo 属性与首份 XML 冲突 — {file_info_attrs} vs {attrs}"
-            )
-
-        for child in root:
-            if not isinstance(child.tag, str):
-                continue
-            iden = _multi_xml_identity(child)
-            fingerprint = _structural_fingerprint(child)
-            prior = seen.get(iden)
-            if prior is not None:
-                if prior != fingerprint:
-                    raise ValueError(
-                        f"{xml_path}: identity {iden} 在多份 XML 中字段不同（非幂等去重）"
-                    )
-                continue
-            seen[iden] = fingerprint
-            children.append(child)
-    return file_info_root, children
-
-
-def _multi_xml_identity(child: Any) -> Tuple:
-    """跨 XML 合并的身份键：wrapper / 带 RunMode 的自命名 → 显式 key；其他 → 结构指纹."""
-    elem_name, stem = _classify(child)
+    first_child, elem_name, stem, scope_folder = group[0]
+    bare_stem = strip_variant(stem)
     if elem_name == WRAPPER_TAG:
-        return (WRAPPER_TAG, stem)
-    if RUNMODE_ATTR in child.attrib:
-        return (child.tag, RUNMODE_ATTR, child.attrib[RUNMODE_ATTR])
-    if RUNMODE_VALUE_ATTR in child.attrib:
-        return (child.tag, RUNMODE_VALUE_ATTR, child.attrib[RUNMODE_VALUE_ATTR])
-    return _structural_fingerprint(child)
-
-
-def _structural_fingerprint(child: Any) -> Tuple:
-    """递归 (tag, sorted_attrib_items, child_fingerprints) — hashable 且忽略 text/tail 空白."""
-    return (
-        child.tag,
-        tuple(sorted(child.attrib.items())),
-        tuple(_structural_fingerprint(c) for c in child if isinstance(c.tag, str)),
-    )
-
-
-def _build_runmode_xref(children: List[Any]) -> Dict[str, Set[str]]:
-    """扫所有 ``<RunModeTbl>`` 的 ``<RunModeItem X="Y"/>`` 子项，建 ``Y → {RunMode}`` 映射."""
-    xref: Dict[str, Set[str]] = {}
-    for c in children:
-        if c.tag != RUNMODE_TBL_TAG:
-            continue
-        run_mode = c.get(RUNMODE_ATTR)
-        if run_mode is None:
-            continue
-        for item in c:
-            if item.tag != RUNMODE_ITEM_TAG:
-                continue
-            for value in item.attrib.values():
-                xref.setdefault(value, set()).add(run_mode)
-    return xref
-
-
-def _classify(child: Any) -> Tuple[str, str]:
-    """``(element_name, stem)``：wrapper ``<ResTbl X="Y" .../>`` → (ResTbl, Y)；自命名 → (X, X)."""
-    if child.tag == WRAPPER_TAG:
-        for k, v in child.attrib.items():
-            if k != LINE_COUNT_ATTR:
-                return (WRAPPER_TAG, v)
+        # wrapper 多实例同 path 不应发生（每个 wrapper stem 唯一），但留兜底
         raise ValueError(
-            f"<{WRAPPER_TAG}> 缺 type-attr: {etree.tostring(child)[:XML_ERR_TRUNC_LEN]!r}"
+            f"{path}: wrapper 多实例同名同 scope，应不可能；attrs={dict(first_child.attrib)}"
         )
-    return (child.tag, child.tag)
-
-
-def _scope_for(
-    child: Any, elem_name: str, stem: str,
-    xref: Dict[str, Set[str]], has_scope: bool,
-) -> Optional[str]:
-    """根据 child 的 ``RunMode``/``RunModeValue`` 直接绑定；ResTbl wrapper 走 xref 反查."""
-    if not has_scope:
-        return None
-    if RUNMODE_ATTR in child.attrib:
-        return child.attrib[RUNMODE_ATTR]
-    if RUNMODE_VALUE_ATTR in child.attrib:
-        return child.attrib[RUNMODE_VALUE_ATTR]
-    if elem_name == WRAPPER_TAG:
-        runmodes = xref.get(stem, set())
-        if len(runmodes) == 1:
-            return next(iter(runmodes))
-    return SHARED_FOLDER
+    header = element_header(ELEMENT_SELF if elem_name == bare_stem else elem_name)
+    seq = CommentedSeq()
+    for child, _, _, _ in group:
+        seq.append(_build_self_named_body(child, scope_folder, stem_folders))
+    path.write_text(header + dump_yaml(seq), encoding="utf-8")
 
 
 def _write_file_info(path: Path, root: Any) -> None:
-    """FileInfo.yaml — flat mapping，无 ``@element`` 头（文档根例外）."""
+    """FileInfo.yaml — 首行 ``# @element:FileInfo`` + 扁平 attribute mapping."""
     doc = CommentedMap()
     for k, v in root.attrib.items():
         doc[k] = _attrib_to_yaml_value(v)
-    path.write_text(_dump_yaml(doc), encoding="utf-8")
+    path.write_text(element_header(ROOT_TAG) + dump_yaml(doc), encoding="utf-8")
 
 
 def _write_element_yaml(
@@ -240,14 +148,12 @@ def _write_element_yaml(
     bare_stem = strip_variant(stem)
     if elem_name == WRAPPER_TAG:
         body = _build_wrapper_body(child, current_folder, stem_folders)
-        header = f"# {ANNOT_ELEMENT}{elem_name}\n"
     elif elem_name == bare_stem:
         body = _build_self_named_body(child, current_folder, stem_folders)
-        header = f"# {ANNOT_ELEMENT}{ELEMENT_SELF}\n"
     else:
         body = _build_self_named_body(child, current_folder, stem_folders)
-        header = f"# {ANNOT_ELEMENT}{elem_name}\n"
-    path.write_text(header + _dump_yaml(body), encoding="utf-8")
+    header = element_header(ELEMENT_SELF if elem_name == bare_stem else elem_name)
+    path.write_text(header + dump_yaml(body), encoding="utf-8")
 
 
 def _build_wrapper_body(
@@ -262,10 +168,7 @@ def _build_wrapper_body(
         doc[LINE_COUNT_ATTR] = _build_children_seq(sub_children, current_folder, stem_folders)
     else:
         doc[LINE_COUNT_ATTR] = None
-    doc.yaml_add_eol_comment(
-        f"{ANNOT_RELATED_COUNT}({subtag})", LINE_COUNT_ATTR,
-        column=len(LINE_COUNT_ATTR) + KEY_VAL_SEP_LEN,
-    )
+    attach_count_anchor(doc, LINE_COUNT_ATTR, subtag)
     return doc
 
 
@@ -280,16 +183,13 @@ def _build_self_named_body(
             doc[k] = _attrib_to_yaml_value(v)
         return doc
 
-    count_attr = _detect_count_attr(child.attrib, len(sub_children))
+    count_attr = detect_count_attr(child.attrib, len(sub_children))
     for k, v in child.attrib.items():
         if k != count_attr:
             doc[k] = _attrib_to_yaml_value(v)
 
     doc[count_attr] = _build_children_seq(sub_children, current_folder, stem_folders)
-    doc.yaml_add_eol_comment(
-        f"{ANNOT_RELATED_COUNT}({sub_children[0].tag})", count_attr,
-        column=len(count_attr) + KEY_VAL_SEP_LEN,
-    )
+    attach_count_anchor(doc, count_attr, sub_children[0].tag)
     return doc
 
 
@@ -348,21 +248,6 @@ def _rel_use_path(current: Optional[str], target: Optional[str], stem: str) -> s
     return "/".join(parts)
 
 
-def _detect_count_attr(attrib: Dict[str, str], n_children: int) -> str:
-    """heuristic：找值等于 ``n_children`` 的 attribute 作 count 锚；多候选 → WARNING + 选首个."""
-    candidates = [k for k, v in attrib.items() if INT_RE.match(v) and int(v) == n_children]
-    if not candidates:
-        raise ValueError(
-            f"无法识别 count 锚字段（attrib={dict(attrib)}, len(children)={n_children}）"
-        )
-    if len(candidates) > 1:
-        logger.warning(
-            "count 锚字段歧义：attrs %s 都 == %d；选首个 %r（attrib=%s）",
-            candidates, n_children, candidates[0], dict(attrib),
-        )
-    return candidates[0]
-
-
 def _attrib_to_yaml_value(s: str) -> Any:
     """XML attribute string → ruamel rt 友好 Python 值，保留 hex 宽度+大小写。"""
     if s == "":
@@ -384,28 +269,35 @@ def _write_children_order(
     path: Path,
     instances: List[Tuple[int, str, str, Optional[str]]],
 ) -> None:
-    """生成 ``_children_order.yaml``：仅 element-class catch-all + ``<element>:<stem>`` 特例.
+    """生成 ``_children_order.yaml``：顶层 ``{FileInfo: [<children>]}`` 嵌套 mapping.
 
-    设计契约：template 描述**类约束**，不再枚举 stem。
-    - 同 element 跨 XML 出现 N 次（被其他 element 隔开 N 个 block）：
-      仅最后一个 block 可用 catch-all ``- <Element>``，前面 block 用 ``- <E>:<stem>`` 特例
-    - catch-all 要求 block 内 ``(stem, folder)`` 字母序 == XML idx 序；不满足则降级为特例
-    - 同 element 类内字母序为协议契约 — XML 必须按相同顺序声明同 element 实例
+    children list 描述**类约束**，仅两种 entry 形式：
+    - ``- <Element>`` element-class catch-all：匹配该 element 的所有未消费文件
+    - ``- <element>:<stem>`` 特例：精确 pin 单个 instance
+
+    同 element 跨 XML 出现 N 次（被其他 element 隔开 N 个 block）：仅最后一个 block 可用
+    catch-all，前面 block 用特例。catch-all 要求 block 内 ``(stem, folder)`` 字母序 ==
+    XML idx 序；不满足则降级为特例。同 element 类内字母序为协议契约 — XML 必须按相同顺序
+    声明同 element 实例。
     """
     path.parent.mkdir(parents=True, exist_ok=True)
-    seq = CommentedSeq()
+    children = CommentedSeq()
     blocks = _group_consecutive_by_element(instances)
     last_block_idx = {elem: bi for bi, (elem, _) in enumerate(blocks)}
 
     for bi, (elem, block) in enumerate(blocks):
         is_trailing = bi == last_block_idx[elem]
         if is_trailing and _alphabetic_matches_xml(block):
-            seq.append(elem)
+            children.append(elem)
         else:
             for _, _, stem, _ in block:
-                seq.append(f"{elem}:{stem}")
+                children.append(f"{elem}:{stem}")
 
-    text = "# FileInfo children emit order\n" + _dump_yaml(seq)
+    # 嵌套形态：top-level mapping ``FileInfo: <list>`` — yaml 结构表达
+    # "FileInfo 是根，children 在它下面"
+    doc = CommentedMap()
+    doc[ROOT_TAG] = children
+    text = "# Top-level emit order — FileInfo (root) → list of child entries\n" + dump_yaml(doc)
     path.write_text(text, encoding="utf-8")
 
 
@@ -441,7 +333,3 @@ def _alphabetic_matches_xml(
     return by_alpha == by_xml
 
 
-def _dump_yaml(doc: Any) -> str:
-    buf = io.StringIO()
-    _YAML_RT.dump(doc, buf)
-    return buf.getvalue()

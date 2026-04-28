@@ -1,0 +1,8 @@
+# @element:RunModeTbl
+RunModeDesc:
+RunMode:
+ResAllocMode:
+ResTblNum: # @related:count(RunModeItem)
+- ClkCfgTbl:
+  DmaCfgTbl:
+  CoreDeployTbl:

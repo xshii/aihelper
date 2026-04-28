@@ -1,8 +1,8 @@
 """Excel → Table importer.
 
 每个 sheet 生成一个 ``Table(base_name=<sheet PascalCase>)``：首列（或 ``index_overrides``
-指定列）进 ``Record.index``，其余列进 ``Record.attribute``；不产出 ``ref``——历史
-Excel 表不表达关联关系，后续人工或 schema 驱动补充。
+指定列）进 ``Record.index``，其余列进 ``Record.attribute``；不产出 ``ref`` —— legacy
+Excel 表不表达关联关系，由 schema 或 yaml 编辑层补充。
 """
 from __future__ import annotations
 

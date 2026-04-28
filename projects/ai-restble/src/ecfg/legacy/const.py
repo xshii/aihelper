@@ -44,9 +44,12 @@ CHILDREN_ORDER_YAML = "_children_order.yaml"
 # ─── Folder 语义 ─────────────────────────────────────────────────
 # 跨 RunMode 共享文件：FileInfo + 多 RunMode 都引用的 wrapper（如 DmaCfgTbl）。
 SHARED_FOLDER = "shared"
-# meta 文件目录（仅放 ``_children_order.yaml`` 等）。
+# meta + schema scaffold 文件夹（``_children_order.yaml`` + ``<Element>.yaml`` schema）。
 # pack/unpack glob 时 ``TEMPLATE_FOLDER not in p.parts`` 用于排除。
 TEMPLATE_FOLDER = "template"
+# scope-bound element 的 schema 占位文件夹：同 element 在不同真实 RunMode 下 schema
+# 同形，只存一份在 ``template/0x00000000/<Element>.yaml`` 即可。
+FAKE_RUNMODE_FOLDER = "0x00000000"
 
 # ─── Annotation tokens（含冒号；emit 时前置 ``# `` 转为注释） ────────
 # element 数据 yaml 首行：``# @element:Foo`` / ``# @element:<self>``。

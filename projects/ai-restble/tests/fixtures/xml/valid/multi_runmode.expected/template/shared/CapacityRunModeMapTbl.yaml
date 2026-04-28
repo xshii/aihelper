@@ -1,0 +1,8 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ChipType:
+  CoreNum:
+  Frequency:
+  DdrSize:
+  CapacityID:
+  RunModeValue:

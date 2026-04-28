@@ -1,0 +1,6 @@
+# @element:ResTbl
+LineNum: # @related:count(Line)
+- ChannelId:
+  SrcType:
+  DstType:
+  BurstSize:
