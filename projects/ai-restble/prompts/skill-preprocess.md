@@ -21,12 +21,13 @@
 | R1 | 一文件一实例 | 顶层 element → 一个 yaml 文件。flat 多实例（如多个 `<CapacityRunModeMapTbl />`）合并为 list 主体 |
 | R2 | 目录 = scope | 有 RunMode 维度 → 用 `shared/` + `<RunMode>/` 子目录；无 RunMode → flat 根目录 |
 | R3 | 文件 stem = XML literal | wrapper `<ResTbl X="Y">` → 文件名 `Y.yaml`；自命名 `<X .../>` → 文件名 `X.yaml`。**绝不带 `ResTbl_` 前缀** |
-| R4 | 首行 `# @element:<X>` | 自命名 → `# @element:<self>`；wrapper → `# @element:ResTbl`（实际 element 名） |
+| R4 | 首行 `# @element:<X>` | 自命名 → `# @element:<self>`；wrapper → `# @element:ResTbl`（实际 element 名）。**FileInfo.yaml 例外**：无首行注解 |
 | R6 | 顶层扁平 mapping | XML attribute 直接平铺到 yaml 顶层，不要 `attribute:` 包裹 |
 | R7 | 派生字段 → `# @related:count(<Child>)` | 该字段 emit 时算 `len(children)`；yaml 里其值是 children list |
 | R8 | list item = child element 的 attribute set | mapping 每个 key-value 对 = child 的一个 attribute |
 | R9 | 引用 value 永远 = 文件 stem | RunModeItem `<X="Y"/>` → yaml 写 `- X: "Y"` |
 | R10 | 同目录 ref 默认；跨目录加 `# @use:<path>` | 自动判断 |
+| **生成 meta** | `template/_children_order.yaml` | 必须产出：list 形态、顶层 element 顺序，按原 XML 出现顺序记录每 logical-class 的位置；如果同 class 内多 element 形态（wrapper + flat 混合）需用 `<element>:<stem>` 特例 pin 顺序 |
 
 ## Steps
 
@@ -47,41 +48,52 @@ flowchart TD
 
 具体执行：
 
-1. **解析 XML**，得到 element 树。
-2. **遍历顶层 element**：
-   - 若 `<FileInfo>` —— 拆出其自身 attributes 写一个 yaml 文件，**children 各自递归拆分**
-   - 若 `<ResTbl X="Y" .../>` —— 这是 wrapper，stem = Y
-   - 若其他自命名 element —— stem = element name
+1. **解析 XML**，得到 element 树（**多 XML 输入**则全部解析为 element 序列）。
+2. **遍历顶层 element**（按 XML 文档顺序）：
+   - 若 `<FileInfo>` —— 拆出其自身 attributes 写一个 yaml 文件（无 `@element:` 头，文档根特殊豁免），**children 各自递归拆分**
+   - 若 `<ResTbl X="Y" .../>` —— wrapper，stem = Y，首行 `# @element:ResTbl`
+   - 若其他自命名 element —— stem = element name，首行 `# @element:<self>`
 3. **决定 scope**：
    - 元素引用 RunMode（如 RunModeTbl 自带 RunMode 字段，或 ResTbl 的 type-attr value 带 `_<RunMode>` 后缀）→ 放对应 `<RunMode>/` 目录
    - 跨 RunMode 通用 → `shared/`
    - 全文档无 RunMode → 根目录平铺
 4. **生成 yaml 内容**：
-   - 首行 `# @element:<X>`
+   - 首行 `# @element:<X>`（除 FileInfo）
    - 顶层是 element 的所有 attributes（**剔除派生字段** LineNum/ResTblNum，由 `@related:count(...)` 注解锚定）
    - children 作为派生字段下的 list-of-mappings
 5. **检测跨目录引用**：list item 的 value 指向不在同目录的文件 → 在该行注释 `# @use:<相对路径>`
-6. **写文件**到目录树。
+6. **生成 `template/_children_order.yaml`**（顺序 meta）：
+   - 按 FileInfo 直接子元素在原 XML 的出现顺序，记录每个 logical-class（即 wrapper 的 type-attr value 或自命名 element 名）
+   - 同 class 多 element 形态（wrapper + flat 混合）：用 `<element>:<stem>` 特例 pin 关键 instance；剩余靠默认 `(element 名, stem, path)` 字母序兜底
+   - 重复 class 名跳过（class 内 instance 由 postprocess 解析时贪心匹配）
+7. **多 XML 合一兜底（仅多输入场景）**：
+   - 同 (element, type-attr) tuple 在不同 XML 中出现 → 字段必须**完全相同**（幂等去重），任一字段不同 → raise（不引入 `@merge` 注解）
+   - 不冲突的（不同 element 来自不同 XML）正常并入同一 yaml 树
+8. **写文件**到目录树。
 
 ## Output Format
 
-目录结构（按 fixture 复杂度有 3 种形态）：
+目录结构（按 fixture 复杂度 2 种形态）：
 
 ```
-<output_dir>/                    无 scope 时
+<output_dir>/                              无 scope 时
 ├── FileInfo.yaml
-├── RatVersion.yaml
-└── <Other>.yaml
+├── <ElementA>.yaml
+├── <ElementB>.yaml
+└── template/
+    └── _children_order.yaml               必备 meta，顶层 emit 顺序
 ```
 
 ```
-<output_dir>/                    有 scope 时
+<output_dir>/                              有 scope（RunMode 维度）时
 ├── shared/
 │   ├── FileInfo.yaml
 │   └── <SharedTable>.yaml
-└── <RunMode>/
-    ├── RunModeTbl.yaml
-    └── <ScopedTable>.yaml
+├── <RunMode>/                             如 0x10000000/
+│   ├── RunModeTbl.yaml
+│   └── <ScopedTable>.yaml
+└── template/
+    └── _children_order.yaml
 ```
 
 ## Examples

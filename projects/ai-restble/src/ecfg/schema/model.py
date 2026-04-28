@@ -4,6 +4,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Literal, Optional
 
+from ecfg.schema.const import REGION_ATTRIBUTE, REGION_REF
+
+# 三区域字面值与 ``schema.const.REGION_*`` 一致；Python ``Literal`` 不接受 alias 必须字面。
 Region = Literal["index", "attribute", "ref"]
 
 
@@ -49,10 +52,10 @@ class TableSchema:
 
     def merge_rule_for(self, region: Region, name: str) -> Optional[str]:
         """查找指定 region+name 字段的 merge 规则字符串；查不到返回 None."""
-        if region == "attribute":
+        if region == REGION_ATTRIBUTE:
             f = self.attribute_fields.get(name)
             return f.merge_rule if f else None
-        if region == "ref":
+        if region == REGION_REF:
             f = self.ref_fields.get(name)
             return f.merge_rule if f else None
         return None  # index 不参与 merge

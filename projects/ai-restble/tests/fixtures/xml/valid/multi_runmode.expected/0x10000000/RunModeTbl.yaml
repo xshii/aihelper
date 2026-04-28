@@ -4,5 +4,5 @@ RunMode: 0x10000000
 ResAllocMode: 0
 ResTblNum: # @related:count(RunModeItem)
 - ClkCfgTbl: "ClkCfgTbl"
-- DmaCfgTbl: "DmaCfgTbl"          # @use:../shared/DmaCfgTbl.yaml
+- DmaCfgTbl: "DmaCfgTbl"  # @use:../shared/DmaCfgTbl.yaml
 - CoreDeployTbl: "CoreDeployTbl"

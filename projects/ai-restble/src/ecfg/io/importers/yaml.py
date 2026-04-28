@@ -7,6 +7,7 @@ from typing import Any, Dict, List
 from ruamel.yaml import YAML
 
 from ecfg.model import CellValue, Record, Table
+from ecfg.schema.const import REGION_ATTRIBUTE, REGION_INDEX, REGION_REF
 
 
 def read_yaml_file(yaml_path: Path) -> Table:
@@ -36,9 +37,9 @@ def _parse_record(src: Path, idx: int, item: Any) -> Record:
             f"{src}: 第 {idx} 条记录不是 mapping，而是 {type(item).__name__}"
         )
     return Record(
-        index=_coerce_field_map(item.get("index")),
-        attribute=_coerce_field_map(item.get("attribute")),
-        ref=_coerce_field_map(item.get("ref")),
+        index=_coerce_field_map(item.get(REGION_INDEX)),
+        attribute=_coerce_field_map(item.get(REGION_ATTRIBUTE)),
+        ref=_coerce_field_map(item.get(REGION_REF)),
     )
 
 

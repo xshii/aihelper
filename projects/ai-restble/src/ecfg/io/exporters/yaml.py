@@ -8,6 +8,12 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 from ecfg.model import Record, Table
+from ecfg.schema.const import REGION_ATTRIBUTE, REGION_INDEX, REGION_REF
+
+# YAML 落盘格式：与 ``legacy/const`` 一致但语义独立（io 不依赖 legacy）.
+_INDENT_MAPPING = 2
+_INDENT_SEQUENCE = 2
+_INDENT_OFFSET = 0
 
 
 class WriteResult(NamedTuple):
@@ -23,7 +29,7 @@ def write_tables(
 ) -> List[WriteResult]:
     """批量落盘 Table 到 ``<output_dir>/<BaseName>.yaml``；跳过空表。"""
     yaml = YAML()
-    yaml.indent(mapping=2, sequence=2, offset=0)
+    yaml.indent(mapping=_INDENT_MAPPING, sequence=_INDENT_SEQUENCE, offset=_INDENT_OFFSET)
     yaml.preserve_quotes = True
 
     results: List[WriteResult] = []
@@ -55,9 +61,9 @@ def _records_to_commented_seq(records: List[Record]) -> CommentedSeq:
     seq = CommentedSeq()
     for rec in records:
         node = CommentedMap()
-        node["index"] = CommentedMap(rec.index)
-        node["attribute"] = CommentedMap(rec.attribute)
+        node[REGION_INDEX] = CommentedMap(rec.index)
+        node[REGION_ATTRIBUTE] = CommentedMap(rec.attribute)
         if rec.ref:
-            node["ref"] = CommentedMap(rec.ref)
+            node[REGION_REF] = CommentedMap(rec.ref)
         seq.append(node)
     return seq

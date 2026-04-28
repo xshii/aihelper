@@ -19,14 +19,24 @@ from ruamel.yaml.comments import CommentedMap
 
 from ecfg.schema._comments import trailing_comment
 from ecfg.schema.annotations import parse_comment
+from ecfg.schema.const import (
+    ANNOT_INDEX_REPEATABLE,
+    ANNOT_KEY_ENUM,
+    ANNOT_KEY_INDEX,
+    ANNOT_KEY_MERGE,
+    ANNOT_KEY_RANGE,
+    REGION_ATTRIBUTE,
+    REGION_INDEX,
+    REGION_REF,
+    TEMPLATE_BEGIN,
+    TEMPLATE_END,
+)
 from ecfg.schema.model import FieldSchema, TableSchema
 
 logger = logging.getLogger(__name__)
 
 _YAML_RT = YAML(typ="rt")
 
-_TEMPLATE_BEGIN = "# ----- TEMPLATE BEGIN -----"
-_TEMPLATE_END = "# ----- TEMPLATE END -----"
 _RANGE_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)\s*$")
 _FK_RE = re.compile(r"^\s*([A-Z][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*$")
 
@@ -41,10 +51,10 @@ def extract_template_text(yaml_text: str) -> Optional[str]:
     in_template = False
     out: list[str] = []
     for line in yaml_text.splitlines():
-        if line.strip() == _TEMPLATE_BEGIN:
+        if line.strip() == TEMPLATE_BEGIN:
             in_template = True
             continue
-        if line.strip() == _TEMPLATE_END:
+        if line.strip() == TEMPLATE_END:
             return "\n".join(out)
         if in_template:
             out.append(re.sub(r"^#\s?", "", line))
@@ -72,16 +82,16 @@ def load_table_schema(yaml_path: Path) -> TableSchema:
         return schema
     record = template_doc[0]  # 占位 record
 
-    index_map = record.get("index") or CommentedMap()
-    attr_map = record.get("attribute") or CommentedMap()
-    ref_map = record.get("ref") or CommentedMap()
+    index_map = record.get(REGION_INDEX) or CommentedMap()
+    attr_map = record.get(REGION_ATTRIBUTE) or CommentedMap()
+    ref_map = record.get(REGION_REF) or CommentedMap()
 
     schema.index_fields = list(index_map.keys())
     schema.index_repeatable = _parse_index_repeatable(record)
     # MVP：index 字段不构 FieldSchema（不参与 merge）；如未来 validator 需要约束信息，
     # 在此扩展构建 ``schema.index_field_schemas``。
     schema.attribute_fields = {
-        name: _build_field_schema(name, "attribute", attr_map)
+        name: _build_field_schema(name, REGION_ATTRIBUTE, attr_map)
         for name in attr_map
     }
     schema.ref_fields = {
@@ -103,19 +113,19 @@ def _parse_index_repeatable(record: CommentedMap) -> bool:
     ``@index:nonrepeatable`` / ``@index:strict``）都立刻 raise，避免静默 fallback
     让调用方误以为生效。不写注解 = 默认严格唯一。
     """
-    comment = trailing_comment(record, "index") or ""
+    comment = trailing_comment(record, REGION_INDEX) or ""
     parsed = parse_comment(comment)
     repeatable = False
     for ann in parsed.annotations:
-        if ann.key != "index":
+        if ann.key != ANNOT_KEY_INDEX:
             continue
         value = ann.value.strip()
-        if value == "repeatable":
+        if value == ANNOT_INDEX_REPEATABLE:
             repeatable = True
         else:
             raise ValueError(
-                f"未知 @index 值: {value!r}（当前仅支持 @index:repeatable；"
-                "不写注解 = 默认严格唯一）"
+                f"未知 @{ANNOT_KEY_INDEX} 值: {value!r}（当前仅支持 "
+                f"@{ANNOT_KEY_INDEX}:{ANNOT_INDEX_REPEATABLE}；不写注解 = 默认严格唯一）"
             )
     return repeatable
 
@@ -126,25 +136,25 @@ def _build_field_schema(name: str, region: str, parent: CommentedMap) -> FieldSc
     comment = trailing_comment(parent, name) or ""
     parsed = parse_comment(comment)
     for ann in parsed.annotations:
-        if ann.key == "merge":
+        if ann.key == ANNOT_KEY_MERGE:
             fs.merge_rule = ann.value
-        elif ann.key == "range":
+        elif ann.key == ANNOT_KEY_RANGE:
             m = _RANGE_RE.match(ann.value)
             if m:
                 fs.range_lo = float(m.group(1))
                 fs.range_hi = float(m.group(2))
-        elif ann.key == "enum":
+        elif ann.key == ANNOT_KEY_ENUM:
             fs.enum_values = [v.strip() for v in ann.value.split(",") if v.strip()]
     return fs
 
 
 def _build_ref_field_schema(name: str, ref_map: CommentedMap) -> FieldSchema:
     """ref 区子项：entry-level ``@merge`` + 每个 leaf 子字段的 FK 目标 ``Table.col``."""
-    fs = FieldSchema(name=name, region="ref")
+    fs = FieldSchema(name=name, region=REGION_REF)
     comment = trailing_comment(ref_map, name) or ""
     parsed = parse_comment(comment)
     for ann in parsed.annotations:
-        if ann.key == "merge":
+        if ann.key == ANNOT_KEY_MERGE:
             fs.merge_rule = ann.value
     # 每个 leaf 子字段的 FK 目标（``Module.moduleType`` 形式裸文本注释）
     entry = ref_map.get(name)

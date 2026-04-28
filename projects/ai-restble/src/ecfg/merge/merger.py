@@ -5,6 +5,7 @@ import logging
 from collections import OrderedDict
 from typing import Dict, Iterable, List, Optional, Tuple
 
+from ecfg.merge.const import REF_DEFAULT_MERGE_RULE
 from ecfg.merge.policies import ConflictError, apply_merge
 from ecfg.model import CellValue, Record, Table
 from ecfg.schema.model import TableSchema, to_hashable
@@ -83,8 +84,8 @@ def _merge_record_group(records: List[Record], schema: TableSchema) -> Record:
     )
     merged.ref = _merge_region(
         [r.ref for r in records],
-        {n: (f.merge_rule or "conflict") for n, f in schema.ref_fields.items()},
-        default_rule="conflict",  # ref 默认 conflict（必须等值）
+        {n: (f.merge_rule or REF_DEFAULT_MERGE_RULE) for n, f in schema.ref_fields.items()},
+        default_rule=REF_DEFAULT_MERGE_RULE,  # ref 默认 conflict（必须等值）
         context=f"{context}.ref",
     )
     return merged

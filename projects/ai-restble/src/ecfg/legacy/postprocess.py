@@ -22,15 +22,26 @@ from lxml import etree
 from ruamel.yaml import YAML
 from ruamel.yaml.scalarint import HexCapsInt, HexInt
 
+from ecfg.legacy.const import (
+    ANNOT_ELEMENT,
+    ANNOT_RELATED_COUNT,
+    CHILDREN_ORDER_YAML,
+    ELEMENT_SELF,
+    LXML_TO_LEGACY_INDENT_RATIO,
+    ROOT_TAG,
+    ROOT_YAML,
+    SHARED_FOLDER,
+    TEMPLATE_FOLDER,
+    strip_variant,
+)
 from ecfg.schema._comments import trailing_comment
 
 logger = logging.getLogger(__name__)
 
 _YAML_RT = YAML(typ="rt")
 
-_ELEMENT_HEADER = re.compile(r"^#\s*@element:(\S+)\s*$")
-_RELATED_COUNT = re.compile(r"@related:count\(([^)]+)\)")
-_VARIANT_SUFFIX = re.compile(r"^(.+?)_(0[xX][0-9A-Fa-f]+)$")
+_ELEMENT_HEADER = re.compile(rf"^#\s*{re.escape(ANNOT_ELEMENT)}(\S+)\s*$")
+_RELATED_COUNT = re.compile(rf"{re.escape(ANNOT_RELATED_COUNT)}\(([^)]+)\)")
 
 
 def pack(fixture_dir: Path) -> str:
@@ -43,7 +54,7 @@ def pack(fixture_dir: Path) -> str:
     logger.debug("pack: FileInfo=%s, children_order=%s", file_info_path.name, children_order)
 
     file_info_data = _load_yaml(file_info_path)
-    root = etree.Element("FileInfo")
+    root = etree.Element(ROOT_TAG)
     for key, value in file_info_data.items():
         root.set(key, _format_scalar(value))
 
@@ -63,6 +74,7 @@ def pack(fixture_dir: Path) -> str:
     logger.info("pack: emitted %d top-level elements", emit_count)
 
     body = etree.tostring(root, pretty_print=True, encoding="unicode")
+    body = _reindent_to_4_spaces(body)
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + body
 
 
@@ -71,27 +83,27 @@ def _warn_on_orphan_files(fixture_dir: Path, ordered: list[Path]) -> None:
     expected = set(ordered)
     all_data = {
         p for p in fixture_dir.rglob("*.yaml")
-        if p.name != "FileInfo.yaml"
+        if p.name != ROOT_YAML
         and not p.name.startswith("_")
-        and "template" not in p.parts
+        and TEMPLATE_FOLDER not in p.parts
     }
     orphans = sorted(all_data - expected)
     for orphan in orphans:
         logger.warning(
-            "pack: %s 不在 _children_order.yaml 任何 class 下，将被丢弃",
-            orphan.relative_to(fixture_dir),
+            "pack: %s 不在 %s 任何 class 下，将被丢弃",
+            orphan.relative_to(fixture_dir), CHILDREN_ORDER_YAML,
         )
 
 
 def _find_file_info(fixture_dir: Path) -> Path:
     for candidate in (
-        fixture_dir / "shared" / "FileInfo.yaml",
-        fixture_dir / "FileInfo.yaml",
+        fixture_dir / SHARED_FOLDER / ROOT_YAML,
+        fixture_dir / ROOT_YAML,
     ):
         if candidate.is_file():
             return candidate
     raise FileNotFoundError(
-        f"FileInfo.yaml not found in {fixture_dir} or its shared/"
+        f"{ROOT_YAML} not found in {fixture_dir} or its {SHARED_FOLDER}/"
     )
 
 
@@ -100,7 +112,7 @@ def _load_yaml(path: Path) -> Any:
 
 
 def _load_children_order(fixture_dir: Path) -> list[str]:
-    meta = fixture_dir / "template" / "_children_order.yaml"
+    meta = fixture_dir / TEMPLATE_FOLDER / CHILDREN_ORDER_YAML
     if not meta.is_file():
         raise FileNotFoundError(f"Missing {meta}")
     loaded = _YAML_RT.load(meta.read_text(encoding="utf-8"))
@@ -120,9 +132,9 @@ def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:
     """
     all_data = [
         p for p in fixture_dir.rglob("*.yaml")
-        if p.name != "FileInfo.yaml"
+        if p.name != ROOT_YAML
         and not p.name.startswith("_")
-        and "template" not in p.parts
+        and TEMPLATE_FOLDER not in p.parts
     ]
 
     result: list[Path] = []
@@ -134,7 +146,7 @@ def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:
             consumed = _consume_class_entry(entry, all_data, used)
         if not consumed:
             logger.warning(
-                "_children_order 列了 %r 但 fixture 找不到匹配文件", entry,
+                "%s 列了 %r 但 fixture 找不到匹配文件", CHILDREN_ORDER_YAML, entry,
             )
         result.extend(consumed)
         used.update(consumed)
@@ -176,24 +188,18 @@ def _resolve_element_name(yaml_path: Path) -> str:
     first = yaml_path.read_text(encoding="utf-8").splitlines()[0]
     m = _ELEMENT_HEADER.match(first.strip())
     if not m:
-        raise ValueError(f"{yaml_path}: 缺少 # @element:<X> 首行")
+        raise ValueError(f"{yaml_path}: 缺少 # {ANNOT_ELEMENT}<X> 首行")
     val = m.group(1)
-    if val == "<self>":
-        return _strip_variant(yaml_path.stem)
+    if val == ELEMENT_SELF:
+        return strip_variant(yaml_path.stem)
     return val
-
-
-def _strip_variant(stem: str) -> str:
-    """去掉 _<hex> 后缀（若存在）."""
-    m = _VARIANT_SUFFIX.match(stem)
-    return m.group(1) if m else stem
 
 
 def _emit_element(parent: etree._Element, yaml_path: Path, data: Any) -> None:
     """在 parent 下创建一个 XML element，对应 yaml_path 的一份 data."""
     elem_name = _resolve_element_name(yaml_path)
     stem = yaml_path.stem
-    bare_stem = _strip_variant(stem)
+    bare_stem = strip_variant(stem)
 
     elem = etree.SubElement(parent, elem_name)
     if elem_name != bare_stem:
@@ -255,3 +261,13 @@ def _format_hex(v: Any) -> str:
     if width:
         return f"0x{int(v):0{width}{case_spec}}"
     return f"0x{int(v):{case_spec}}"
+
+
+def _reindent_to_4_spaces(xml_text: str) -> str:
+    """lxml ``pretty_print=True`` 用 2 空格缩进；legacy XML 风格为 4 空格——逐行倍增前导空格."""
+    out = []
+    for line in xml_text.split("\n"):
+        stripped = line.lstrip(" ")
+        leading = len(line) - len(stripped)
+        out.append(" " * (leading * LXML_TO_LEGACY_INDENT_RATIO) + stripped)
+    return "\n".join(out)

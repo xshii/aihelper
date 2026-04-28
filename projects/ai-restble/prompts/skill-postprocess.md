@@ -4,11 +4,12 @@
 你是 ai-restble 的**后处理 skill** 实现者。任务是把 yaml 文件树合成回字节级稳定的 legacy XML。
 
 ## Task
-读取一个目录树（含数据 yaml + template），输出一个 XML 文件，要求**字节级跟原始 XML 一致**（允许空白/空行差异）。
+读取一个目录树（含 element data yaml + `template/_children_order.yaml` 顺序 meta），输出一个 XML 文件，要求**字节级跟原始 XML 一致**（允许空白/空行差异）。
 
 ## Context
 - **权威协议**：`docs/yaml-schema.md`（必读）
-- **Template 决定 emit 顺序**：每个数据 yaml 的字段 emit 顺序 = 对应 template 的 mapping insertion order
+- **顶层元素顺序**：完全由 `template/_children_order.yaml` 决定（含 `<element>:<stem>` 特例覆盖默认字母序）
+- **元素属性 emit 顺序**：按**数据 yaml 自身的 mapping insertion order**（无元素 template 概念）
 - **派生字段在 emit 时算出**（`@related:count(...)`）
 - **参考样例**：见 `tests/fixtures/xml/valid/*.expected/` 与对应 `.xml`
 
@@ -29,17 +30,19 @@
 
 ```mermaid
 flowchart TD
-  A[扫描目录] --> B[加载所有数据 yaml + template]
-  B --> C[确定 FileInfo 是文档根]
-  C --> D{每个非 FileInfo yaml 文件}
-  D --> E[读首行 @element:<X>]
+  A[扫描目录] --> B[加载 template/_children_order.yaml + 所有 element yaml]
+  B --> C[FileInfo.yaml 作为根]
+  C --> D{遍历 _children_order entry}
+  D --> D1{含冒号?}
+  D1 -->|yes :| D2["特例：精确匹配 element:stem 文件"]
+  D1 -->|no| D3[class 兜底匹配 + 默认排序]
+  D2 & D3 --> E[读首行 @element:<X>]
   E --> F{X = <self>?}
-  F -->|yes| G[element name = file stem 去 variant]
+  F -->|yes| G[element name = stem 去 variant]
   F -->|no| H[element name = X<br/>type-attr 由 stem 推导]
-  G & H --> I[查找对应 template]
-  I --> J[按 template 字段顺序输出 attribute]
-  J --> K{有 @related:count?}
-  K -->|yes| L[计算 count 值<br/>emit children sibling]
+  G & H --> J[按 yaml 自身字段 insertion order 输出 attribute]
+  J --> K{字段尾有 @related:count?}
+  K -->|yes| L[count = len(list)<br/>list items 平级 emit 为 children]
   K -->|no| M[skip]
   L & M --> N[append 到 FileInfo 子元素]
   N --> D
@@ -49,27 +52,24 @@ flowchart TD
 
 具体执行：
 
-1. **扫描目录**：找出所有 `.yaml` 文件（数据 + template）
-2. **解析每个 yaml 的首行**：决定其物理 element 名
-3. **加载 template**：每个数据 yaml 对应 schema 在 `template/<scope-class>/<logical-stem>.yaml`
-4. **拼装 XML**：
-   a. **FileInfo 是文档根** —— 它的 attributes 来自 `(shared/)?FileInfo.yaml`
-   b. **加载 `template/_children_order.yaml`** —— 这个独立 meta 文件含 logical-table-name 的 yaml list，定义 class 顺序
-   c. **逐 entry 展开**：按 list 顺序，每条 entry 二选一：
-      - 不含 ``:`` → **class 兜底**：匹配 stem == entry 或 stem 形如 ``entry_<variant>`` 的文件；class 内多 instance 排序键 ``(element 名, stem, 全路径)``。
-      - 含 ``:`` → **特例**：``<element>:<stem>`` 精确匹配（resolved element name + 完整 stem），pin 该单个 instance 到此位置。
+1. **扫描目录**：找出所有 element yaml（排除 FileInfo / `template/` / 下划线 meta）。
+2. **加载 `template/_children_order.yaml`** —— logical-class 顺序 + `<element>:<stem>` 特例 list。
+3. **拼装 XML**：
+   a. **FileInfo 是文档根** —— attributes 来自 `(shared/)?FileInfo.yaml`，无 `@element:` 头（特殊豁免）。
+   b. **逐 entry 展开**：按 list 顺序，每条 entry 二选一匹配：
+      - 不含 `:` → **class 兜底**：stem == entry 或 stem 形如 `entry_<variant>` 的文件；class 内多 instance 排序键 `(resolved element 名, stem, 全路径)`。
+      - 含 `:` → **特例**：`<element>:<stem>` 精确匹配（resolved element name + 完整 stem），pin 单个 instance 到此位置。
       
-      匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，class 后兜底）。**文件夹位置（shared/ vs scope/）不参与排序**——存储约定，非数据语义。
-5. **每个文件 emit XML**：
-   - 读首行 `@element:<X>` 决定 element name
-   - 按 template 字段顺序输出 attributes
-   - 派生字段（`@related:count(C)`）—— scalar attribute 值 = list 长度；list items 作为 sibling children
-   - list item mapping 中的每个 key-value → child element 的 attribute
-6. **字节级稳定**：
-   - 属性顺序按 template
-   - hex 数值保留原宽度（`0xAB` 不能输出 `0xab` 或 `0x000000AB`）
+      匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，class 后兜底）。**文件夹位置（shared/ vs `0x.../`）不参与排序**——存储约定，非数据语义。
+4. **每个文件 emit XML**：
+   - 读首行 `@element:<X>` 决定 element name（FileInfo 例外）
+   - 按**数据 yaml 自身**字段 insertion order 输出 attributes
+   - 派生字段（`@related:count(C)`）—— scalar attribute 值 = `len(list)`；list items 作为 sibling children 平级挂父元素下（**不**嵌套）
+   - list item mapping 中的每个 key-value → child element 的一个 attribute
+5. **字节级稳定**：
+   - hex 数值保留原宽度（`0xAB` 不能输出 `0xab` 或 `0x000000AB`），ruamel rt 模式 `HexInt._width` / `HexCapsInt` 自动保
    - 空属性输出 `attr=""`
-   - 自闭合 vs 显式结束标签：跟原 XML 一致（无 children → 自闭合）
+   - 无 children 自闭合：`<X .../>`；有 children 显式结束标签
 
 ## Output Format
 
@@ -138,28 +138,33 @@ emit：
 
 ## Quality Checklist
 
-- [ ] 输出 XML 与原始 XML **字节级一致**（用 `diff -w` 验证，允空白）
-- [ ] 所有派生字段（LineNum/ResTblNum）数值正确（= 子元素数）
-- [ ] hex 数值宽度保留（`0xAB` ≠ `0xab` ≠ `0x000000AB`）
-- [ ] 派生字段 list children **平级 emit**，不嵌套
-- [ ] FileInfo 是文档根，其他 yaml 作为它的 children
-- [ ] 所有 ref（`@use` 或默认同目录）都成功解析到现存文件
-- [ ] template 缺失时报错，不静默使用默认顺序
+- [ ] 输出 XML 与原始 XML **字节级一致**（`diff -w` 验证，允空白差）
+- [ ] 同一 fixture 多次 pack 输出 byte-for-byte 完全一致（幂等性）
+- [ ] 所有派生字段（LineNum/ResTblNum）数值 = `len(children)`
+- [ ] hex 数值宽度 + 大小写都保留（`0xAB` ≠ `0xab` ≠ `0x000000AB`）
+- [ ] 派生字段下的 list items **平级 emit** 为 sibling children，不嵌套到 `<count_field>...` 里
+- [ ] FileInfo 是文档根，其他所有 yaml 文件作为它的 children
+- [ ] 所有 ref（`@use` 显式 + 默认同目录）都成功解析到现存文件
+- [ ] `template/_children_order.yaml` 缺失或非 yaml-list-of-strings → 报错，不猜
+- [ ] `_children_order` 列了某 entry 但 fixture 找不到匹配 → WARNING（不丢弃静默）
+- [ ] fixture 有 yaml 但不在 `_children_order` 任何 entry 下 → WARNING（不丢弃静默）
 
 ## Edge Cases
 
 | 情况 | 处理 |
 |---|---|
 | yaml 文件首行 = `# @element:<self>` | element name = file stem 去 `_<variant>` 后缀 |
-| yaml 主体仅首行（空 element） | emit 自闭合 element，无 attribute、无 children |
-| list 为 null（如 `LineNum: # @related:count(Line)` 后无 `-` items） | 派生值 = 0，无 children |
+| FileInfo.yaml 无 `# @element:` 头 | element name 固定为 `FileInfo`（文档根特殊豁免） |
+| yaml 主体仅首行（空 element） | emit 自闭合 element，无 attribute 无 children |
+| list 为 null（`LineNum: # @related:count(Line)` 后无 `-` items） | 派生值 = 0，emit 自闭合 element |
+| 同 stem 同 element 在不同 scope folder 都存在 | **正常**——多 RunMode 数据；按 `_children_order` 顺序逐个 emit |
 | 引用解析不到目标文件 | 报错 `unresolved-ref:<value>`，不静默 |
-| 同 stem 在两个 scope folder 都存在 | 数据 bug，报错（每 scope 该 stem 唯一） |
-| hex 数值无 width 注解 | 保留 yaml literal 原写法（`0xAB` → `0xAB`） |
+| `0xCAFE` / `0x0001` 等 hex literal | ruamel rt 模式天然保留宽度+大小写，直接 emit 不转 int |
 
 ## 解决冲突的兜底原则
 
 - **字节级一致优先**：宁可 emit 失败也不输出"看似合法但字节有差"的 XML
-- **template 是 emit 顺序的唯一仲裁者**：data yaml 字段顺序无效，按 template 排
-- **不静默兜底**：宁报错不猜测；让人/上层介入
-- **派生字段永远算，不读 source**：即使 yaml 误填了 `LineNum: 99`，也要 ignore，按 `len(children)` 算（这条违反了 R7 但是 fail-loud 兜底）
+- **`_children_order.yaml` 是顶层顺序的唯一仲裁者**：不依赖文件夹位置启发（无 shared/ 优先）
+- **数据 yaml 自身 insertion order 是元素属性顺序的唯一仲裁者**：无元素 template 干预
+- **不静默兜底**：宁报错不猜测；orphan 文件 / 不匹配的 entry 都 WARNING
+- **派生字段永远算，不读 source**：即使 yaml 误填了 `LineNum: 99`，也要 ignore，按 `len(children)` 算（fail-loud：用户的源数据被忽略时至少在日志可见）

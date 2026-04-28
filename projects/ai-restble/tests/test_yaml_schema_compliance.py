@@ -11,6 +11,7 @@ import pytest
 from ruamel.yaml import YAML, YAMLError
 
 from ecfg.legacy.postprocess import pack
+from ecfg.legacy.preprocess import unpack, unpack_many
 
 _yaml = YAML(typ="safe")
 
@@ -241,3 +242,279 @@ class TestRoundTripBytes:
         assert _norm_xml(emitted) == _norm_xml(original), (
             f"\n--- emitted ---\n{emitted}\n--- original ---\n{original}"
         )
+
+
+class TestUnpackFolderIdentity:
+    """unpack 产物与 ``.expected/`` 目录字节级一致（仅 data 文件，``template/`` 豁免）。
+
+    Why exclude template/：``template/_children_order.yaml`` 是人工带教学注释的产物，
+    设计上允许 fixture 比 preprocess 多写解释；data yamls 必须严格 == preprocess 输出。
+    """
+
+    def test_unpack_byte_identical_to_fixture(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """所有非 template/ yaml 文件，unpack 输出 must 字节级 == fixture."""
+        xml_source = fixture_dir.with_suffix(".xml")
+        out = tmp_path / fixture_dir.name
+        unpack(xml_source, out)
+
+        mismatches: list[str] = []
+        for fixture_file in fixture_dir.rglob("*.yaml"):
+            if "template" in fixture_file.parts:
+                continue
+            rel = fixture_file.relative_to(fixture_dir)
+            our_file = out / rel
+            if not our_file.exists():
+                mismatches.append(f"{rel} (missing in unpack)")
+                continue
+            if our_file.read_bytes() != fixture_file.read_bytes():
+                mismatches.append(f"{rel} (content differs)")
+
+        for our_file in out.rglob("*.yaml"):
+            if "template" in our_file.parts:
+                continue
+            rel = our_file.relative_to(out)
+            if not (fixture_dir / rel).exists():
+                mismatches.append(f"{rel} (extra in unpack)")
+
+        assert not mismatches, (
+            f"{fixture_dir.name}：unpack 与 fixture data 文件不一致：{mismatches}"
+        )
+
+
+class TestFullRoundTrip:
+    """完整 XML → unpack → pack → 字节级回到原 XML。
+
+    验证 ``ecfg.legacy.preprocess.unpack`` 与 ``postprocess.pack`` 互为完整逆操作。
+    """
+
+    def test_xml_to_yaml_to_xml_byte_identical(
+        self, fixture_dir: Path, tmp_path: Path,
+    ) -> None:
+        """从 ``.xml`` 出发：unpack → 中间 yaml 树 → pack 拼回，必须严格字节级一致."""
+        xml_source = fixture_dir.with_suffix(".xml")
+        assert xml_source.is_file(), f"缺少配套 XML：{xml_source}"
+        original = xml_source.read_text(encoding="utf-8")
+
+        intermediate = tmp_path / fixture_dir.name
+        unpack(xml_source, intermediate)
+        emitted = pack(intermediate)
+
+        assert emitted == original, (
+            f"XML→YAML→XML 必须字节级一致；fixture={fixture_dir.name}"
+        )
+
+
+_MERGE_HEADER = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<FileInfo FileName="merge.xlsx" Date="2026/04" XmlConvToolsVersion="V0.01" '
+    'RatType="" Version="1.00" RevisionHistory="">\n'
+)
+_MERGE_RATVERSION = (
+    '    <ResTbl RatVersion="RatVersion" LineNum="1">\n'
+    '        <Line VVersion="100" RVersion="22" CVersion="10"/>\n'
+    '    </ResTbl>\n'
+)
+_MERGE_FOO = (
+    '    <ResTbl FooTbl="FooTbl" LineNum="1">\n'
+    '        <Line Id="0" Name="alpha"/>\n'
+    '    </ResTbl>\n'
+)
+_MERGE_FOO_CONFLICT = (
+    '    <ResTbl FooTbl="FooTbl" LineNum="1">\n'
+    '        <Line Id="0" Name="OOPS"/>\n'
+    '    </ResTbl>\n'
+)
+_MERGE_BAR = (
+    '    <ResTbl BarTbl="BarTbl" LineNum="1">\n'
+    '        <Line Id="1" Name="beta"/>\n'
+    '    </ResTbl>\n'
+)
+
+
+class TestUnpackMany:
+    """多 XML 合并：幂等去重 + 冲突检测 + 跨 XML 顺序保持."""
+
+    def test_idempotent_dedup_then_pack_byte_identical(self, tmp_path: Path) -> None:
+        """xml_a [RatVer, Foo] + xml_b [Foo (dup), Bar] → 合并去重 → [RatVer, Foo, Bar]."""
+        a = tmp_path / "a.xml"
+        b = tmp_path / "b.xml"
+        a.write_text(
+            _MERGE_HEADER + _MERGE_RATVERSION + _MERGE_FOO + "</FileInfo>", encoding="utf-8",
+        )
+        b.write_text(_MERGE_HEADER + _MERGE_FOO + _MERGE_BAR + "</FileInfo>", encoding="utf-8")
+        merged_expected = (
+            _MERGE_HEADER + _MERGE_RATVERSION + _MERGE_FOO + _MERGE_BAR + "</FileInfo>\n"
+        )
+
+        out = tmp_path / "merged"
+        unpack_many([a, b], out)
+        emitted = pack(out)
+        assert emitted == merged_expected, (
+            f"\n--- emitted ---\n{emitted}\n--- expected ---\n{merged_expected}"
+        )
+
+    def test_conflict_same_wrapper_key_different_content_raises(
+        self, tmp_path: Path,
+    ) -> None:
+        """相同 wrapper key (ResTbl, FooTbl) 在两份 XML 中字段不同 → ValueError."""
+        a = tmp_path / "a.xml"
+        b = tmp_path / "b.xml"
+        a.write_text(_MERGE_HEADER + _MERGE_FOO + "</FileInfo>", encoding="utf-8")
+        b.write_text(_MERGE_HEADER + _MERGE_FOO_CONFLICT + "</FileInfo>", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="非幂等去重"):
+            unpack_many([a, b], tmp_path / "out")
+
+    def test_fileinfo_attrs_conflict_raises(self, tmp_path: Path) -> None:
+        """两份 XML 的 ``<FileInfo>`` attribute 不一致 → ValueError."""
+        a = tmp_path / "a.xml"
+        b = tmp_path / "b.xml"
+        a.write_text(_MERGE_HEADER + "</FileInfo>", encoding="utf-8")
+        b.write_text(
+            _MERGE_HEADER.replace('FileName="merge.xlsx"', 'FileName="other.xlsx"')
+            + "</FileInfo>",
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="FileInfo 属性"):
+            unpack_many([a, b], tmp_path / "out")
+
+    def test_empty_xml_paths_raises(self, tmp_path: Path) -> None:
+        """空列表 → ValueError，不静默."""
+        with pytest.raises(ValueError, match="不能为空"):
+            unpack_many([], tmp_path / "out")
+
+
+class TestCountAttrAmbiguity:
+    """G3：值匹配 ``len(children)`` 的 attribute 多个时 → WARNING + 选首个；唯一时静默."""
+
+    def test_ambiguous_count_attr_warns(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """构造一个有两个 int=3 的 attribute → 触发 WARNING."""
+        xml = tmp_path / "ambig.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<FileInfo FileName="x" Date="" XmlConvToolsVersion="" RatType="" '
+            'Version="" RevisionHistory="">\n'
+            '    <AmbigTbl ResAllocMode="3" ResTblNum="3">\n'
+            '        <RunModeItem A="A"/>\n'
+            '        <RunModeItem B="B"/>\n'
+            '        <RunModeItem C="C"/>\n'
+            '    </AmbigTbl>\n'
+            '</FileInfo>\n',
+            encoding="utf-8",
+        )
+        with caplog.at_level("WARNING", logger="ecfg.legacy.preprocess"):
+            unpack(xml, tmp_path / "out")
+        assert "count 锚字段歧义" in caplog.text
+
+    def test_unique_count_attr_does_not_warn(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """唯一匹配 → 不应触发歧义 WARNING（防止误报）."""
+        xml = tmp_path / "unique.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<FileInfo FileName="x" Date="" XmlConvToolsVersion="" RatType="" '
+            'Version="" RevisionHistory="">\n'
+            '    <UniqueTbl ResAllocMode="0" ResTblNum="2">\n'
+            '        <RunModeItem A="A"/>\n'
+            '        <RunModeItem B="B"/>\n'
+            '    </UniqueTbl>\n'
+            '</FileInfo>\n',
+            encoding="utf-8",
+        )
+        with caplog.at_level("WARNING", logger="ecfg.legacy.preprocess"):
+            unpack(xml, tmp_path / "out")
+        assert "count 锚字段歧义" not in caplog.text
+
+
+class TestUseAnnotation:
+    """G1：跨目录 ref 自动加 ``# @use:<rel-path>`` 行尾注释."""
+
+    def test_cross_folder_ref_emits_use_annotation(self, tmp_path: Path) -> None:
+        """``0x10000000/RunModeTbl.yaml`` 引用 ``shared/DmaCfgTbl`` → 必有 @use 注释."""
+        src = FIXTURES_ROOT / "multi_runmode.xml"
+        out = tmp_path / "mr"
+        unpack(src, out)
+        yaml_text = (out / "0x10000000" / "RunModeTbl.yaml").read_text(encoding="utf-8")
+        assert "@use:../shared/DmaCfgTbl.yaml" in yaml_text, (
+            f"跨目录 ref 应该加 @use；实际内容：\n{yaml_text}"
+        )
+
+    def test_same_folder_ref_does_not_emit_use(self, tmp_path: Path) -> None:
+        """``0x10000000/RunModeTbl.yaml`` 引用同 folder 的 ``ClkCfgTbl`` → 不应有 @use."""
+        src = FIXTURES_ROOT / "multi_runmode.xml"
+        out = tmp_path / "mr"
+        unpack(src, out)
+        yaml_text = (out / "0x10000000" / "RunModeTbl.yaml").read_text(encoding="utf-8")
+        # ClkCfgTbl 在 0x10000000 同 folder（本 fixture 中）
+        clk_lines = [line for line in yaml_text.splitlines() if "ClkCfgTbl" in line]
+        assert clk_lines and not any("@use" in line for line in clk_lines), (
+            f"同 folder ref 不应加 @use；ClkCfgTbl 行：{clk_lines}"
+        )
+
+    def test_ambiguous_stem_across_folders_warns_and_skips(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """同 stem 存在于多 folder + ref 来自第三处 → WARNING + 不输出 @use（不猜路径）."""
+        # 两个 RunModeTbl 制造 stem='RunModeTbl' 的多 folder 状态
+        # ExtraTbl 落在 shared/，其子 ExtraItem 引用 'RunModeTbl' → 触发歧义
+        xml = tmp_path / "ambig.xml"
+        xml.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<FileInfo FileName="x" Date="" XmlConvToolsVersion="" RatType="" '
+            'Version="" RevisionHistory="">\n'
+            '    <RunModeTbl RunMode="0x1" ResAllocMode="0" ResTblNum="0"/>\n'
+            '    <RunModeTbl RunMode="0x2" ResAllocMode="0" ResTblNum="0"/>\n'
+            '    <ExtraTbl ExtraNum="1">\n'
+            '        <ExtraItem Tgt="RunModeTbl"/>\n'
+            '    </ExtraTbl>\n'
+            '</FileInfo>\n',
+            encoding="utf-8",
+        )
+        out = tmp_path / "out"
+        with caplog.at_level("WARNING", logger="ecfg.legacy.preprocess"):
+            unpack(xml, out)
+        assert "跨多个 folder" in caplog.text
+        extra_text = (out / "shared" / "ExtraTbl.yaml").read_text(encoding="utf-8")
+        assert "@use" not in extra_text, (
+            f"歧义情况下不应猜路径；实际：\n{extra_text}"
+        )
+
+
+_RUNMODE_A = (
+    '    <RunModeTbl RunMode="0x1" ResAllocMode="0" ResTblNum="1">\n'
+    '        <RunModeItem Foo="Foo"/>\n'
+    '    </RunModeTbl>\n'
+)
+_RUNMODE_A_CONFLICT = (
+    '    <RunModeTbl RunMode="0x1" ResAllocMode="9" ResTblNum="1">\n'
+    '        <RunModeItem Foo="Foo"/>\n'
+    '    </RunModeTbl>\n'
+)
+
+
+class TestUnpackManyExtra:
+    """补强测试：自命名（带 RunMode）冲突 + 非 FileInfo 根."""
+
+    def test_self_named_runmode_conflict_raises(self, tmp_path: Path) -> None:
+        """同 ``(RunModeTbl, RunMode=0x1)`` 在两份 XML 中字段不同 → ValueError."""
+        a = tmp_path / "a.xml"
+        b = tmp_path / "b.xml"
+        a.write_text(_MERGE_HEADER + _RUNMODE_A + "</FileInfo>", encoding="utf-8")
+        b.write_text(_MERGE_HEADER + _RUNMODE_A_CONFLICT + "</FileInfo>", encoding="utf-8")
+        with pytest.raises(ValueError, match="非幂等去重"):
+            unpack_many([a, b], tmp_path / "out")
+
+    def test_non_fileinfo_root_raises(self, tmp_path: Path) -> None:
+        """根元素不是 ``<FileInfo>`` → ValueError，不静默接受."""
+        bad = tmp_path / "bad.xml"
+        bad.write_text(
+            '<?xml version="1.0" encoding="UTF-8"?>\n<NotFileInfo/>\n',
+            encoding="utf-8",
+        )
+        with pytest.raises(ValueError, match="root must be <FileInfo>"):
+            unpack(bad, tmp_path / "out")
