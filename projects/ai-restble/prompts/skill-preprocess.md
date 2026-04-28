@@ -27,7 +27,7 @@
 | R8 | list item = child element 的 attribute set | mapping 每个 key-value 对 = child 的一个 attribute |
 | R9 | 引用 value 永远 = 文件 stem | RunModeItem `<X="Y"/>` → yaml 写 `- X: "Y"` |
 | R10 | 同目录 ref 默认；跨目录加 `# @use:<path>` | 自动判断 |
-| **生成 meta** | `template/_children_order.yaml` | 必须产出：list 形态、顶层 element 顺序，按原 XML 出现顺序记录每 logical-class 的位置；如果同 class 内多 element 形态（wrapper + flat 混合）需用 `<element>:<stem>` 特例 pin 顺序 |
+| **生成 meta** | `template/_children_order.yaml` | 必须产出 list。**只有两种 entry**：(1) `<Element>` element-class catch-all（匹配该 element 的所有剩余文件，按 `(stem, path)` 字母序）；(2) `<element>:<stem>` 特例（精确 pin 单个 instance）。同 element 跨 XML 出现多次时：仅末尾 block 可用 catch-all 且块内字母序 == XML idx 序，前面 block 用特例；同 class 多 element 形态（wrapper + flat 混合）也用特例 pin |
 
 ## Steps
 
@@ -63,8 +63,10 @@ flowchart TD
    - children 作为派生字段下的 list-of-mappings
 5. **检测跨目录引用**：list item 的 value 指向不在同目录的文件 → 在该行注释 `# @use:<相对路径>`
 6. **生成 `template/_children_order.yaml`**（顺序 meta）：
-   - 按 FileInfo 直接子元素在原 XML 的出现顺序，记录每个 logical-class（即 wrapper 的 type-attr value 或自命名 element 名）
-   - 同 class 多 element 形态（wrapper + flat 混合）：用 `<element>:<stem>` 特例 pin 关键 instance；剩余靠默认 `(element 名, stem, path)` 字母序兜底
+   - 把 XML 顶层 element 按出现顺序切成「连续同 element」block 序列
+   - 每个 element 的**末尾 block** 若 `(stem, scope_folder)` 字母序 == XML idx 序 → emit `- <Element>` catch-all
+   - 否则（或非末尾 block）→ block 内每个 instance emit `- <Element>:<stem>` 特例
+   - 同 class 多 element 形态（wrapper + flat 混合）天然在不同 block 中，按上述规则处理
    - 重复 class 名跳过（class 内 instance 由 postprocess 解析时贪心匹配）
 7. **多 XML 合一兜底（仅多输入场景）**：
    - 同 (element, type-attr) tuple 在不同 XML 中出现 → 字段必须**完全相同**（幂等去重），任一字段不同 → raise（不引入 `@merge` 注解）

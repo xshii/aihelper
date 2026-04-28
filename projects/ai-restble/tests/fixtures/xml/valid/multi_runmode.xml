@@ -26,9 +26,6 @@
         <Line ClkName="SYS_CLK" FreqMHz="1200" Source="PLL2"/>
         <Line ClkName="DDR_CLK" FreqMHz="2400" Source="PLL3"/>
     </ResTbl>
-    <ResTbl DmaCfgTbl="DmaCfgTbl" LineNum="1">
-        <Line ChannelId="0" SrcType="MEM" DstType="DEV" BurstSize="16"/>
-    </ResTbl>
     <ResTbl CoreDeployTbl="CoreDeployTbl" LineNum="4">
         <Line CoreId="0" CoreType="A53" FreqMHz="600" Cluster="0"/>
         <Line CoreId="1" CoreType="A53" FreqMHz="600" Cluster="0"/>
@@ -44,5 +41,8 @@
         <Line CoreId="5" CoreType="A53" FreqMHz="800" Cluster="0"/>
         <Line CoreId="6" CoreType="A53" FreqMHz="800" Cluster="0"/>
         <Line CoreId="7" CoreType="A53" FreqMHz="800" Cluster="0"/>
+    </ResTbl>
+    <ResTbl DmaCfgTbl="DmaCfgTbl" LineNum="1">
+        <Line ChannelId="0" SrcType="MEM" DstType="DEV" BurstSize="16"/>
     </ResTbl>
 </FileInfo>

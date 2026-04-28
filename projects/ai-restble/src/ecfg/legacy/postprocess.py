@@ -169,19 +169,21 @@ def _consume_specific_entry(
 def _consume_class_entry(
     entry: str, all_data: list[Path], used: set[Path],
 ) -> list[Path]:
-    """``<class>`` 兜底：stem == entry 或 stem 形如 ``entry_<variant>``。
+    """``<entry>`` element-class 匹配：``resolved element name == entry`` 的所有未消费文件。
 
-    class 内排序键 ``(resolved element name, stem, full path str)``。
+    设计契约：template 只描述 **element 类约束**；同 element 类内 stem 字母序为协议契约
+    （XML 必须按相同顺序声明），否则 round-trip 失败。无回退 stem-match。
+
+    排序键 ``(stem, full path)``（element 已固定为 entry，path 为同 stem 跨 folder 的 tiebreak）。
     """
-    matches: list[tuple[str, str, str, Path]] = []
+    matches: list[tuple[str, str, Path]] = []
     for p in all_data:
         if p in used:
             continue
-        stem = p.stem
-        if stem == entry or stem.startswith(entry + "_"):
-            matches.append((_resolve_element_name(p), stem, str(p), p))
+        if _resolve_element_name(p) == entry:
+            matches.append((p.stem, str(p), p))
     matches.sort()
-    return [p for _, _, _, p in matches]
+    return [p for _, _, p in matches]
 
 
 def _resolve_element_name(yaml_path: Path) -> str:

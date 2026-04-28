@@ -158,31 +158,30 @@ class TestChildrenOrderSpecificEntry:
             f"wrapper 应该在 flats 之前；wrapper@{wrapper_pos}, flat@{flat_pos}"
         )
 
-    def test_without_specific_entry_falls_back_to_alphabetical(
+    def test_pure_element_class_template_orders_alphabetically(
         self, tmp_path: Path,
     ) -> None:
-        """删掉特例条 → 默认字母序：flat element 名 ``Cap...`` < ``ResTbl``，flats 先于 wrapper."""
+        """删掉所有特例 → 仅 element-class catch-all：每个 element 类内按 stem 字母序 emit."""
         import shutil
         src = FIXTURES_ROOT / "multi_runmode.expected"
         dst = tmp_path / "fx.expected"
         shutil.copytree(src, dst)
-        # 把 _children_order.yaml 改成无特例的版本
         order_file = dst / "template" / "_children_order.yaml"
+        # 三条 element-class 入口：CapacityRunModeMapTbl flat / ResTbl wrappers / RunModeTbl
         order_file.write_text(
-            "- RatVersion\n"
             "- CapacityRunModeMapTbl\n"
-            "- RunModeTbl\n"
-            "- ClkCfgTbl\n"
-            "- DmaCfgTbl\n"
-            "- CoreDeployTbl\n",
+            "- ResTbl\n"
+            "- RunModeTbl\n",
             encoding="utf-8",
         )
         emitted = pack(dst)
-        wrapper_pos = emitted.find('CapacityRunModeMapTbl="CapacityRunModeMapTbl"')
+        # ResTbl wrappers 按 stem 字母序：CapacityRunModeMapTbl < ClkCfgTbl < ... < RatVersion
+        wrapper_pos = emitted.find('<ResTbl CapacityRunModeMapTbl="CapacityRunModeMapTbl"')
+        rat_pos = emitted.find('<ResTbl RatVersion="RatVersion"')
         flat_pos = emitted.find('<CapacityRunModeMapTbl CapacityID="0x0001"')
-        # 字母序：flat element 名 "CapacityRunModeMapTbl" 排在 wrapper element 名 "ResTbl" 前
-        assert flat_pos < wrapper_pos, (
-            f"无特例时按字母序，flats 应该先于 wrapper；wrapper@{wrapper_pos}, flat@{flat_pos}"
+        # 顺序：flat block → ResTbl block (CRMM wrapper 首, RatVersion 末) → RunModeTbl block
+        assert 0 < flat_pos < wrapper_pos < rat_pos, (
+            f"flat={flat_pos}, wrapper={wrapper_pos}, rat={rat_pos}"
         )
 
 
@@ -192,14 +191,15 @@ class TestPackWarnings:
     def test_orphan_yaml_warns(
         self, tmp_path: Path, caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """fixture 里有但 ``_children_order`` 没列的 yaml → WARNING."""
+        """fixture 里有 yaml 但其 element 不在 ``_children_order`` 任何 entry 下 → WARNING."""
         import shutil
 
         src = FIXTURES_ROOT / "minimal.expected"
         dst = tmp_path / "minimal.expected"
         shutil.copytree(src, dst)
+        # ``# @element:<self>`` 解析为 stem ``OrphanTbl``；template 只有 ``- ResTbl`` 不匹配
         (dst / "OrphanTbl.yaml").write_text(
-            "# @element:ResTbl\nLineNum: # @related:count(Line)\n",
+            "# @element:<self>\nLineNum: # @related:count(Line)\n",
             encoding="utf-8",
         )
         with caplog.at_level("WARNING", logger="ecfg.legacy.postprocess"):

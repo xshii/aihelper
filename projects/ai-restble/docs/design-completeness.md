@@ -18,6 +18,10 @@
 - **YAML 端语法**（target grammar）：`docs/yaml-schema.md` R1–R11 + `_children_order.yaml` meta。
 - **翻译规则集**（reductions）：`preprocess.py`（XML AST → YAML AST）、`postprocess.py`（YAML AST → XML AST）。每条规则一个 `_classify` / `_scope_for` / `_emit_*` helper。
 - **类型系统**：`schema/model.py` 的 `FieldSchema` / `TableSchema` + `Region = Literal["index","attribute","ref"]` + 6 种 `@merge` op。
+- **`_children_order.yaml` 语法**（仅两种 entry 形式）：
+  - `<Element>` element-class catch-all — 匹配 `resolved element name == entry` 的所有未消费文件，按 `(stem, full path)` 字母序排列
+  - `<element>:<stem>` 特例 — 精确 pin 单个 instance
+  - **协议契约**：同 element 类内 `(stem, full path)` 字母序 == XML idx 序；XML 不一致时必须用特例显式 pin。这是**对 XML 输入的约束**，不是松弛——简化语义换取可证明性。
 
 ## 2. 完备性论证（Closed-form）
 

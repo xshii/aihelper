@@ -35,7 +35,7 @@ flowchart TD
   C --> D{遍历 _children_order entry}
   D --> D1{含冒号?}
   D1 -->|yes :| D2["特例：精确匹配 element:stem 文件"]
-  D1 -->|no| D3[class 兜底匹配 + 默认排序]
+  D1 -->|no| D3["element-class catch-all：匹配 element_name == entry"]
   D2 & D3 --> E[读首行 @element:<X>]
   E --> F{X = <self>?}
   F -->|yes| G[element name = stem 去 variant]
@@ -53,14 +53,14 @@ flowchart TD
 具体执行：
 
 1. **扫描目录**：找出所有 element yaml（排除 FileInfo / `template/` / 下划线 meta）。
-2. **加载 `template/_children_order.yaml`** —— logical-class 顺序 + `<element>:<stem>` 特例 list。
+2. **加载 `template/_children_order.yaml`** —— element-class entries + `<element>:<stem>` 特例 list。
 3. **拼装 XML**：
    a. **FileInfo 是文档根** —— attributes 来自 `(shared/)?FileInfo.yaml`，无 `@element:` 头（特殊豁免）。
-   b. **逐 entry 展开**：按 list 顺序，每条 entry 二选一匹配：
-      - 不含 `:` → **class 兜底**：stem == entry 或 stem 形如 `entry_<variant>` 的文件；class 内多 instance 排序键 `(resolved element 名, stem, 全路径)`。
-      - 含 `:` → **特例**：`<element>:<stem>` 精确匹配（resolved element name + 完整 stem），pin 单个 instance 到此位置。
+   b. **逐 entry 展开**：按 list 顺序，每条 entry **只有两种形式**：
+      - 不含 `:` → **`<Element>` element-class catch-all**：匹配 `resolved element name == entry` 的所有未消费文件，按 `(stem, full path)` 字母序排列。
+      - 含 `:` → **`<element>:<stem>` 特例**：精确匹配 (resolved element name + 完整 stem)，pin 单个 instance 到此位置。
       
-      匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，class 后兜底）。**文件夹位置（shared/ vs `0x.../`）不参与排序**——存储约定，非数据语义。
+      匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，catch-all 后兜底）。**协议契约**：同 element 类内 `(stem, full path)` 字母序 == XML idx 序——XML 不一致时必须用特例显式 pin。**文件夹位置通过 path 进入 tiebreak**，不单独优先。
 4. **每个文件 emit XML**：
    - 读首行 `@element:<X>` 决定 element name（FileInfo 例外）
    - 按**数据 yaml 自身**字段 insertion order 输出 attributes

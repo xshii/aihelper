@@ -94,26 +94,21 @@ def unpack_many(xml_paths: List[Path], out_dir: Path) -> None:
     file_info_dir.mkdir(parents=True, exist_ok=True)
     _write_file_info(file_info_dir / ROOT_YAML, file_info_root)
 
-    class_first_idx: Dict[str, int] = {}
-    class_instances: Dict[str, List[Tuple[int, str, str]]] = {}
+    instances: List[Tuple[int, str, str, Optional[str]]] = []
     for idx, child, elem_name, stem, scope_folder in classifications:
-        bare_class = strip_variant(stem)
         dest_dir = (out_dir / scope_folder) if scope_folder else out_dir
         dest_dir.mkdir(parents=True, exist_ok=True)
         _write_element_yaml(
             dest_dir / f"{stem}.yaml", child, elem_name, stem,
             scope_folder, stem_folders,
         )
-        class_first_idx.setdefault(bare_class, idx)
-        class_instances.setdefault(bare_class, []).append((idx, elem_name, stem))
+        instances.append((idx, elem_name, stem, scope_folder))
 
     _write_children_order(
-        out_dir / TEMPLATE_FOLDER / CHILDREN_ORDER_YAML,
-        class_first_idx, class_instances,
+        out_dir / TEMPLATE_FOLDER / CHILDREN_ORDER_YAML, instances,
     )
     logger.info(
-        "unpack: %d XML(s) → %d top-level children → %d classes",
-        len(xml_paths), len(children), len(class_instances),
+        "unpack: %d XML(s) → %d top-level children", len(xml_paths), len(children),
     )
 
 
@@ -387,24 +382,63 @@ def _attrib_to_yaml_value(s: str) -> Any:
 
 def _write_children_order(
     path: Path,
-    class_first_idx: Dict[str, int],
-    class_instances: Dict[str, List[Tuple[int, str, str]]],
+    instances: List[Tuple[int, str, str, Optional[str]]],
 ) -> None:
-    """生成 ``template/_children_order.yaml``：class 序（XML 首次出现）+ ``element:stem`` 特例."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    classes = sorted(class_first_idx, key=lambda c: class_first_idx[c])
+    """生成 ``_children_order.yaml``：仅 element-class catch-all + ``<element>:<stem>`` 特例.
 
+    设计契约：template 描述**类约束**，不再枚举 stem。
+    - 同 element 跨 XML 出现 N 次（被其他 element 隔开 N 个 block）：
+      仅最后一个 block 可用 catch-all ``- <Element>``，前面 block 用 ``- <E>:<stem>`` 特例
+    - catch-all 要求 block 内 ``(stem, folder)`` 字母序 == XML idx 序；不满足则降级为特例
+    - 同 element 类内字母序为协议契约 — XML 必须按相同顺序声明同 element 实例
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
     seq = CommentedSeq()
-    for cls in classes:
-        instances = class_instances[cls]  # [(xml_idx, element, stem), ...]
-        elements = {e for _, e, _ in instances}
-        if len(elements) > 1:
-            # 同 class 内 element 不一致 → 第一个用特例 pin，剩余靠 class 默认排序
-            first = min(instances, key=lambda t: t[0])
-            seq.append(f"{first[1]}:{first[2]}")
-        seq.append(cls)
+    blocks = _group_consecutive_by_element(instances)
+    last_block_idx = {elem: bi for bi, (elem, _) in enumerate(blocks)}
+
+    for bi, (elem, block) in enumerate(blocks):
+        is_trailing = bi == last_block_idx[elem]
+        if is_trailing and _alphabetic_matches_xml(block):
+            seq.append(elem)
+        else:
+            for _, _, stem, _ in block:
+                seq.append(f"{elem}:{stem}")
+
     text = "# FileInfo children emit order\n" + _dump_yaml(seq)
     path.write_text(text, encoding="utf-8")
+
+
+def _group_consecutive_by_element(
+    instances: List[Tuple[int, str, str, Optional[str]]],
+) -> List[Tuple[str, List[Tuple[int, str, str, Optional[str]]]]]:
+    """把 instances 按 XML 出现顺序切成「连续同 element」block 序列."""
+    blocks: List[Tuple[str, List[Tuple[int, str, str, Optional[str]]]]] = []
+    current_elem: Optional[str] = None
+    current_block: List[Tuple[int, str, str, Optional[str]]] = []
+    for inst in instances:
+        elem = inst[1]
+        if elem != current_elem:
+            if current_block and current_elem is not None:
+                blocks.append((current_elem, current_block))
+            current_elem, current_block = elem, [inst]
+        else:
+            current_block.append(inst)
+    if current_block and current_elem is not None:
+        blocks.append((current_elem, current_block))
+    return blocks
+
+
+def _alphabetic_matches_xml(
+    block: List[Tuple[int, str, str, Optional[str]]],
+) -> bool:
+    """block 内 ``(stem, scope_folder)`` 字母序是否与 XML idx 序一致.
+
+    与 ``postprocess._consume_class_entry`` 的 ``(stem, full path)`` 等价（folder 决定 path 前缀）。
+    """
+    by_alpha = sorted(block, key=lambda t: (t[2], t[3] or ""))
+    by_xml = sorted(block, key=lambda t: t[0])
+    return by_alpha == by_xml
 
 
 def _dump_yaml(doc: Any) -> str:

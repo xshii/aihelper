@@ -1,10 +1,8 @@
 # FileInfo children emit order
-# 默认排序键：class 内 (element 名, stem, full path)
-# 特例语法：<element>:<stem> 精确 pin 单个 instance 到指定位置
-- RatVersion
-- ResTbl:CapacityRunModeMapTbl   # 特例：wrapper 形态先 emit（element=ResTbl）
-- CapacityRunModeMapTbl           # 兜底：剩下的 flat 实例（element=CapacityRunModeMapTbl）
-- RunModeTbl
-- ClkCfgTbl
-- DmaCfgTbl
-- CoreDeployTbl
+# 仅 element-class 与 ``<element>:<stem>`` 特例两种 entry 形式
+# 同 element 类内字母序为协议契约（XML 必须按相同顺序声明）
+- ResTbl:RatVersion              # 特例：RatVersion 必须在最前
+- ResTbl:CapacityRunModeMapTbl   # 特例：wrapper 形态紧随其后（element=ResTbl）
+- CapacityRunModeMapTbl           # CapacityRunModeMapTbl flat 实例
+- RunModeTbl                      # RunModeTbl 实例
+- ResTbl                          # 剩余 ResTbl wrappers (Cl, Cl_var, Co, Co_var, Dm 字母序)
