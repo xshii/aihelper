@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "proto-test-env"
+version = "0.0.1"
+description = "FPGA 原型测试环境参考实现 — Autotest 端 + 桩 CPU / DUT 固件占位"
+requires-python = ">=3.9"
+dependencies = [
+    "bitstruct>=8.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff>=0.5",
+    "pyright>=1.1.350",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.pyright]
+include = ["src", "tests"]
+pythonVersion = "3.9"
