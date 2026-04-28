@@ -84,9 +84,9 @@ class TestSubsequentComments:
         assert subsequent_comments(doc, "priority") == []
 
     def test_single_standalone(self):
-        src = "priority: 0\n# @noconflict_group: [p]\n"
+        src = "priority: 0\n# @range: 0-15\n"
         doc = _load(src)
-        assert subsequent_comments(doc, "priority") == ["@noconflict_group: [p]"]
+        assert subsequent_comments(doc, "priority") == ["@range: 0-15"]
 
     def test_multiple_standalones(self):
         src = (
@@ -108,11 +108,11 @@ class TestSubsequentComments:
             "      owner:\n"
             "        moduleType: uart\n"
             "        moduleIndex: 0\n"
-            "# @noconflict_group: [a, b]\n"
+            "# @flag: top\n"
         )
         doc = _load(src)
         inner = doc["items"][0]["ref"]["owner"]
-        assert subsequent_comments(inner, "moduleIndex") == ["@noconflict_group: [a, b]"]
+        assert subsequent_comments(inner, "moduleIndex") == ["@flag: top"]
 
 
 class TestCoexistence:
@@ -121,8 +121,8 @@ class TestCoexistence:
     def test_trailing_plus_standalone(self):
         src = (
             "priority: 0  # @merge: sum\n"
-            "# @noconflict_group: [p]\n"
+            "# @range: 0-15\n"
         )
         doc = _load(src)
         assert trailing_comment(doc, "priority") == "@merge: sum"
-        assert subsequent_comments(doc, "priority") == ["@noconflict_group: [p]"]
+        assert subsequent_comments(doc, "priority") == ["@range: 0-15"]

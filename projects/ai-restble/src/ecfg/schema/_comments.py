@@ -85,10 +85,10 @@ def subsequent_comments(cmap: CommentedMap, key: str) -> List[str]:
 
     单条 standalone：
 
-    >>> src = 'priority: 0\\n# @noconflict_group: [p]\\n'
+    >>> src = 'priority: 0\\n# @range: 0-15\\n'
     >>> doc = yaml.load(src)
     >>> subsequent_comments(doc, "priority")
-    ['@noconflict_group: [p]']
+    ['@range: 0-15']
 
     多条连续 standalone：
 
@@ -111,11 +111,11 @@ def subsequent_comments(cmap: CommentedMap, key: str) -> List[str]:
     但本函数只返回 standalone 部分）：
 
     >>> src = '''priority: 0  # @merge: sum
-    ... # @noconflict_group: [p]
+    ... # @range: 0-15
     ... '''
     >>> doc = yaml.load(src)
     >>> subsequent_comments(doc, "priority")
-    ['@noconflict_group: [p]']
+    ['@range: 0-15']
 
     上面这个 case 的同行尾随仍然可以取到（两者互不干扰）：
 

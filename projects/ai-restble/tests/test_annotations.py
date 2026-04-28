@@ -41,8 +41,8 @@ class TestSingleAnnotation:
         assert r.annotations == [Annotation("range", "0-15")]
 
     def test_key_with_underscore(self):
-        r = parse_comment("@noconflict_group: [handler, priority]")
-        assert r.annotations == [Annotation("noconflict_group", "[handler, priority]")]
+        r = parse_comment("@no_conflict_set: [handler, priority]")
+        assert r.annotations == [Annotation("no_conflict_set", "[handler, priority]")]
 
 
 class TestTwoAnnotations:
@@ -156,9 +156,9 @@ class TestNestedSeparators:
         ]
 
     def test_list_with_nested_structures(self):
-        r = parse_comment("@noconflict_group: [handler, priority, retry]; @merge: conflict")
+        r = parse_comment("@enum_set: [handler, priority, retry]; @merge: conflict")
         assert r.annotations == [
-            Annotation("noconflict_group", "[handler, priority, retry]"),
+            Annotation("enum_set", "[handler, priority, retry]"),
             Annotation("merge", "conflict"),
         ]
 

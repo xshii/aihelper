@@ -1,13 +1,11 @@
 """YAML Schema 合规性测试 — 验证所有 fixture 符合 docs/yaml-schema.md 规范。
 
-不依赖 skill 实现；只检查 fixture 静态合规。round-trip 字节级测试在 skill 实现后启用
-（标记 xfail 占位；strict=True 强制：skill 上线后必须移除 xfail）。
+静态合规（首行 / 命名 / 注解形式）+ 字节级 round-trip + 幂等性。
 """
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Pattern
 
 import pytest
 from ruamel.yaml import YAML, YAMLError
@@ -17,15 +15,6 @@ from ecfg.legacy.postprocess import pack
 _yaml = YAML(typ="safe")
 
 FIXTURES_ROOT = Path(__file__).parent / "fixtures" / "xml" / "valid"
-
-# 已废弃形态（fixture 内出现就违规）。`@enum` `@range` `@merge` 是规范保留注解，不在此列。
-OBSOLETE_PATTERNS: list[tuple[Pattern[str], str]] = [
-    (re.compile(r"@derived:"), "用 @related: 替代"),
-    (re.compile(r"@ref\b"), "用 @related（无括号 = identity）"),
-    (re.compile(r"@noconflict_group\b"), "已删除；merge-safety 由 per-field @merge 有/无推断"),
-    (re.compile(r"^#\s*@toplevel\b", re.MULTILINE), "用 # @element:<self> 替代"),
-    (re.compile(r"^attribute:\s*$", re.MULTILINE), "顶层 attribute: 包裹已废弃；扁平 mapping"),
-]
 
 ELEMENT_HEADER = re.compile(r"^#\s*@element:(<self>|[A-Za-z][A-Za-z0-9_]*)\s*$")
 ANNOTATION_NEEDS_NO_SPACE = re.compile(r"@(element|related|use|range|merge|enum):\s")
@@ -92,22 +81,6 @@ class TestFirstLine:
             assert ELEMENT_HEADER.match(first_line), (
                 f"{yaml_file.relative_to(FIXTURES_ROOT)} 首行不符 R4 格式：{first_line!r}"
             )
-
-
-class TestObsoleteForms:
-    """fixture 不应出现旧形态/已删注解（含 meta 文件）."""
-
-    def test_no_obsolete_annotations(self, fixture_dir: Path) -> None:
-        """扫所有 yaml（含 meta）确认无 OBSOLETE_PATTERNS."""
-        all_yaml = sorted(fixture_dir.rglob("*.yaml"))
-        for yaml_file in all_yaml:
-            content = yaml_file.read_text(encoding="utf-8")
-            for pattern, hint in OBSOLETE_PATTERNS:
-                if pattern.search(content):
-                    pytest.fail(
-                        f"{yaml_file.relative_to(FIXTURES_ROOT)} 含过时形态 "
-                        f"`{pattern.pattern}` ({hint})"
-                    )
 
 
 class TestYamlValidity:

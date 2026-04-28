@@ -202,7 +202,7 @@ Template 跟数据 yaml **结构同构**，规则差异只有三点：
 2. **行尾可挂约束注解**——`@enum` `@range` `@merge`（关系类用 `@related` 在数据 yaml 也可用）。多 team 合并时字段冲突策略由 `@merge` 一项决定：有 `@merge:concat/sum/max/min/union` → 可合并；有 `@merge:conflict` → 必须等值；无 `@merge` → 必须等值（默认）。
 3. **写出的字段 = required；未写 = 该字段不存在**（无 optional 概念）。
 
-字段顺序 = mapping insertion order（XML emit 按此顺序）。无需 `@attribute_order`。
+字段顺序 = mapping insertion order（XML emit 按此顺序）。
 
 ### Template 目录结构
 
@@ -356,7 +356,6 @@ emit 回 XML（按 template 字段顺序）→ 字节级跟原 XML 一致。
 |---|---|---|
 | `LineNum: 4` 写死 | 派生字段不该写在 source | 删值，仅 `LineNum: # @related:count(Line)` |
 | `<ResTblNum><RunModeItem/></ResTblNum>` | 误把 `@related:count(X)` 字段当 children 容器 | sibling 平级 emit |
-| 文件名带 `ResTbl_` 前缀 | 旧规则，已废弃 | stem = logical table name |
 | 数据 yaml 写 `@enum:...` | 约束属于 template，不是数据 | 搬到 template 文件 |
 | `# @related: T.c`（冒号后空格） | 形式不符约定 | `# @related:T.c` |
 | `# @element:RunModeTbl` 自命名也写名 | 冗余，自命名用 `<self>` | `# @element:<self>` |
