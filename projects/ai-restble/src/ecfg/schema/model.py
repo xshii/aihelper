@@ -29,10 +29,16 @@ class FieldSchema:
 
 @dataclass
 class TableSchema:
-    """一张表的 schema：BaseName + 三区域字段 schemas."""
+    """一张表的 schema：BaseName + 三区域字段 schemas + 索引可重复 flag。
+
+    ``index_repeatable``：默认 False（同 index 严格唯一）。声明 ``# @index:repeatable``
+    （挂在 TEMPLATE 块的 ``index:`` 行尾）即放宽 — 同 index 重复由 merge 引擎按
+    (1) 全等短路 / (2) 字段差异均有 ``@merge`` 规则 / (3) 真冲突 三档自动分流。
+    """
 
     base_name: str
     index_fields: List[str] = field(default_factory=list)
+    index_repeatable: bool = False
     attribute_fields: Dict[str, FieldSchema] = field(default_factory=dict)
     ref_fields: Dict[str, FieldSchema] = field(default_factory=dict)
 

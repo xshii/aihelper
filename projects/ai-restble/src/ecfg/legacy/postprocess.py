@@ -110,7 +110,13 @@ def _load_children_order(fixture_dir: Path) -> list[str]:
 def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:
     """收集所有 element data yaml（排除 FileInfo / template/ / 下划线 meta）。
 
-    排序：class（按 ``order`` 中位置）→ shared 优先 → element 名升序 → 全路径升序。
+    每条 entry 二选一：
+    - ``<class>``（无 ``:``）：class 兜底匹配，stem == class 或 stem 以 ``class_`` 开头。
+      class 内多 instance 排序键 ``(element 名, stem, 全路径)``。
+    - ``<element>:<stem>``（有 ``:``）：特例精确匹配，pin 单个 instance 到此位置。
+
+    匹配按 ``order`` 顺序贪心；每文件最多匹配一次。文件夹层级（shared/ vs scope/）
+    **不参与**排序——属于存储约定，非数据语义。
     """
     all_data = [
         p for p in fixture_dir.rglob("*.yaml")
@@ -120,21 +126,50 @@ def _ordered_children(fixture_dir: Path, order: list[str]) -> list[Path]:
     ]
 
     result: list[Path] = []
-    for logical in order:
-        matches: list[tuple[bool, str, str, Path]] = []
-        for p in all_data:
-            stem = p.stem
-            if stem == logical or stem.startswith(logical + "_"):
-                elem = _resolve_element_name(p)
-                in_scope = "shared" not in p.parts  # shared/ 排在 scope/ 之前
-                matches.append((in_scope, elem, str(p), p))
-        if not matches:
+    used: set[Path] = set()
+    for entry in order:
+        if ":" in entry:
+            consumed = _consume_specific_entry(entry, all_data, used)
+        else:
+            consumed = _consume_class_entry(entry, all_data, used)
+        if not consumed:
             logger.warning(
-                "_children_order 列了 %r 但 fixture 找不到匹配文件", logical,
+                "_children_order 列了 %r 但 fixture 找不到匹配文件", entry,
             )
-        matches.sort()
-        result.extend(p for _, _, _, p in matches)
+        result.extend(consumed)
+        used.update(consumed)
     return result
+
+
+def _consume_specific_entry(
+    entry: str, all_data: list[Path], used: set[Path],
+) -> list[Path]:
+    """``<element>:<stem>`` 特例：精确匹配 (resolved element name, stem)."""
+    elem_target, stem_target = entry.split(":", 1)
+    for p in all_data:
+        if p in used:
+            continue
+        if p.stem == stem_target and _resolve_element_name(p) == elem_target:
+            return [p]
+    return []
+
+
+def _consume_class_entry(
+    entry: str, all_data: list[Path], used: set[Path],
+) -> list[Path]:
+    """``<class>`` 兜底：stem == entry 或 stem 形如 ``entry_<variant>``。
+
+    class 内排序键 ``(resolved element name, stem, full path str)``。
+    """
+    matches: list[tuple[str, str, str, Path]] = []
+    for p in all_data:
+        if p in used:
+            continue
+        stem = p.stem
+        if stem == entry or stem.startswith(entry + "_"):
+            matches.append((_resolve_element_name(p), stem, str(p), p))
+    matches.sort()
+    return [p for _, _, _, p in matches]
 
 
 def _resolve_element_name(yaml_path: Path) -> str:

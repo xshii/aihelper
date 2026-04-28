@@ -77,6 +77,7 @@ def load_table_schema(yaml_path: Path) -> TableSchema:
     ref_map = record.get("ref") or CommentedMap()
 
     schema.index_fields = list(index_map.keys())
+    schema.index_repeatable = _parse_index_repeatable(record)
     # MVP：index 字段不构 FieldSchema（不参与 merge）；如未来 validator 需要约束信息，
     # 在此扩展构建 ``schema.index_field_schemas``。
     schema.attribute_fields = {
@@ -93,6 +94,30 @@ def load_table_schema(yaml_path: Path) -> TableSchema:
         len(schema.attribute_fields), len(schema.ref_fields),
     )
     return schema
+
+
+def _parse_index_repeatable(record: CommentedMap) -> bool:
+    """检测 TEMPLATE 块 ``index:`` 行尾的 ``@index:repeatable`` 标记。
+
+    严格语义：``@index:`` 只接受 ``repeatable`` 一个值；其他任何值（如
+    ``@index:nonrepeatable`` / ``@index:strict``）都立刻 raise，避免静默 fallback
+    让调用方误以为生效。不写注解 = 默认严格唯一。
+    """
+    comment = trailing_comment(record, "index") or ""
+    parsed = parse_comment(comment)
+    repeatable = False
+    for ann in parsed.annotations:
+        if ann.key != "index":
+            continue
+        value = ann.value.strip()
+        if value == "repeatable":
+            repeatable = True
+        else:
+            raise ValueError(
+                f"未知 @index 值: {value!r}（当前仅支持 @index:repeatable；"
+                "不写注解 = 默认严格唯一）"
+            )
+    return repeatable
 
 
 def _build_field_schema(name: str, region: str, parent: CommentedMap) -> FieldSchema:

@@ -155,6 +155,63 @@ class TestAnnotationConsistency:
                     )
 
 
+class TestPackSortDeterminism:
+    """``pack()`` 输出在同一 fixture 上必须**幂等**——多次调用 byte-for-byte 一致."""
+
+    def test_repeated_pack_byte_identical(self, fixture_dir: Path) -> None:
+        """跑 3 次 pack 必须产出完全相同的字节（无任何随机/字典序抖动）."""
+        a, b, c = pack(fixture_dir), pack(fixture_dir), pack(fixture_dir)
+        assert a == b == c
+
+
+class TestChildrenOrderSpecificEntry:
+    """``_children_order.yaml`` 的 ``<element>:<stem>`` 特例语法 — pin 单个 instance."""
+
+    def test_specific_entry_overrides_default_sort(
+        self, tmp_path: Path,
+    ) -> None:
+        """特例条 ``ResTbl:CapacityRunModeMapTbl`` 应让 wrapper 在默认字母序前 emit."""
+        import shutil
+        src = FIXTURES_ROOT / "multi_runmode.expected"
+        dst = tmp_path / "fx.expected"
+        shutil.copytree(src, dst)
+        # 当前 _children_order.yaml 已含特例，pack 出 wrapper 在 flats 之前
+        emitted = pack(dst)
+        wrapper_pos = emitted.find('CapacityRunModeMapTbl="CapacityRunModeMapTbl"')
+        flat_pos = emitted.find('<CapacityRunModeMapTbl CapacityID="0x0001"')
+        assert wrapper_pos > 0 and flat_pos > 0
+        assert wrapper_pos < flat_pos, (
+            f"wrapper 应该在 flats 之前；wrapper@{wrapper_pos}, flat@{flat_pos}"
+        )
+
+    def test_without_specific_entry_falls_back_to_alphabetical(
+        self, tmp_path: Path,
+    ) -> None:
+        """删掉特例条 → 默认字母序：flat element 名 ``Cap...`` < ``ResTbl``，flats 先于 wrapper."""
+        import shutil
+        src = FIXTURES_ROOT / "multi_runmode.expected"
+        dst = tmp_path / "fx.expected"
+        shutil.copytree(src, dst)
+        # 把 _children_order.yaml 改成无特例的版本
+        order_file = dst / "template" / "_children_order.yaml"
+        order_file.write_text(
+            "- RatVersion\n"
+            "- CapacityRunModeMapTbl\n"
+            "- RunModeTbl\n"
+            "- ClkCfgTbl\n"
+            "- DmaCfgTbl\n"
+            "- CoreDeployTbl\n",
+            encoding="utf-8",
+        )
+        emitted = pack(dst)
+        wrapper_pos = emitted.find('CapacityRunModeMapTbl="CapacityRunModeMapTbl"')
+        flat_pos = emitted.find('<CapacityRunModeMapTbl CapacityID="0x0001"')
+        # 字母序：flat element 名 "CapacityRunModeMapTbl" 排在 wrapper element 名 "ResTbl" 前
+        assert flat_pos < wrapper_pos, (
+            f"无特例时按字母序，flats 应该先于 wrapper；wrapper@{wrapper_pos}, flat@{flat_pos}"
+        )
+
+
 class TestPackWarnings:
     """post-process WARNING 路径必须真实触发（防数据静默丢失）."""
 

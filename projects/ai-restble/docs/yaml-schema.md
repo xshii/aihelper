@@ -274,7 +274,7 @@ LineNum: # @related:count(Line)
 
 | 文件路径 | 内容 | 说明 |
 |---|---|---|
-| `template/_children_order.yaml` | yaml list，每项一个 logical-table-name | XML 顶层元素的 **class 顺序**。同 class 内多 instance 排序：**(1) 在 `shared/` 的优先**（位于 scope folder 内的实例次之），**(2) 解析后的 element 名升序**（`<self>` 解析为 stem 去 variant；显式名按字面），**(3) 全路径升序**兜底。**所有 fixture 必备**（包括简单到无其他 schema constraints 的，也要建 template/ 放此文件） |
+| `template/_children_order.yaml` | yaml list，每项一个 logical-table-name 或 ``<element>:<stem>`` 特例 | XML 顶层元素的 **class 顺序**。每条 entry 二选一：(1) **class 名**（无 ``:``）：兜底匹配 stem == name 或 stem 形如 ``name_<variant>``；class 内多 instance 排序键 ``(element 名, stem, full path)``。(2) **`<element>:<stem>` 特例**（有 ``:``）：精确 pin 单个 instance（如 ``ResTbl:CapacityRunModeMapTbl`` 让特定 wrapper 排到指定位置）。匹配按 list 顺序贪心，每文件最多匹配一次；**文件夹位置（shared/ vs scope/）不参与排序**——存储约定，非数据语义。**所有 fixture 必备**（包括简单到无其他 schema constraints 的，也要建 template/ 放此文件） |
 
 例：
 

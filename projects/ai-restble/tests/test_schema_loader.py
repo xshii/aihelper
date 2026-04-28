@@ -89,6 +89,7 @@ class TestLoadTableSchemaFromInterruptFixture:
 
 class TestEmptyOrAbsentTemplate:
     def test_no_template_returns_empty_schema(self, tmp_path):
+        """无 TEMPLATE 块 → 空 schema（所有字段默认无约束）."""
         p = tmp_path / "Foo.yaml"
         p.write_text("- index:\n    id: 1\n", encoding="utf-8")
         s = load_table_schema(p)
@@ -96,3 +97,39 @@ class TestEmptyOrAbsentTemplate:
         assert s.index_fields == []
         assert s.attribute_fields == {}
         assert s.ref_fields == {}
+
+
+class TestIndexRepeatable:
+    """``# @index:repeatable`` 挂在 TEMPLATE 块 ``index:`` 行尾时被识别."""
+
+    def test_default_not_repeatable(self):
+        """Interrupt fixture 没标记 → index_repeatable=False."""
+        path = Path(__file__).parent.parent / "examples" / "tables" / "Interrupt.yaml"
+        assert load_table_schema(path).index_repeatable is False
+
+    def test_annotation_picked_up(self, tmp_path):
+        """``index:`` 行尾标 ``# @index:repeatable`` → schema.index_repeatable=True."""
+        p = tmp_path / "Foo.yaml"
+        p.write_text(dedent("""\
+            # ----- TEMPLATE BEGIN -----
+            # - index:                   # @index:repeatable
+            #     vector: 0
+            #   attribute:
+            #     handler: h0             # @merge: concat(',')
+            # ----- TEMPLATE END -----
+        """), encoding="utf-8")
+        assert load_table_schema(p).index_repeatable is True
+
+    def test_unknown_index_value_raises(self, tmp_path):
+        """未知 ``@index:<X>`` 值立即报错，避免静默 fallback 让弱 AI 误以为生效."""
+        p = tmp_path / "Foo.yaml"
+        p.write_text(dedent("""\
+            # ----- TEMPLATE BEGIN -----
+            # - index:                   # @index:nonrepeatable
+            #     vector: 0
+            #   attribute:
+            #     handler: h0
+            # ----- TEMPLATE END -----
+        """), encoding="utf-8")
+        with pytest.raises(ValueError, match="未知 @index 值"):
+            load_table_schema(p)

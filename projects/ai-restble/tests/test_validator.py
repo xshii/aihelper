@@ -40,14 +40,16 @@ class TestValidateSchema:
 
 class TestIndexUniqueness:
     def test_unique_passes(self):
+        """各 index 唯一 → 通过."""
         s = _schema(index=["v"])
         t = Table(base_name="T", records=[
             Record(index={"v": 1}),
             Record(index={"v": 2}),
         ])
-        validate_table(t, s)  # 不抛
+        validate_table(t, s)
 
     def test_duplicate_raises(self):
+        """默认严格：同 index 重复 → ValidationError."""
         s = _schema(index=["v"])
         t = Table(base_name="T", records=[
             Record(index={"v": 1}),
@@ -55,6 +57,16 @@ class TestIndexUniqueness:
         ])
         with pytest.raises(ValidationError, match="重复 index"):
             validate_table(t, s)
+
+    def test_duplicate_tolerated_when_index_repeatable(self):
+        """``schema.index_repeatable=True`` → 跳过唯一性检查（merger 后续分流）."""
+        s = _schema(index=["v"])
+        s.index_repeatable = True
+        t = Table(base_name="T", records=[
+            Record(index={"v": 1}),
+            Record(index={"v": 1}),
+        ])
+        validate_table(t, s)  # 不抛
 
     def test_composite_index_uniqueness(self):
         """复合 index：(vector, owner_team) 整体不重复即可."""

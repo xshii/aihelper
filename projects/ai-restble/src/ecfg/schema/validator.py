@@ -48,14 +48,23 @@ def validate_table(table: Table, schema: TableSchema) -> None:
 
 
 def _check_index_uniqueness(table: Table, schema: TableSchema) -> None:
+    """同 index 严格唯一；schema 标了 ``@index:repeatable`` → 跳过（merger 分流）."""
     if not schema.index_fields:
+        return
+    if schema.index_repeatable:
+        logger.debug(
+            "%s 标记 @index:repeatable，跳过唯一性检查（重复由 merger 分流）",
+            table.base_name,
+        )
         return
     seen: set = set()
     for i, rec in enumerate(table.records):
         idx = tuple(to_hashable(rec.index.get(f)) for f in schema.index_fields)
         if idx in seen:
             raise ValidationError(
-                f"{table.base_name}[{i}]: 重复 index {idx}（违反唯一性）"
+                f"{table.base_name}[{i}]: 重复 index {idx}"
+                "（违反唯一性；如需允许重复请在 TEMPLATE ``index:`` 行尾加 "
+                "``# @index:repeatable``）"
             )
         seen.add(idx)
 

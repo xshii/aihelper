@@ -55,7 +55,11 @@ flowchart TD
 4. **拼装 XML**：
    a. **FileInfo 是文档根** —— 它的 attributes 来自 `(shared/)?FileInfo.yaml`
    b. **加载 `template/_children_order.yaml`** —— 这个独立 meta 文件含 logical-table-name 的 yaml list，定义 class 顺序
-   c. **逐 class 展开**：按 list 顺序，每个 logical-name 收集所有匹配文件（stem == name 或 stem 形如 `<name>_<variant>`），三层排序：**(1) `shared/` 优先**、**(2) 解析后的 element 名升序**（`<self>` → stem 去 variant；否则字面）、**(3) 全路径升序**
+   c. **逐 entry 展开**：按 list 顺序，每条 entry 二选一：
+      - 不含 ``:`` → **class 兜底**：匹配 stem == entry 或 stem 形如 ``entry_<variant>`` 的文件；class 内多 instance 排序键 ``(element 名, stem, 全路径)``。
+      - 含 ``:`` → **特例**：``<element>:<stem>`` 精确匹配（resolved element name + 完整 stem），pin 该单个 instance 到此位置。
+      
+      匹配按 list 顺序贪心，每文件最多匹配一次（特例先消费，class 后兜底）。**文件夹位置（shared/ vs scope/）不参与排序**——存储约定，非数据语义。
 5. **每个文件 emit XML**：
    - 读首行 `@element:<X>` 决定 element name
    - 按 template 字段顺序输出 attributes

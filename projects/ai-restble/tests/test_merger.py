@@ -233,6 +233,56 @@ class TestMergeValidatesByDefault:
         assert merged.records[0].attribute["priority"] == 999
 
 
+class TestIntraTableRepeatable:
+    """``@index:repeatable`` 表内重复的三档语义（用户场景 1/2/3）."""
+
+    def test_all_identical_dups_collapse(self):
+        """场景 1：完全相同的两条 → 合一（幂等）."""
+        schema = _make_schema(
+            index_fields=["v"],
+            attribute_rules={"handler": "concat(',')"},
+        )
+        schema.index_repeatable = True
+        t = Table(base_name="Test", records=[
+            Record(index={"v": 1}, attribute={"handler": "h"}),
+            Record(index={"v": 1}, attribute={"handler": "h"}),  # 相同
+        ])
+        merged = merge_tables([t], schema)
+        assert len(merged.records) == 1
+        assert merged.records[0].attribute["handler"] == "h"  # 短路保留原值，不 concat
+
+    def test_mergeable_dups_resolve_via_rule(self):
+        """场景 2：差异字段都有 @merge 规则 → 按规则合."""
+        schema = _make_schema(
+            index_fields=["v"],
+            attribute_rules={"handler": "concat(',')", "retry": "sum"},
+        )
+        schema.index_repeatable = True
+        t = Table(base_name="Test", records=[
+            Record(index={"v": 1}, attribute={"handler": "h_a", "retry": 2}),
+            Record(index={"v": 1}, attribute={"handler": "h_b", "retry": 3}),
+        ])
+        merged = merge_tables([t], schema)
+        assert len(merged.records) == 1
+        assert merged.records[0].attribute["handler"] == "h_a,h_b"
+        assert merged.records[0].attribute["retry"] == 5
+
+    def test_unmergeable_dups_raise_with_context(self):
+        """场景 3：差异字段无 @merge 或 @merge:conflict → ConflictError + 完整定位."""
+        schema = _make_schema(
+            index_fields=["v"],
+            attribute_rules={"trigger": "conflict"},
+        )
+        schema.index_repeatable = True
+        t = Table(base_name="Test", records=[
+            Record(index={"v": 1}, attribute={"trigger": "edge"}),
+            Record(index={"v": 1}, attribute={"trigger": "level"}),
+        ])
+        with pytest.raises(ConflictError) as excinfo:
+            merge_tables([t], schema)
+        assert "Test[v=1].attribute.trigger" in str(excinfo.value)
+
+
 class TestMergeThreeTeams:
     """merge-spec §6.2：3 team 同 index，并列 concat + sum."""
 
