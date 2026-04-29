@@ -3,54 +3,482 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ecfg — Phase 0</title>
+    <title>ai-restble — Phase 2A 可视化预览</title>
     <link rel="stylesheet"
           href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <style>
-        body { background: #fafafa; }
-        .muted-box { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 1rem 1.25rem; }
-        code.path { font-size: 0.95rem; }
+        :root {
+            --color-shared: #0d6efd;
+            --color-runmode: #fd7e14;
+            --color-runmode-2: #20c997;
+            --color-root: #6f42c1;
+            --region-index: #0d6efd;
+            --region-attribute: #6c757d;
+            --region-ref: #fd7e14;
+        }
+        body { margin: 0; background: #fafafa; }
+        .topbar {
+            display: flex; align-items: center; gap: .5rem;
+            padding: .5rem 1rem; background: #fff;
+            border-bottom: 1px solid #e5e5e5;
+        }
+        .topbar input { flex: 1; max-width: 600px; }
+        .layout {
+            display: grid; grid-template-columns: 20% 60% 20%;
+            height: calc(100vh - 56px);
+        }
+        aside {
+            padding: 1rem; overflow: auto;
+            border-right: 1px solid #e5e5e5;
+            background: #fff;
+        }
+        aside.right { border-right: none; border-left: 1px solid #e5e5e5; }
+        #canvas { width: 100%; height: 100%; background: #fafafa; }
+        #canvas-wrap { position: relative; }
+        .err-banner {
+            position: absolute; top: 0; left: 0; right: 0;
+            background: #f8d7da; color: #842029; padding: .5rem 1rem;
+            border-bottom: 1px solid #f5c2c7; display: none; z-index: 10;
+        }
+        .err-banner.show { display: block; }
+        .tree-cat {
+            font-size: .75rem; color: #6c757d; font-weight: 600;
+            margin: 1rem 0 .25rem 0; letter-spacing: .03em;
+            font-family: monospace;
+        }
+        .tree-item {
+            display: block; padding: .25rem .5rem;
+            font-family: monospace; font-size: .9rem;
+            color: #212529; cursor: pointer; border-radius: 4px;
+        }
+        .tree-item:hover { background: #f1f3f5; }
+        .tree-item.active { background: #e7f1ff; color: #0d6efd; }
+        .tree-item.has-errors::before { content: "⚠ "; color: #dc3545; }
+        .tree-item .err-count {
+            float: right; font-size: .7rem;
+            background: #dc3545; color: #fff;
+            padding: 0 .35rem; border-radius: 8px; margin-left: .25rem;
+        }
+        .node-header h5 { margin-bottom: .25rem; }
+        .node-header small { color: #6c757d; }
+        .field-group {
+            padding: .5rem 0 .5rem .5rem;
+            margin: .5rem 0;
+            border-left: 3px solid transparent;
+        }
+        .field-group.region-index    { border-color: var(--region-index); }
+        .field-group.region-attribute{ border-color: var(--region-attribute); }
+        .field-group.region-ref      { border-color: var(--region-ref); }
+        .field-group strong {
+            display: block; font-size: .75rem; text-transform: uppercase;
+            color: #6c757d; margin-bottom: .25rem;
+        }
+        .field-row {
+            display: flex; justify-content: space-between; align-items: baseline;
+            padding: .15rem 0; font-family: monospace; font-size: .85rem;
+            gap: .5rem;
+        }
+        .field-row label { color: #495057; margin: 0; flex-shrink: 0; }
+        .field-row .field-value { color: #212529; word-break: break-all; text-align: right; }
+        .field-row .constraints { display: inline-flex; gap: .25rem; margin-left: .25rem; }
+        .constr {
+            font-size: .65rem; padding: 0 .35rem; border-radius: 3px;
+            font-family: monospace; line-height: 1.4;
+        }
+        .constr.merge { background: #d4edda; color: #155724; }
+        .constr.range { background: #cce5ff; color: #004085; }
+        .constr.enum  { background: #fff3cd; color: #856404; cursor: help; }
+        .field-row.invalid label { color: #dc3545; font-weight: 600; }
+        .field-row.invalid .field-value { color: #dc3545; }
+        .field-row .err-msg {
+            display: block; flex-basis: 100%; text-align: right;
+            font-size: .7rem; color: #dc3545; margin-top: .15rem;
+            font-family: monospace;
+        }
+        .node-header .err-badge {
+            display: inline-block; background: #dc3545; color: #fff;
+            font-size: .7rem; padding: 0 .4rem; border-radius: 8px;
+            margin-left: .25rem;
+        }
+        details summary {
+            cursor: pointer; padding: .25rem 0;
+            font-family: monospace; font-size: .9rem;
+        }
+        details[open] summary { border-bottom: 1px dashed #dee2e6; }
+        .popover-edge {
+            position: fixed; background: #fff; border: 1px solid #adb5bd;
+            border-radius: 6px; padding: .75rem; box-shadow: 0 4px 12px rgba(0,0,0,.1);
+            font-family: monospace; font-size: .85rem; max-width: 400px; z-index: 100;
+        }
+        .popover-edge .close { float: right; cursor: pointer; color: #6c757d; }
     </style>
 </head>
 <body>
-<div class="container py-4" style="max-width: 960px;">
-    <header class="mb-4">
-        <h1 class="mb-1">
-            ecfg <small class="text-muted fs-5">Phase 0 · 骨架就位</small>
-        </h1>
-        <p class="text-muted mb-0">YAML-first 嵌入式资源配置表工具</p>
-    </header>
-
-    <div class="alert alert-info">
-        <strong>配置文件：</strong><code class="path">{{ config_path }}</code>
+<nav class="topbar">
+    <strong>ai-restble</strong>
+    <small class="text-muted">Phase 2A 预览</small>
+    <input id="path-input" class="form-control form-control-sm"
+           placeholder="yaml 目录路径（如 tests/fixtures/xml/valid/multi_runmode.expected）">
+    <button id="path-load" class="btn btn-sm btn-primary">加载</button>
+    <button id="path-refresh" class="btn btn-sm btn-outline-secondary" title="重新读 yaml + template">↻ 刷新</button>
+    <a href="/api/health" class="link-secondary small">/api/health</a>
+</nav>
+<div class="layout">
+    <aside id="tree"><div class="text-muted small">输入路径并点"加载"</div></aside>
+    <div id="canvas-wrap">
+        <div id="canvas-err" class="err-banner"></div>
+        <div id="canvas"></div>
     </div>
-
-    <div class="row g-3">
-        <div class="col-md-6">
-            <div class="muted-box h-100">
-                <h2 class="h6 text-uppercase text-muted">当前可用</h2>
-                <ul class="mb-0">
-                    <li><code>ecfg import-excel &lt;file.xlsx&gt;</code> — 从 Excel 导入历史表格</li>
-                    <li><code>ecfg serve</code> — 启动此占位界面</li>
-                    <li><a href="/api/health" class="link-secondary">/api/health</a> — 健康检查</li>
-                </ul>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="muted-box h-100">
-                <h2 class="h6 text-uppercase text-muted">后续阶段</h2>
-                <ul class="mb-0">
-                    <li><strong>Phase 1</strong> — loader / indexer / ref 解析 / 聚合 / 校验</li>
-                    <li><strong>Phase 2</strong> — vis-network 画布 + 详情面板</li>
-                    <li><strong>Phase 3</strong> — 记录编辑 + 注释保真写回</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-
-    <footer class="mt-4 text-muted small">
-        仓库内对话“ecfg 需求分析”为本工具的完整设计文档。
-    </footer>
+    <aside class="right" id="panel"><div class="text-muted small">点选节点查看详情</div></aside>
 </div>
+
+<script>
+const API_GRAPH_PATH = {{ api_graph_path|tojson }};
+const API_PATH_QUERY_KEY = {{ api_path_query_key|tojson }};
+
+let chart = null;
+let graphJson = null;
+
+document.addEventListener("DOMContentLoaded", () => {
+    chart = echarts.init(document.getElementById("canvas"));
+    window.addEventListener("resize", () => chart.resize());
+    document.getElementById("path-load").addEventListener("click", loadGraph);
+    document.getElementById("path-refresh").addEventListener("click", loadGraph);
+    document.getElementById("path-input").addEventListener("keydown", e => {
+        if (e.key === "Enter") loadGraph();
+    });
+    // 启动时若 URL 有 ?path=... 自动加载
+    const initial = new URLSearchParams(location.search).get(API_PATH_QUERY_KEY);
+    if (initial) {
+        document.getElementById("path-input").value = initial;
+        loadGraph();
+    }
+});
+
+async function loadGraph() {
+    const path = document.getElementById("path-input").value.trim();
+    if (!path) return;
+    clearError();
+    try {
+        const url = API_GRAPH_PATH + "?" + API_PATH_QUERY_KEY + "=" + encodeURIComponent(path);
+        const resp = await fetch(url);
+        if (!resp.ok) {
+            const err = await resp.json();
+            showError(err.error || "加载失败");
+            return;
+        }
+        graphJson = await resp.json();
+        renderCanvas(graphJson);
+        renderTree(graphJson);
+        clearPanel("点选节点查看详情");
+        history.replaceState(null, "", "?" + API_PATH_QUERY_KEY + "=" + encodeURIComponent(path));
+    } catch (e) {
+        showError(String(e));
+    }
+}
+
+function showError(msg) {
+    const banner = document.getElementById("canvas-err");
+    banner.textContent = "⚠ " + msg;
+    banner.classList.add("show");
+}
+
+function clearError() {
+    const banner = document.getElementById("canvas-err");
+    banner.textContent = "";
+    banner.classList.remove("show");
+}
+
+// region canvas ─────────────────────────────────────────────────────────────
+function renderCanvas(g) {
+    chart.setOption(buildOption(g), true);
+    chart.off("click");
+    chart.on("click", { dataType: "node" }, e => onNodeClick(e.data.id));
+    chart.on("click", { dataType: "edge" }, e => onEdgeClick(e.data, e.event));
+}
+
+function buildOption(g) {
+    return {
+        tooltip: { formatter: tooltipFormatter },
+        legend: [{ data: g.meta.categories, top: 10 }],
+        series: [{
+            type: "graph",
+            layout: "force",
+            roam: true,
+            draggable: true,
+            label: { show: true, position: "right", formatter: "{b}" },
+            edgeLabel: {
+                show: true,
+                formatter: e => e.data.label || ""
+            },
+            emphasis: {
+                focus: "adjacency",
+                lineStyle: { width: 4 }
+            },
+            force: { repulsion: 280, gravity: 0.08, edgeLength: 140 },
+            categories: g.meta.categories.map(c => ({ name: c })),
+            data: g.nodes.map(n => ({
+                id: n.id,
+                name: n.id,
+                category: n.category,
+                symbolSize: 24 + Math.min(n.records_preview * 3, 36),
+                itemStyle: nodeItemStyle(n),
+                value: n.records_preview
+            })),
+            links: g.edges.map(e => ({
+                id: e.id,
+                source: e.from,
+                target: e.to,
+                label: e.fk_fields.length > 1
+                    ? e.ref_name + "(" + e.fk_fields.join("+") + ")"
+                    : e.ref_name,
+                lineStyle: e.unresolved
+                    ? { color: "#dc3545", type: "dashed" }
+                    : {},
+                _rawEdge: e
+            }))
+        }]
+    };
+}
+
+function nodeItemStyle(n) {
+    if ((n.error_count || 0) > 0) {
+        return { borderColor: "#dc3545", borderWidth: 3 };
+    }
+    if (n.kind === "FileInfo") {
+        return { borderType: "dashed" };
+    }
+    return {};
+}
+
+function tooltipFormatter(params) {
+    if (params.dataType === "node") {
+        const n = graphJson.nodes.find(x => x.id === params.data.id);
+        if (!n) return params.data.name;
+        const errLine = (n.error_count || 0) > 0
+            ? `<br/><span style="color:#dc3545">⚠ ${n.error_count} 处违反约束</span>`
+            : "";
+        return `<b>${escapeHtml(n.id)}</b><br/>`
+             + `scope: ${escapeHtml(n.scope)}<br/>`
+             + `${n.records_preview} records${errLine}`;
+    }
+    if (params.dataType === "edge") {
+        const e = params.data._rawEdge;
+        return `${escapeHtml(e.ref_name)}: ${escapeHtml(e.from)} → ${escapeHtml(e.to)}`
+             + (e.unresolved ? "<br/>⚠ unresolved" : "");
+    }
+    return "";
+}
+
+// endregion
+
+// region tree ───────────────────────────────────────────────────────────────
+function renderTree(g) {
+    const tree = document.getElementById("tree");
+    const groups = {};
+    g.nodes.forEach(n => {
+        (groups[n.category] = groups[n.category] || []).push(n);
+    });
+    const html = g.meta.categories.map(cat => {
+        const items = (groups[cat] || []).map(n => {
+            const errCls = (n.error_count || 0) > 0 ? " has-errors" : "";
+            const badge = (n.error_count || 0) > 0
+                ? `<span class="err-count">${n.error_count}</span>`
+                : "";
+            return `<a class="tree-item${errCls}" data-node="${escapeHtml(n.id)}">${escapeHtml(n.id)}${badge}</a>`;
+        }).join("");
+        return `<div class="tree-cat">${escapeHtml(cat)}</div>${items}`;
+    }).join("");
+    tree.innerHTML = html;
+    tree.querySelectorAll(".tree-item").forEach(el => {
+        el.addEventListener("click", () => onNodeClick(el.dataset.node));
+    });
+}
+
+// endregion
+
+// region detail panel ─────────────────────────────────────────────────────
+function onNodeClick(nodeId) {
+    document.querySelectorAll(".tree-item").forEach(el => {
+        el.classList.toggle("active", el.dataset.node === nodeId);
+    });
+    chart.dispatchAction({ type: "focusNodeAdjacency",
+                           seriesIndex: 0, dataIndex: nodeIndex(nodeId) });
+    const node = graphJson.nodes.find(n => n.id === nodeId);
+    if (node) renderNodeDetail(node);
+}
+
+function nodeIndex(nodeId) {
+    return graphJson.nodes.findIndex(n => n.id === nodeId);
+}
+
+function renderNodeDetail(node) {
+    const refCount = countReferences(node);
+    const errBadge = (node.error_count || 0) > 0
+        ? `<span class="err-badge">⚠ ${node.error_count} 异常</span>`
+        : "";
+    const header = `
+        <div class="node-header">
+          <h5>${escapeHtml(node.id)}
+            <span class="badge bg-secondary">${escapeHtml(node.category)}</span>
+            ${node.element ? `<span class="badge bg-info">${escapeHtml(node.element)}</span>` : ""}
+            ${errBadge}
+          </h5>
+          <small>${node.records_preview} records · 被 ${refCount} 处引用</small>
+        </div>`;
+    const tableAttrs = renderTableAttrs(node.table_attributes);
+    const records = node.records.length > 0
+        ? renderRecords(node.records, node.fields)
+        : '<div class="text-muted small">该表暂无 record</div>';
+    document.getElementById("panel").innerHTML = header + tableAttrs + records;
+}
+
+function countReferences(node) {
+    if (!graphJson.referenced_by) return 0;
+    let count = 0;
+    Object.keys(graphJson.referenced_by).forEach(key => {
+        if (key.startsWith(node.id + ".")) count += graphJson.referenced_by[key].length;
+    });
+    return count;
+}
+
+function renderTableAttrs(attrs) {
+    const keys = Object.keys(attrs || {});
+    if (keys.length === 0) return "";
+    const rows = keys.map(k => `
+        <div class="field-row">
+          <label>${escapeHtml(k)}</label>
+          <span>${escapeHtml(formatValue(attrs[k]))}</span>
+        </div>`).join("");
+    return `<div class="field-group region-attribute">
+              <strong>table attributes</strong>${rows}</div>`;
+}
+
+function renderRecords(records, fieldsMeta) {
+    return records.map((r, idx) => {
+        const indexLabel = recordSummary(r) || `record #${idx + 1}`;
+        const hasErr = (r.errors || []).length > 0;
+        // 有异常的 record 默认展开（更易看到）；否则首条展开其余收起
+        const open = hasErr || idx === 0;
+        const errMark = hasErr ? ` <span class="err-badge">⚠ ${r.errors.length}</span>` : "";
+        return `<details ${open ? "open" : ""}>
+                  <summary>${escapeHtml(indexLabel)}${errMark}</summary>
+                  ${renderRegions(r, fieldsMeta || [])}
+                </details>`;
+    }).join("");
+}
+
+function recordSummary(record) {
+    const all = { ...record.index, ...record.attribute };
+    const keys = Object.keys(all);
+    if (keys.length === 0) return "";
+    const k = keys[0];
+    return `${k} = ${formatValue(all[k])}`;
+}
+
+function renderRegions(record, fieldsMeta) {
+    const errorMap = buildErrorMap(record.errors || []);
+    return ["index", "attribute", "ref"].map(region => {
+        const fields = record[region] || {};
+        const keys = Object.keys(fields);
+        if (keys.length === 0) return "";
+        const rows = keys.map(k => {
+            const meta = fieldsMeta.find(f => f.name === k && f.region === region);
+            const badges = meta && meta.constraints
+                ? renderConstraintBadges(meta.constraints)
+                : "";
+            const errKey = `${region}.${k}`;
+            const err = errorMap[errKey];
+            const cls = err ? " invalid" : "";
+            const errSpan = err ? `<span class="err-msg">⚠ ${escapeHtml(err.message)}</span>` : "";
+            return `
+            <div class="field-row${cls}">
+              <label>${escapeHtml(k)}${badges}</label>
+              <span class="field-value">${escapeHtml(formatValue(fields[k]))}</span>
+              ${errSpan}
+            </div>`;
+        }).join("");
+        return `<div class="field-group region-${region}">
+                  <strong>${region}</strong>${rows}</div>`;
+    }).join("");
+}
+
+function buildErrorMap(errors) {
+    const m = {};
+    errors.forEach(e => { m[`${e.region}.${e.field}`] = e; });
+    return m;
+}
+
+function renderConstraintBadges(c) {
+    const parts = [];
+    if (c.merge) {
+        parts.push(`<span class="constr merge" title="merge rule">@merge:${escapeHtml(c.merge)}</span>`);
+    }
+    if (c.range) {
+        parts.push(`<span class="constr range" title="value range">${c.range[0]}..${c.range[1]}</span>`);
+    }
+    if (c.enum) {
+        const tip = "enum: " + c.enum.map(escapeHtml).join(", ");
+        parts.push(`<span class="constr enum" title="${tip}">${c.enum.length} opts</span>`);
+    }
+    return parts.length ? `<span class="constraints">${parts.join("")}</span>` : "";
+}
+
+function clearPanel(msg) {
+    document.getElementById("panel").innerHTML =
+        `<div class="text-muted small">${escapeHtml(msg)}</div>`;
+}
+
+// endregion
+
+// region edge popover ─────────────────────────────────────────────────────
+function onEdgeClick(linkData, event) {
+    const edge = linkData._rawEdge;
+    closeEdgePopover();
+    const div = document.createElement("div");
+    div.className = "popover-edge";
+    div.style.left = event.event.clientX + "px";
+    div.style.top = event.event.clientY + "px";
+    const pairs = (edge.record_pairs || []).map(p =>
+        `<div>${escapeHtml(p.src_index)} → ${escapeHtml(p.dst_index)}</div>`
+    ).join("");
+    div.innerHTML = `<span class="close" onclick="this.parentElement.remove()">×</span>
+                     <b>${escapeHtml(edge.ref_name)}</b>
+                     ${edge.fk_fields.length > 1
+                         ? "(" + edge.fk_fields.map(escapeHtml).join("+") + ")"
+                         : ""}<br/>
+                     <small class="text-muted">${escapeHtml(edge.from)} → ${escapeHtml(edge.to)}</small>
+                     <hr style="margin:.5rem 0">
+                     ${pairs || '<div class="text-muted">聚合空</div>'}`;
+    document.body.appendChild(div);
+}
+
+function closeEdgePopover() {
+    document.querySelectorAll(".popover-edge").forEach(el => el.remove());
+}
+
+document.addEventListener("click", e => {
+    if (!e.target.closest(".popover-edge") && !e.target.closest("canvas")) {
+        closeEdgePopover();
+    }
+});
+
+// endregion
+
+// region utils ─────────────────────────────────────────────────────────────
+function formatValue(v) {
+    if (v === null || v === undefined) return "—";
+    if (typeof v === "object") return JSON.stringify(v);
+    return String(v);
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// endregion
+</script>
 </body>
 </html>

@@ -9,6 +9,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.scalarint import HexCapsInt
 
 from ecfg.legacy.const import (
     ANNOT_ELEMENT,
@@ -49,3 +50,17 @@ def attach_count_anchor(doc: CommentedMap, key: str, subtag: str) -> None:
         f"{ANNOT_RELATED_COUNT}({subtag})", key,
         column=len(key) + KEY_VAL_SEP_LEN,
     )
+
+
+def format_hex(v: Any) -> str:
+    """ruamel ``HexInt`` (lowercase) / ``HexCapsInt`` (uppercase) → ``0xHEX`` 字面.
+
+    保留 width + 大小写。width 缺失（值的天然 hex digits 已够长）→ 不填 0；
+    width=N → 左 pad 0 至 N 位。调用方应先用 ``isinstance(v, (HexInt, HexCapsInt))``
+    gate，本函数对非 Hex* int 用 lowercase 兜底。
+    """
+    width = getattr(v, "_width", None)
+    case_spec = "X" if isinstance(v, HexCapsInt) else "x"
+    if width:
+        return f"0x{int(v):0{width}{case_spec}}"
+    return f"0x{int(v):{case_spec}}"

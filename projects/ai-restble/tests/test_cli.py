@@ -33,7 +33,7 @@ def test_app_health():
     assert r.status_code == 200
     data = r.get_json()
     assert data["status"] == "ok"
-    assert data["phase"] == 0
+    assert data["phase"] == 2
     assert data["config"].endswith("fake-config.yaml")
 
 
@@ -44,8 +44,8 @@ def test_app_index():
     client = app.test_client()
     r = client.get("/")
     assert r.status_code == 200
-    assert b"ecfg" in r.data
-    assert b"demo.yaml" in r.data
+    assert b"ai-restble" in r.data
+    assert b"echarts" in r.data  # ECharts CDN 引用必在页内
 
 
 def test_import_excel_rejects_bad_index_spec(tmp_path):

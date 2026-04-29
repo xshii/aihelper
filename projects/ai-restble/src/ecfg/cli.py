@@ -38,11 +38,11 @@ def expand(config: str) -> None:
 @click.option("--port", type=int, default=5000, show_default=True)
 @click.option("--debug/--no-debug", default=True)
 def serve(config: str, host: str, port: int, debug: bool) -> None:
-    """启动 Flask 画布（Phase 0：占位页）。"""
+    """启动 Flask 画布（Phase 2A：ECharts 三栏可视化预览）."""
     from ecfg.app import create_app
 
     app = create_app(config)
-    click.echo(f"[ecfg] 占位页 http://{host}:{port}  (config: {config})")
+    click.echo(f"[ecfg] http://{host}:{port}/  传 ?path=<yaml_dir> 加载具体 fixture")
     app.run(host=host, port=port, debug=debug)
 
 

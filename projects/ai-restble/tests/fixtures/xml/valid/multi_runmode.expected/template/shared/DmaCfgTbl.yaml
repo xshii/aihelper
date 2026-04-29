@@ -1,6 +1,8 @@
 # @element:ResTbl
+# 教学注解（template/ 文件 fixture 与 scaffold 输出豁免 byte-identity）：演示
+# Phase 2A 联动 template 的字段约束显示。
 LineNum: # @related:count(Line)
-- ChannelId:
-  SrcType:
-  DstType:
-  BurstSize:
+- ChannelId:        # @merge:conflict
+  SrcType:          # @enum:MEM,DEV,AXI
+  DstType:          # @enum:MEM,DEV,AXI
+  BurstSize:        # @range:1-8

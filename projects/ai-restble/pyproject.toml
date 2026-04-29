@@ -27,6 +27,9 @@ dev = [
     "radon>=6.0",
     "vulture>=2.10",
     "lxml-stubs>=0.5",
+    # Phase 2A 前端交互冒烟（tests/test_browser_smoke.py）
+    "playwright>=1.50",
+    "pytest-playwright>=0.5",
 ]
 
 [project.scripts]

@@ -21,7 +21,7 @@ from typing import Any
 from lxml import etree
 from ruamel.yaml.scalarint import HexCapsInt, HexInt
 
-from ecfg.legacy._yaml import YAML_RT
+from ecfg.legacy._yaml import YAML_RT, format_hex
 from ecfg.legacy.const import (
     ANNOT_ELEMENT,
     ANNOT_RELATED_COUNT,
@@ -256,21 +256,12 @@ def _format_scalar(v: Any) -> str:
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, (HexCapsInt, HexInt)):
-        return _format_hex(v)
+        return format_hex(v)
     if isinstance(v, int):
         return str(v)
     if isinstance(v, float):
         return repr(v)
     return str(v)
-
-
-def _format_hex(v: Any) -> str:
-    """ruamel HexInt/HexCapsInt → ``0xHEX`` 字面，保留 width + 大小写."""
-    width = getattr(v, "_width", None)
-    case_spec = "X" if isinstance(v, HexCapsInt) else "x"
-    if width:
-        return f"0x{int(v):0{width}{case_spec}}"
-    return f"0x{int(v):{case_spec}}"
 
 
 def _reindent_to_4_spaces(xml_text: str) -> str:

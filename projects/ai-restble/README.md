@@ -147,14 +147,29 @@ tests/
 ├── test_cli.py                 # CLI 入口
 ├── test_excel_importer.py / test_io_roundtrip.py
 ├── test_schema_loader.py / test_validator.py / test_annotations.py / test_comments.py
-└── test_merger.py
+├── test_merger.py
+├── test_graph_builder.py       # Phase 2A graph builder
+├── test_api_graph.py           # Flask /api/graph 端点
+└── test_browser_smoke.py       # Phase 2A 前端 Playwright 交互冒烟
 ```
 
 ## 运行测试
 
 ```bash
+# 主测试套件（不依赖浏览器，~250 项秒级跑完）
 pytest -q
-# 215 passed
+
+# 含前端交互冒烟（需先装 Playwright 一次）
+pip install playwright pytest-playwright
+playwright install chromium    # ~80MB 一次性下载
+pytest -q                       # test_browser_smoke 自动接入
+```
+
+## 浏览器手动验真
+
+```bash
+ecfg serve --port 5050
+# 浏览器打开 http://127.0.0.1:5050/?path=tests/fixtures/xml/valid/multi_runmode.expected
 ```
 
 测试覆盖：

@@ -4,13 +4,15 @@
 
 ## 当前状态
 
-- **Phase 0 骨架**：CLI / Flask 占位画布 / Excel importer ✅
+- **Phase 0 骨架**：CLI / Flask app / Excel importer ✅
 - **Phase 1 schema engine**：annotation parser / TEMPLATE 块 loader / 6 种 merge op /
   validator / merger ✅
 - **Legacy XML round-trip**：unpack / pack / 字节级一致 / 多 XML 合一 / @use 跨目录 ref
   / scaffold 生成 ✅
-- **可视化**：Phase 2 待做（vis-network 集成）
-- **记录编辑**：Phase 3 待做
+- **Phase 2A read-only 可视化**：graph builder（yaml → JSON）/ Flask `/api/graph`
+  / ECharts 三栏前端（树 + 画布 + 详情面板）✅；边渲染待 schema 轨道有 ref 数据时接通（2A.2）
+- **Phase 2B 编辑 + 联动**：表单编辑 / 级联预警 / yaml 写回，待做
+- **记录编辑**：折入 Phase 2B（form panel 路径）
 
 ## 权威规范（必读）
 
@@ -50,13 +52,13 @@ Checklist/Edge Cases）：
 - `prompts/phase1/05-merger.md` — 多 team 合并引擎
 - `prompts/phase1/06-validator.md` — 约束校验
 
-## Phase 2+：待做
+## Phase 2 可视化协议（设计已落地，实现进行中）
 
-- `prompts/phase2/01-graph-builder.md` — 节点图 JSON
-- `prompts/phase2/02-vis-network.md` — 前端 vis-network
-- `prompts/phase2/03-detail-panel.md` — 右栏详情
-- `prompts/phase3/01-record-crud.md` — 表单编辑 + YAML 写回
-- `prompts/phase3/02-schema-form.md` — 按 schema 生成表单
+技术栈：**ECharts + form panel**，2A read-only 与 2B 编辑共用同一框架（不切框架）。
+
+- `prompts/phase2/01-graph-builder.md` — yaml 目录 → graph JSON（含 referenced_by 反查表）
+- `prompts/phase2/02-echarts-canvas.md` — ECharts 三栏渲染 + L0/L1/L2 渐进交互
+- `prompts/phase2/03-detail-panel.md` — 右栏 record 列表 + 字段编辑（2A read-only / 2B 编辑级联）
 
 ## 给弱 AI 的使用建议
 

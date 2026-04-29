@@ -1,8 +1,8 @@
 # @element:ResTbl
 LineNum: # @related:count(Line)
-- ChipType:
-  CoreNum:
-  Frequency:
-  DdrSize:
-  CapacityID:
-  RunModeValue:
+- ChipType:         # @enum:1,2,3
+  CoreNum:          # @range:1-4
+  Frequency:        # @range:100-700
+  DdrSize:          # @range:128-32768
+  CapacityID:       # @merge:conflict
+  RunModeValue:     # @merge:conflict

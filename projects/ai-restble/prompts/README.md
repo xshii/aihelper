@@ -16,6 +16,17 @@ PROMPT.md 模板。
 - preprocess 与 postprocess 是**字节级互逆**（``pack(unpack(xml)) == xml``）
 - scaffold 跟主流程**解耦** — 不在 unpack 里触发，按需调用
 
+## Phase 2 可视化协议（设计已锁定，实现进行中）
+
+| Skill | 文件 | 实现位置 | 一句话描述 |
+|-------|------|---------|------------|
+| **graph-builder** | `phase2/01-graph-builder.md` | `src/ecfg/viz/graph.py`（待落地） | yaml 目录 → ECharts-friendly 节点图 JSON（含 referenced_by 反查表） |
+| **echarts-canvas** | `phase2/02-echarts-canvas.md` | `src/ecfg/templates/index.html`（待落地） | ECharts graph series 三栏渲染 + L0/L1/L2 渐进交互 |
+| **detail-panel** | `phase2/03-detail-panel.md` | 同上 | 右栏 form panel：record 列表 + 字段编辑（2A read-only / 2B 编辑级联） |
+
+技术栈决策：**ECharts + form panel**，2A 和 2B 共用同一框架（不切 React Flow / Cytoscape）。
+理由见 `01-graph-builder.md` Context 节 + 项目记忆。
+
 ## 计划中 skill（未拆出独立文件）
 
 Phase 1 schema engine 已实现（`src/ecfg/{schema,merge}/`），未来要让弱 AI 重写或扩展时可拆：
@@ -29,8 +40,11 @@ prompts/
 │   ├── 04-merge-policies.md      ← 6 种 op 实现
 │   ├── 05-merger.md              ← 多 team 合并引擎
 │   └── 06-validator.md           ← 约束校验
-├── phase2/                       ← 可视化（vis-network）
-└── phase3/                       ← 记录编辑
+├── phase2/                       ← 可视化（ECharts + form panel，已落地协议）
+│   ├── 01-graph-builder.md
+│   ├── 02-echarts-canvas.md
+│   └── 03-detail-panel.md
+└── phase3/                       ← 记录编辑（折入 phase2/03 的 2B 部分）
 ```
 
 ## 每份 skill 的标准结构
