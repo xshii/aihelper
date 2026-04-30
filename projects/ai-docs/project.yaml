@@ -1,0 +1,8 @@
+name: ai-docs
+type: demo
+description: AI 验证执行流程 wiki 集 + 配套参考实现（06a DUT 内存软调机制 C demo + 06b 原型测试环境 Python demo）
+language: mixed
+tags: [verification, autotest, fpga, wiki, c, python, embedded]
+status: active
+difficulty: intermediate
+created: 2026-04-24

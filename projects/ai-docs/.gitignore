@@ -1,0 +1,5 @@
+# clangd / 编辑器索引缓存
+.cache/
+
+# CMake 产物（顶层 .gitignore 已含 build/，这里冗余声明便于阅读）
+06a-dut-debug/build/
