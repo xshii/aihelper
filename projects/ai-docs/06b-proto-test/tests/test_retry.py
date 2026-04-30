@@ -5,10 +5,10 @@ import time
 
 import pytest
 
-from proto_test.errors import (
+from proto_test.foundation.errors import (
     DataIntegrityError, HardwareFaultError, TransientError,
 )
-from proto_test.retry import retryable, total_backoff
+from proto_test.runtime.retry import retryable, total_backoff
 
 
 def test_retryable_first_success():

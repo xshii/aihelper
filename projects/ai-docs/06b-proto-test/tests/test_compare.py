@@ -9,14 +9,14 @@ from proto_test import (
     CompareBufOverflow, CompareEntry, Datatype, DummyAdapter,
     MemoryCompareDriver, run_compare_round, soft_compare,
 )
-from proto_test.compare import MAX_ENTRIES
+from proto_test.protocol.compare import MAX_ENTRIES
 
 
 # region 工具：模拟 DUT 固件填充 ──────────────────────────────────
 def _fw_publish_entries(
     adapter: DummyAdapter, entries: list, data_base: int = 0x4000
 ) -> None:
-    """模拟固件：先写 g_compAddr 描述符 + 数据，最后递增 g_debugCnt（顺序至关重要）。"""
+    """模拟固件：先写 g_compareBufCompAddr 描述符 + 数据，最后递增 g_compareBufDebugCnt（顺序至关重要）。"""
     addr = data_base
     descriptor_addrs = []
     data_blocks = []
@@ -33,16 +33,16 @@ def _fw_publish_entries(
     # 再写描述符
     for i, (tid, cnt, length, daddr) in enumerate(descriptor_addrs, start=1):
         adapter.mem.WriteStruct(
-            "g_compAddr", CompareEntry, i,
+            "g_compareBufCompAddr", CompareEntry, i,
             {"tid": tid, "cnt": cnt, "length": length, "addr": daddr},
         )
     # 最后才更新 cnt（生产 / 消费协议关键）
-    adapter.mem.WriteVal("g_debugCnt", Datatype.UINT32, len(entries))
+    adapter.mem.WriteVal("g_compareBufDebugCnt", Datatype.UINT32, len(entries))
 # endregion
 
 
 def test_pull_empty_batch(cmp_driver: MemoryCompareDriver):
-    """g_debugCnt == 0 → 空批，不抛错。"""
+    """g_compareBufDebugCnt == 0 → 空批，不抛错。"""
     assert cmp_driver.pull_compare_batch() == []
 
 
@@ -82,9 +82,9 @@ def test_pull_multiple_entries_order(
 def test_overflow_raises(
     adapter_with_compare_symbols: DummyAdapter, cmp_driver: MemoryCompareDriver
 ):
-    """g_debugCnt 越界 → CompareBufOverflow。"""
+    """g_compareBufDebugCnt 越界 → CompareBufOverflow。"""
     adapter_with_compare_symbols.mem.WriteVal(
-        "g_debugCnt", Datatype.UINT32, MAX_ENTRIES + 1
+        "g_compareBufDebugCnt", Datatype.UINT32, MAX_ENTRIES + 1
     )
     with pytest.raises(CompareBufOverflow):
         cmp_driver.pull_compare_batch()
@@ -96,7 +96,7 @@ def test_overflow_caught_by_autotest_error(
     """CompareBufOverflow 应在 AutotestError 异常树里。"""
     from proto_test import AutotestError
     adapter_with_compare_symbols.mem.WriteVal(
-        "g_debugCnt", Datatype.UINT32, MAX_ENTRIES + 5
+        "g_compareBufDebugCnt", Datatype.UINT32, MAX_ENTRIES + 5
     )
     with pytest.raises(AutotestError):
         cmp_driver.pull_compare_batch()
@@ -105,10 +105,10 @@ def test_overflow_caught_by_autotest_error(
 def test_clear_compare_buf(
     adapter_with_compare_symbols: DummyAdapter, cmp_driver: MemoryCompareDriver
 ):
-    adapter_with_compare_symbols.mem.WriteVal("g_debugCnt", Datatype.UINT32, 5)
+    adapter_with_compare_symbols.mem.WriteVal("g_compareBufDebugCnt", Datatype.UINT32, 5)
     cmp_driver.clear_compare_buf()
     assert adapter_with_compare_symbols.mem.ReadVal(
-        "g_debugCnt", Datatype.UINT32
+        "g_compareBufDebugCnt", Datatype.UINT32
     ) == 0
 
 
@@ -125,7 +125,7 @@ def test_run_compare_round_pass(
     assert results[0].diff_bytes == 0
     # 已清零
     assert adapter_with_compare_symbols.mem.ReadVal(
-        "g_debugCnt", Datatype.UINT32
+        "g_compareBufDebugCnt", Datatype.UINT32
     ) == 0
 
 

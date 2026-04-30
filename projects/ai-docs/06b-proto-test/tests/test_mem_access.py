@@ -26,8 +26,9 @@ def test_write_val_uint16_round_trip(adapter: DummyAdapter):
 def test_read_struct_index_1_based(adapter: DummyAdapter):
     """index=1 = 第 1 个元素 = 数组开头。"""
     adapter.install_symbol("g_arr", 0x300)
-    raw0 = struct.pack("<HHI I", 10, 0, 100, 0xAA)    # tid=10, cnt=0, length=100, addr=0xAA
-    raw1 = struct.pack("<HHI I", 20, 1, 200, 0xBB)
+    # 64 位 DUT：addr 字段 8 字节
+    raw0 = struct.pack("<HHIQ", 10, 0, 100, 0xAA)     # tid=10, cnt=0, length=100, addr=0xAA
+    raw1 = struct.pack("<HHIQ", 20, 1, 200, 0xBB)
     adapter.write_raw(0x300, raw0 + raw1)
 
     e1 = adapter.mem.ReadStruct("g_arr", CompareEntry, 1)
@@ -73,7 +74,7 @@ def test_dtype_namespace():
     """``Datatype.struct.CompareEntry`` 命名空间访问。"""
     sdef = Datatype.struct.CompareEntry
     assert sdef.name == "CompareEntry"
-    assert sdef.size() == 12                          # 2 + 2 + 4 + 4(PTR=32位)
+    assert sdef.size() == 16                          # 2 + 2 + 4 + 8(PTR=64位)
 
 
 def test_dtype_namespace_unregistered_raises():

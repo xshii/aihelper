@@ -14,15 +14,15 @@ def adapter() -> DummyAdapter:
 
 @pytest.fixture
 def adapter_with_compare_symbols(adapter: DummyAdapter) -> DummyAdapter:
-    """已安装 ``g_debugCnt`` + ``g_compAddr`` 符号 + 张量缓冲。
+    """已安装 ``g_compareBufDebugCnt`` + ``g_compareBufCompAddr`` 符号 + 张量缓冲。
 
     地址布局（示意，可任意改）::
-        0x1000  g_debugCnt           (uint32, 4B)
-        0x1100  g_compAddr[200]      (CompareEntry × 200)
+        0x1000  g_compareBufDebugCnt           (uint32, 4B)
+        0x1100  g_compareBufCompAddr[200]      (CompareEntry × 200)
         0x4000  tensor 数据缓冲区     (32 KiB 给比数张量)
     """
-    adapter.install_symbol("g_debugCnt", 0x1000)
-    adapter.install_symbol("g_compAddr", 0x1100)
+    adapter.install_symbol("g_compareBufDebugCnt", 0x1000)
+    adapter.install_symbol("g_compareBufCompAddr", 0x1100)
     return adapter
 
 

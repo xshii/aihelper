@@ -1,33 +1,23 @@
 /*
  * svc_compare.c — 桩 CPU 侧机制 B 比数 svc（详见 06b § 1.6.4 / § 4.6）.
  *
- * 本文件实现 mem_drv_pull_compare_batch / mem_drv_clear_compare_buf 两个语义化函数。
- * 对外 svc 名：svc_compare_pull_batch / svc_compare_clear（在 mechanism_ops_t 表中绑定）。
+ * 实现 SVC_COMPARE_PullBatch / SVC_COMPARE_Clear（在 mechanism_ops_t 表中绑定）。
  *
- * 风格：参考 ai-restble 项目；常量集中、无魔法字、所有外部依赖通过 extern 声明。
+ * 风格：codestyle 工程命名；常量集中、无魔法字、所有外部依赖通过 extern 声明。
  */
 
-#include <stdint.h>
-#include <string.h>
+#include "sut_types.h"
+#include "compare_buf.h"        /* 复用 DUT 侧 CompareEntryStru / COMPARE_BUF_CAPACITY */
 
-/* ─── 与 Autotest 端 dtypes.CompareEntry 等价 ─── */
-typedef struct __attribute__((packed)) {
-    uint16_t tid;
-    uint16_t cnt;
-    uint32_t length;
-    uint32_t addr;          /* 32 位 DUT 指针 */
-} compare_entry_t;
-
-#define COMPARE_BUF_CAPACITY    200u
 #define COMPARE_BATCH_MAX       COMPARE_BUF_CAPACITY
 
-/* SoftDebug L6B SDK — 由其它文件提供 */
-extern int  l6b_softdebug_read (uint32_t addr, uint32_t n, void *out);
-extern int  l6b_softdebug_write(uint32_t addr, uint32_t n, const void *in);
+/* SoftDebug L6B SDK — 由其它文件提供（DUT 是 64 位地址空间）*/
+extern INT32 L6B_SoftdebugRead (UINT64 addr, UINT32 n, void *out);
+extern INT32 L6B_SoftdebugWrite(UINT64 addr, UINT32 n, const void *in);
 
 /* 链接 map 中加载的 DUT 符号地址（image_activate 后由 svc_image 重载）*/
-extern uint32_t g_dut_sym_debugCnt;     /* 对应 DUT 的 &g_debugCnt   */
-extern uint32_t g_dut_sym_compAddr;     /* 对应 DUT 的 &g_compAddr[0]*/
+extern UINT64 g_svcCompareDutSymDebugCnt;     /* 对应 DUT 的 &g_compareBufDebugCnt   */
+extern UINT64 g_svcCompareDutSymCompAddr;     /* 对应 DUT 的 &g_compareBufCompAddr[0]*/
 
 /* 错误码段（与 errors.yaml 对齐）*/
 #define ERR_OK                          0x0000
@@ -37,54 +27,54 @@ extern uint32_t g_dut_sym_compAddr;     /* 对应 DUT 的 &g_compAddr[0]*/
 
 /*
  * 拉一批比数描述符 + 数据。
- *   out_entries[0..N-1] = 描述符（按 1-based 1..N 顺序填入数组 0..N-1）
- *   out_data_buf[i] = 第 i 条对应的数据（连续平铺，由调用方按 length 切片）
+ *   pOutEntries[0..N-1] = 描述符（按 1-based 1..N 顺序填入数组 0..N-1）
+ *   pOutDataBuf[i]      = 第 i 条对应的数据（连续平铺，调用方按 length 切片）
  *
  * 返回：
  *    >= 0  实际项数 N
  *    < 0   错误码（取负）
  */
-int svc_compare_pull_batch(compare_entry_t *out_entries,
-                           uint8_t         *out_data_buf,
-                           uint32_t         out_data_buf_size,
-                           uint32_t        *out_data_total)
+INT32 SVC_COMPARE_PullBatch(CompareEntryStru *pOutEntries,
+                             UINT8            *pOutDataBuf,
+                             UINT32            outDataBufSize,
+                             UINT32           *pOutDataTotal)
 {
-    uint32_t n = 0u;
-    int rc;
+    UINT32 n = 0u;
+    INT32 rc;
 
-    rc = l6b_softdebug_read(g_dut_sym_debugCnt, sizeof(uint32_t), &n);
+    rc = L6B_SoftdebugRead(g_svcCompareDutSymDebugCnt, sizeof(UINT32), &n);
     if (rc != 0) { return -ERR_COMM_TIMEOUT; }
-    if (n == 0u) { *out_data_total = 0u; return 0; }
+    if (n == 0u) { *pOutDataTotal = 0u; return 0; }
     if (n > COMPARE_BUF_CAPACITY) { return -ERR_COMPARE_BUF_OVERFLOW; }
 
     /* 一次性读全部描述符 — 减少 SoftDebug 往返次数 */
-    rc = l6b_softdebug_read(g_dut_sym_compAddr,
-                            n * sizeof(compare_entry_t),
-                            out_entries);
+    rc = L6B_SoftdebugRead(g_svcCompareDutSymCompAddr,
+                           n * sizeof(CompareEntryStru),
+                           pOutEntries);
     if (rc != 0) { return -ERR_COMM_TIMEOUT; }
 
     /* 逐条按 entry.addr 拉数据 */
-    uint32_t cursor = 0u;
-    for (uint32_t i = 0u; i < n; ++i) {
-        if (cursor + out_entries[i].length > out_data_buf_size) {
+    UINT32 cursor = 0u;
+    for (UINT32 i = 0u; i < n; ++i) {
+        if (cursor + pOutEntries[i].length > outDataBufSize) {
             return -ERR_DATA_INTEGRITY;     /* 缓冲不够 */
         }
-        rc = l6b_softdebug_read(out_entries[i].addr,
-                                out_entries[i].length,
-                                &out_data_buf[cursor]);
+        rc = L6B_SoftdebugRead(pOutEntries[i].addr,
+                               pOutEntries[i].length,
+                               &pOutDataBuf[cursor]);
         if (rc != 0) { return -ERR_COMM_TIMEOUT; }
-        cursor += out_entries[i].length;
+        cursor += pOutEntries[i].length;
     }
-    *out_data_total = cursor;
-    return (int)n;
+    *pOutDataTotal = cursor;
+    return (INT32)n;
 }
 
 /*
- * 整体清零 g_debugCnt（消费协议）。
+ * 整体清零 g_compareBufDebugCnt（消费协议）。
  */
-int svc_compare_clear(void)
+INT32 SVC_COMPARE_Clear(void)
 {
-    uint32_t zero = 0u;
-    int rc = l6b_softdebug_write(g_dut_sym_debugCnt, sizeof(uint32_t), &zero);
+    UINT32 zero = 0u;
+    INT32 rc = L6B_SoftdebugWrite(g_svcCompareDutSymDebugCnt, sizeof(UINT32), &zero);
     return (rc == 0) ? ERR_OK : -ERR_COMM_TIMEOUT;
 }

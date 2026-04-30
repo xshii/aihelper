@@ -3,7 +3,7 @@ from __future__ import annotations
 
 __version__ = "0.0.1"
 
-from .block import (
+from .protocol.block import (
     BitFieldMixin as BitFieldMixin,
     Block as Block,
     Composite as Composite,
@@ -19,7 +19,7 @@ from .block import (
     fragment_payload as fragment_payload,
     pack as pack,
 )
-from .memory import (
+from .protocol.memory import (
     CompareEntry as CompareEntry,
     Datatype as Datatype,
     MemAccessAPI as MemAccessAPI,
@@ -28,14 +28,14 @@ from .memory import (
     SymbolMap as SymbolMap,
     register_struct as register_struct,
 )
-from .compare import (
+from .protocol.compare import (
     CompareBufOverflow as CompareBufOverflow,
     CompareResult as CompareResult,
     MemoryCompareDriver as MemoryCompareDriver,
     run_compare_round as run_compare_round,
     soft_compare as soft_compare,
 )
-from .errors import (
+from .foundation.errors import (
     AutotestError as AutotestError,
     AutotestTimeoutError as AutotestTimeoutError,
     CommError as CommError,
@@ -55,7 +55,7 @@ from .errors import (
     TransientError as TransientError,
     code_to_exception as code_to_exception,
 )
-from .domain import (
+from .foundation.domain import (
     Baseline as Baseline,
     Case as Case,
     CompareMode as CompareMode,
@@ -67,17 +67,17 @@ from .domain import (
     Verdict as Verdict,
     Via as Via,
 )
-from .retry import (
+from .runtime.retry import (
     retryable as retryable,
     total_backoff as total_backoff,
 )
-from .buffer_registry import (
+from .runtime.buffer_registry import (
     BufferEntry as BufferEntry,
     BufferKind as BufferKind,
     BufferRegistry as BufferRegistry,
     BufferRegistryFull as BufferRegistryFull,
 )
-from .lifecycle import (
+from .runtime.lifecycle import (
     LifecycleEvent as LifecycleEvent,
     LifecycleFSM as LifecycleFSM,
     ModelState as ModelState,
@@ -90,5 +90,9 @@ from .adapters import (
     MemoryMechanism as MemoryMechanism,
     MemoryPort as MemoryPort,
     MessageMechanism as MessageMechanism,
+    MockL6APort as MockL6APort,
     PlatformAdapter as PlatformAdapter,
+)
+from .repl import (
+    DebugConsole as DebugConsole,
 )

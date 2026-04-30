@@ -1,4 +1,4 @@
-"""机制 B 比数协议 — § 1.6 ``g_debugCnt`` + ``g_compAddr[200]`` 实现.
+"""机制 B 比数协议 — § 1.6 ``g_compareBufDebugCnt`` + ``g_compareBufCompAddr[200]`` 实现.
 
 入口：
 - ``MemoryCompareDriver``  — L5B 内存比数驱动；封装轮询契约
@@ -7,34 +7,34 @@
 - ``soft_compare()``       — 张量软比；返回 ``CompareResult``
 
 设计点：
-- DUT 固件维护 ``g_debugCnt`` (uint32) + ``g_compAddr[200]`` (CompareEntry[])
+- DUT 固件维护 ``g_compareBufDebugCnt`` (uint32) + ``g_compareBufCompAddr[200]`` (CompareEntry[])
 - 桩 CPU 走 SoftDebug 通过 ``MemAccessAPI`` 读这两个符号 → 软比 → 写 0
 - 同 ``tid`` 多次产出用 ``cnt`` 区分；GOLDEN 按 ``(tid, cnt)`` 二维索引
 
 错误：
-- ``g_debugCnt > MAX_ENTRIES`` → ``CompareBufOverflow``（固件应同时触发 DFX 告警）
+- ``g_compareBufDebugCnt > MAX_ENTRIES`` → ``CompareBufOverflow``（固件应同时触发 DFX 告警）
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
-from .errors import AutotestError, ERR_COMPARE_BUF_OVERFLOW
+from ..foundation.errors import DataIntegrityError, ERR_COMPARE_BUF_OVERFLOW
 from .memory import CompareEntry, Datatype, MemAccessAPI
 
 MAX_ENTRIES = 200
 
 # ─── DUT 固件链接契约 — 与 dut/compare_buf.h 对齐 ──────────
-SYM_DEBUG_CNT = "g_debugCnt"
-SYM_COMP_ADDR = "g_compAddr"
+SYM_DEBUG_CNT = "g_compareBufDebugCnt"
+SYM_COMP_ADDR = "g_compareBufCompAddr"
 
 
 CompareEntryDict = Dict[str, int]                  # {"tid", "cnt", "length", "addr"}
 CompareBatchEntry = Tuple[CompareEntryDict, bytes]  # (描述符, 张量数据)
 
 
-class CompareBufOverflow(AutotestError):
-    """``g_debugCnt`` 超过 200 —— 固件应同时触发 DFX 告警；段位 0x4002。"""
+class CompareBufOverflow(DataIntegrityError):
+    """``g_compareBufDebugCnt`` 超过 200 —— 固件应同时触发 DFX 告警；段位 0x4002。"""
 
 
 @dataclass
@@ -58,9 +58,9 @@ class MemoryCompareDriver:
     mem: MemAccessAPI
 
     def pull_compare_batch(self) -> List[CompareBatchEntry]:
-        """轮询一次：读 ``g_debugCnt`` → 读 N 条描述符 → 拉每条数据。
+        """轮询一次：读 ``g_compareBufDebugCnt`` → 读 N 条描述符 → 拉每条数据。
 
-        空批（``g_debugCnt == 0``）返回 ``[]``，不写清零。
+        空批（``g_compareBufDebugCnt == 0``）返回 ``[]``，不写清零。
         非空批返回后**调用方负责** ``clear_compare_buf()``。
         """
         n = self.mem.ReadVal(SYM_DEBUG_CNT, Datatype.UINT32)
@@ -68,7 +68,7 @@ class MemoryCompareDriver:
             return []
         if n > MAX_ENTRIES:
             raise CompareBufOverflow(
-                f"g_debugCnt={n} 超过容量 {MAX_ENTRIES}；固件应触发 DFX 告警",
+                f"g_compareBufDebugCnt={n} 超过容量 {MAX_ENTRIES}；固件应触发 DFX 告警",
                 code=ERR_COMPARE_BUF_OVERFLOW,
             )
         batch: List[CompareBatchEntry] = []

@@ -1,4 +1,4 @@
-"""模型生命周期 FSM M06 — 详见 06b § 2.7 / § 3.5.
+"""模型生命周期 FSM M06 — 详见 06b § 2.6 / § 3.5.
 
 入口：
 - ``ModelState``      — Idle / Loading / Ready / Running / Done / Error / Terminated
@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, FrozenSet, Tuple
 
-from .errors import (
+from ..foundation.errors import (
     ERR_ILLEGAL_TRANSITION,
     ERR_SWITCH_COMPARE_DENIED,
     IllegalStateError,
@@ -69,7 +69,7 @@ _TRANSITIONS: Dict[Tuple[ModelState, LifecycleEvent], ModelState] = {
     (ModelState.ERROR,   LifecycleEvent.GIVE_UP_SESSION):  ModelState.TERMINATED,
 }
 
-# 比数模式 / 路径切换允许的状态（§ 2.7 / § 3.4）
+# 比数模式 / 路径切换允许的状态（§ 2.6 / § 3.4）
 _SWITCH_COMPARE_ALLOWED: FrozenSet[ModelState] = frozenset(
     {ModelState.IDLE, ModelState.DONE, ModelState.READY}
 )

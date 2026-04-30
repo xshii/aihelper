@@ -5,6 +5,7 @@
 - ``MemoryPort``        — DummyAdapter 的字节级 bytearray 端口
 - ``DummyAdapter``      — 纯内存平台，跑契约 / meta-test 用
 - ``L6APort``           — 接口 FPGA 软调 SDK 抽象（机制 A 物理底座）
+- ``MockL6APort``       — L6APort 的内存级 mock（example / 集成测试用）
 - ``Mechanism``         — A/B Strategy 接口
 - ``MessageMechanism``  — 机制 A：VPORT 消息 + 接口 FPGA 比数引擎
 - ``MemoryMechanism``   — 机制 B：SoftDebug + 桩 CPU 软比
@@ -19,12 +20,12 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, ClassVar, Dict, Protocol, runtime_checkable
+from typing import Any, ClassVar, Dict, List, Protocol, runtime_checkable
 
-from .compare import MemoryCompareDriver, run_compare_round
-from .domain import Case, ResultOut, Via
-from .lifecycle import LifecycleEvent, LifecycleFSM
-from .memory import EndianStr, MemAccessAPI, MemPort, SymbolMap
+from .protocol.compare import MemoryCompareDriver, run_compare_round
+from .foundation.domain import Case, ResultOut, Via
+from .runtime.lifecycle import LifecycleEvent, LifecycleFSM
+from .protocol.memory import EndianStr, MemAccessAPI, MemPort, SymbolMap
 
 
 # region PlatformAdapter Protocol ───────────────────────────────────
@@ -126,6 +127,40 @@ class L6APort(Protocol):
     def msg_send_start(self) -> None: ...
     def msg_poll_done(self, timeout_s: float) -> bool: ...
     def cmp_engine_pull(self) -> ResultOut: ...
+
+
+@dataclass
+class MockL6APort:
+    """``L6APort`` 的内存级 mock — example / 集成测试用，不连真硬件。
+
+    Happy path：``data_buf_write`` 累积所有片段；``msg_poll_done`` 立即成功；
+    ``cmp_engine_pull`` 返回可配置的 ``diff_count``（默认 0 = PASS）。
+    """
+
+    sent_buffers: List[bytes] = field(default_factory=list)
+    timer_period_us: int = 0
+    started: bool = False
+    poll_succeeds: bool = True
+    diff_count: int = 0
+
+    def data_buf_write(self, raw: bytes) -> None:
+        self.sent_buffers.append(raw)
+
+    def cfg_timer(self, period_us: int) -> None:
+        self.timer_period_us = period_us
+
+    def msg_send_start(self) -> None:
+        self.started = True
+
+    def msg_poll_done(self, timeout_s: float) -> bool:
+        return self.poll_succeeds
+
+    def cmp_engine_pull(self) -> ResultOut:
+        return ResultOut(cmp_diff_count=self.diff_count)
+
+    @property
+    def total_bytes_sent(self) -> int:
+        return sum(len(b) for b in self.sent_buffers)
 
 
 @dataclass

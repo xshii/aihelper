@@ -8,6 +8,7 @@
     │   └── TransientError                 可重试子类
     ├── IllegalStateError          0x3xxx  非法状态（编码 bug，不重试）
     ├── DataIntegrityError         0x4xxx  数据完整性（CRC / 大小不匹配）
+    │   └── SymbolNotFoundError    0x4100  符号未在当前 image map 中
     ├── StubCpuError               0x5xxx  桩 CPU 内部
     └── HardwareFaultError         0x6xxx  硬件故障（fatal，不重试）
 
@@ -58,8 +59,8 @@ class DataIntegrityError(AutotestError):
     """数据校验失败（CRC / 大小不匹配 / 字节数不符）；段位 0x4xxx。"""
 
 
-class SymbolNotFoundError(AutotestError):
-    """符号未在当前 image 的 map 中（属 0x4xxx 数据完整性段位的子类语义）。"""
+class SymbolNotFoundError(DataIntegrityError):
+    """符号未在当前 image 的 map 中；属 0x4xxx 数据完整性段位（``ERR_SYMBOL_NOT_FOUND = 0x4100``）。"""
 
 
 class StubCpuError(AutotestError):

@@ -43,7 +43,7 @@ try:
 except ImportError:
     bitstruct = None  # type: ignore[assignment]
 
-from .errors import DataIntegrityError, ERR_DATA_CRC_MISMATCH
+from ..foundation.errors import DataIntegrityError, ERR_DATA_CRC_MISMATCH
 
 EndianStr = Literal["<", ">"]
 

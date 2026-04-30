@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from proto_test.domain import (
+from proto_test.foundation.domain import (
     Baseline, Case, CompareMode, ComparePath, HpTrigger,
     ResultOut, Verdict, Via,
 )
-from proto_test.errors import (
+from proto_test.foundation.errors import (
     AutotestError, AutotestTimeoutError, CommError,
     DataIntegrityError, HardwareFaultError, IllegalStateError,
     StubCpuError, TransientError, code_to_exception,

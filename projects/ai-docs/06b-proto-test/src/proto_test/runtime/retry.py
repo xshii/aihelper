@@ -16,7 +16,7 @@ import logging
 import time
 from typing import Any, Callable, Optional, TypeVar
 
-from .errors import TransientError
+from ..foundation.errors import TransientError
 
 logger = logging.getLogger(__name__)
 

@@ -19,7 +19,7 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Dict, Iterator, List
 
-from .errors import AutotestError, ERR_BUFFER_REGISTRY_FULL
+from ..foundation.errors import DataIntegrityError, ERR_BUFFER_REGISTRY_FULL
 
 
 class BufferKind(Enum):
@@ -40,7 +40,7 @@ class BufferEntry:
     created_ts: float
 
 
-class BufferRegistryFull(AutotestError):
+class BufferRegistryFull(DataIntegrityError):
     """容量已满；按 § 3.8 不做隐式 LRU。属 0x4xxx 数据完整性段位。"""
 
 

@@ -5,9 +5,9 @@ import logging
 
 import pytest
 
-from proto_test.errors import IllegalStateError
-from proto_test.lifecycle import LifecycleEvent as Ev
-from proto_test.lifecycle import LifecycleFSM, ModelState
+from proto_test.foundation.errors import IllegalStateError
+from proto_test.runtime.lifecycle import LifecycleEvent as Ev
+from proto_test.runtime.lifecycle import LifecycleFSM, ModelState
 
 
 def test_happy_path():
@@ -45,7 +45,7 @@ def test_retry_count_preserved_in_log_on_fatal(caplog: pytest.LogCaptureFixture)
     fsm.transition(Ev.LOAD_DO)                       # IDLE -> LOADING
     fsm.transition(Ev.RETRY)
     fsm.transition(Ev.RETRY)
-    with caplog.at_level(logging.INFO, logger="proto_test.lifecycle"):
+    with caplog.at_level(logging.INFO, logger="proto_test.runtime.lifecycle"):
         fsm.transition(Ev.FATAL)                     # LOADING -> ERROR
     fatal_log = [r for r in caplog.records if "Error" in r.getMessage()][-1]
     assert "retries=2" in fatal_log.getMessage()
@@ -59,7 +59,7 @@ def test_retry_count_preserved_in_log_on_rat_ready(caplog: pytest.LogCaptureFixt
     fsm.transition(Ev.RETRY)
     fsm.transition(Ev.RETRY)
     fsm.transition(Ev.RETRY)
-    with caplog.at_level(logging.INFO, logger="proto_test.lifecycle"):
+    with caplog.at_level(logging.INFO, logger="proto_test.runtime.lifecycle"):
         fsm.transition(Ev.RAT_READY)
     ready_log = [r for r in caplog.records if "Ready" in r.getMessage()][-1]
     assert "retries=3" in ready_log.getMessage()

@@ -5,7 +5,7 @@ import zlib
 
 import pytest
 
-from proto_test.buffer_registry import (
+from proto_test.runtime.buffer_registry import (
     BufferKind, BufferRegistry, BufferRegistryFull,
 )
 

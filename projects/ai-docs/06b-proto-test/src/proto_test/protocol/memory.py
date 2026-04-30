@@ -20,14 +20,14 @@ import struct as _struct
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Protocol, Tuple
 
-from .errors import (
+from ..foundation.errors import (
     DataIntegrityError,
     ERR_DATA_CRC_MISMATCH,
     ERR_SYMBOL_NOT_FOUND,
     SymbolNotFoundError,
 )
 
-CFG_PTR_SIZE = 4  # 32 位 DUT 默认；64 位场景显式置 8
+CFG_PTR_SIZE = 8  # 64 位 DUT 默认；32 位场景显式置 4
 
 EndianStr = Literal["<", ">"]   # 与 block.EndianStr 一致；struct 模块约定
 
@@ -243,7 +243,7 @@ class MemAccessAPI:
         return list(_struct.unpack(fmt, raw))
 
     def ReadBytes(self, addr: int, n: int) -> bytes:
-        """绝对地址裸读；用于地址来自数据结构（如 ``g_compAddr[i].addr``）的场景。"""
+        """绝对地址裸读；用于地址来自数据结构（如 ``g_compareBufCompAddr[i].addr``）的场景。"""
         return self._port.read(addr, n)
 
     def WriteBytes(self, addr: int, raw: bytes) -> None:

@@ -11,7 +11,7 @@ proto-test-env/
 ├── src/proto_test/                  # Autotest Python 端（9 个核心模块）
 │   ├── block.py            (§ 1.7)  Composite + 512 对齐 + ENDIAN + BitFieldMixin + DDR 块头 + 分片填写
 │   ├── memory.py           (§ 4.8)  Datatype + StructDef + register_struct + MemAccessAPI + SymbolMap + CompareEntry
-│   ├── compare.py          (§ 1.6)  机制 B 比数（g_debugCnt + g_compAddr）
+│   ├── compare.py          (§ 1.6)  机制 B 比数（g_compareBufDebugCnt + g_compareBufCompAddr）
 │   ├── adapters.py         (§ 4.2)  PlatformAdapter / DummyAdapter / Mechanism / FpgaAdapter
 │   ├── errors.py           (§ 3.6)  AutotestError 异常树 + code_to_exception
 │   ├── domain.py           (§ 4.3)  Verdict / CompareMode / ResultOut / Case / ...
@@ -78,7 +78,7 @@ python3 -m venv .venv
 | 反序列化 | `TensorBlock.from_bytes(raw)` round-trip | 本项目 |
 | 类型命名空间 | `Datatype.UINT32` / `Datatype.struct.CompareEntry` | 06b § 4.8 |
 | 1-based 索引 | `ReadStruct(symbol, sdef, index=1)` | 06b § 4.8.1 |
-| 比数协议 | `g_debugCnt` + `g_compAddr[200]`（先填后 incr） | 06b § 1.6 |
+| 比数协议 | `g_compareBufDebugCnt` + `g_compareBufCompAddr[200]`（先填后 incr） | 06b § 1.6 |
 | 异常树 | `AutotestError → CommError / TimeoutError → TransientError / ...` | 06b § 3.6 / § 4.5 |
 | 错误码翻译 | `code_to_exception(0x4001)` → `DataIntegrityError` | 06b § 3.6 |
 | 重试 | `@retryable(max_retries, backoff_s)` 仅对 `TransientError` | 06b § 3.6 |
