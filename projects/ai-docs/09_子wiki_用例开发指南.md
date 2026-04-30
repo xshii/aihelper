@@ -105,7 +105,7 @@ def test_resnet50_accuracy_001(fpga, case_loader):
     assert verdict.is_pass(), verdict.explain()
 ```
 
-### 步骤 5：把用例加入套件（对应 02 · 3.5）
+### 步骤 5：把用例加入套件（对应 02 · 3.4）
 
 ```yaml
 # suites/cv_resnet50_accuracy.yaml
@@ -237,29 +237,13 @@ def test_resnet50_perf(batch_size, emu, case_loader, perf_baseline):
 
 ## 5. 首用例怎么写
 
-**首用例 = 同一精度链路的 "CPU 简化 + 关闭所有硬件优化" 参照版本**（见 02 · 5.1）。
+完整代码示例见 § 3.2 多阶段 dump 的精度用例。关键约束：
 
-```python
-@pytest.mark.accuracy
-@pytest.mark.首用例
-@pytest.mark.l0                       # 首用例默认是 L0，作为准入
-def test_resnet50_cpu_baseline(fpga, case_loader):
-    """首用例：CPU 简化实现 + 关闭 DMA 双缓 / tiling / 融合算子。"""
-    case = case_loader.load(
-        "cv_resnet50_cpu_baseline",
-        execution_mode="cpu_simplified",   # 隐含：hw_optimizations=disabled, latency_check=off
-        stages=[
-            {"name": "backbone_out", "end_layer": "layer4.2.relu"},
-            {"name": "neck_out",     "end_layer": "fpn.out"},
-            {"name": "head_out",     "end_layer": "classifier"},
-        ],
-    )
-    fpga.run(case)
-    verdict = fpga.compare_stages(case.golden_per_stage)
-    assert verdict.is_pass(), verdict.explain()
-```
+- **每个精度用例集必须至少有 1 个首用例**（02 · 5.3），打 `@pytest.mark.首用例` + `@pytest.mark.l0`
+- `execution_mode="cpu_simplified"`（隐含 hw_optimizations=disabled + 不看端到端时延）
+- 首用例跑通后，框架自动把套件内后续用例的比数模式切为 `end_to_end`（02 · 5.5）
 
-**每个精度用例集必须至少有 1 个首用例**（02 · 5.3）。首用例跑通后，框架自动把套件内后续用例的比数模式切为 `end_to_end`（02 · 5.5）。
+> 首用例本质 = "CPU 简化 + 关闭所有硬件优化"的参照版本（见 02 · 5.1）。
 
 ---
 
@@ -296,23 +280,20 @@ test_cross_platform_bit_exact[emu]
 
 ## 7. markers 使用规范
 
-### 7.1 必加的三个 marker
+### 7.1 marker 速查
 
-每个用例**至少**要有：
+| 类别 | 取值 | 必加? |
+|---|---|---|
+| 用例类型 | `accuracy` / `perf` / `functional` / `stability` | ✅ 四选一 |
+| 级别 | `l0` / `l1` / `l2` / `l3` | ✅ 四选一 |
+| 模型分类 | `cv` / `nlp` / `mm` | ✅ 三选一 |
+| 首用例 | `首用例` | 按需 |
+| 跨平台一致 | `bit_exact` | 按需 |
+| 平台约束 | `fpga_only` / `emu_only` | 按需 |
+| 具体模型 | `resnet50` / `bert_base` / ... | 按需 |
+| 运行规格 | `spec_mini` / `spec_full` | 按需 |
 
-1. **用例类型**：`accuracy` / `perf` / `functional` / `stability` 四选一
-2. **级别**：`l0` / `l1` / `l2` / `l3` 四选一
-3. **模型分类**：`cv` / `nlp` / `mm` 三选一
-
-### 7.2 按需加的 marker
-
-- 首用例：`@pytest.mark.首用例`
-- 跨平台一致性：`@pytest.mark.bit_exact`
-- 平台约束：`@pytest.mark.fpga_only` / `@pytest.mark.emu_only`
-- 具体模型：`@pytest.mark.resnet50` / `@pytest.mark.bert_base`
-- 运行规格：`@pytest.mark.spec_mini` / `@pytest.mark.spec_full`
-
-### 7.3 命令行筛选
+### 7.2 命令行筛选
 
 ```bash
 pytest -m "accuracy and l0"                    # L0 精度
@@ -320,7 +301,7 @@ pytest -m "perf and resnet50 and not fpga_only" # 所有非 FPGA 专属的 resne
 pytest -m "l1 and (cv or nlp)"                  # L1 的 CV 或 NLP
 ```
 
-### 7.4 注册（conftest.py，见 06 · 8.8）
+### 7.3 注册（conftest.py，见 06 · 8.8）
 
 **所有 marker 必须在 conftest.py 注册**，配合 `pytest --strict-markers` 防拼写错。
 
@@ -440,28 +421,7 @@ def test_with_pair(fpga, golden_pair):
 
 ### 11.1 ❌ 为了"复用"滥抽 helper
 
-```python
-# Bad
-def _load_and_run(case_id, fpga):
-    case = case_loader.load(case_id)
-    fpga.run(case)
-    return fpga.compare(case.golden)
-
-def test_a(fpga): assert _load_and_run("a", fpga).is_pass()
-def test_b(fpga): assert _load_and_run("b", fpga).is_pass()
-def test_c(fpga): assert _load_and_run("c", fpga).is_pass()
-```
-
-**问题**：3 个几乎一样的用例应该用 `parametrize`，不是抽 helper。
-
-```python
-# Good
-@pytest.mark.parametrize("case_id", ["a", "b", "c"])
-def test_accuracy(case_id, fpga, case_loader):
-    case = case_loader.load(case_id)
-    fpga.run(case)
-    assert fpga.compare(case.golden).is_pass()
-```
+3 个几乎一样的用例（`test_a` / `test_b` / `test_c` 都调用 `_load_and_run(case_id)`）应该用 `parametrize` 展开成一个用例 + 数据列表，不是抽 helper。详见 § 8。
 
 ### 11.2 ❌ 在用例里写 if-else 平台分支
 
@@ -535,30 +495,7 @@ def test_run(do_handle):
 
 ### 11.5 ❌ 在用例函数里起 / 关资源
 
-```python
-# Bad
-def test_something():
-    proc = subprocess.Popen([...])
-    try:
-        result = proc.communicate()
-        assert result
-    finally:
-        proc.terminate()
-```
-
-**问题**：测试失败 / 异常时可能资源泄漏；重复代码。
-
-```python
-# Good
-@pytest.fixture
-def backend():
-    proc = subprocess.Popen([...])
-    yield proc
-    proc.terminate()
-
-def test_something(backend):
-    assert backend.communicate()
-```
+用例函数里 `Popen` + `try/finally terminate` → 失败时易泄漏 + 多个用例重复同一段代码。资源生命周期统一交给 `@pytest.fixture` 的 `yield` 写法管理（详见 § 9）。
 
 ### 11.6 ❌ 长用例不拆阶段
 
@@ -580,21 +517,7 @@ def test_accuracy(fpga, case_loader):
 
 ### 11.7 ❌ 静默失败
 
-```python
-# Bad
-try:
-    result = fpga.compare(...)
-except Exception:
-    pass                      # 把真实错误吞了
-assert result                 # 甚至 result 没定义会再抛 NameError
-```
-
-**问题**：掩盖真实失败原因，调试极难。
-
-```python
-# Good：让异常自然抛出；如果必须 catch，显式处理
-result = fpga.compare(...)
-assert result.is_pass(), result.explain()
+`try: ... except Exception: pass` 吞掉异常 → 调试地狱。让异常自然抛出；必须 catch 时显式处理并保留信息（`result.explain()`）。
 ```
 
 ---

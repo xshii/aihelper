@@ -19,14 +19,15 @@
 1. [业界对照](#1-业界对照)
 2. [设计原则](#2-设计原则)
 3. [机制集](#3-机制集)
+   - 3.0 全局变量地址解析机制
    - 3.1 命令通道与函数调用门（引用 6B）
    - 3.2 [高速日志通道（RTT 风格）](#32-高速日志通道rtt-风格)
    - 3.3 [环形事件追踪（ftrace 风格）](#33-环形事件追踪ftrace-风格)
    - 3.4 [软件断点（kprobe 风格）](#34-软件断点kprobe-风格)
-   - 3.5 [函数入口 Hook（patch prologue）](#35-函数入口-hookpatch-prologue)
+   - 3.5 [函数入口 Hook（编译期 NOP padding）](#35-函数入口-hook编译期-nop-padding)
    - 3.6 [PC 采样性能分析](#36-pc-采样性能分析)
    - 3.7 [代码覆盖率收集](#37-代码覆盖率收集)
-   - 3.8 [内存红区与栈金丝雀](#38-内存红区与栈金丝雀)
+   - 3.8 [栈金丝雀](#38-栈金丝雀)
    - 3.9 [黑匣子 Crash Beacon](#39-黑匣子-crash-beacon)
    - 3.10 [按需 Coredump](#310-按需-coredump)
    - 3.11 [实时变量监视（Live Watch）](#311-实时变量监视live-watch)
@@ -87,6 +88,39 @@
 ---
 
 ## 3. 机制集
+
+### 3.0 全局变量地址解析机制
+
+后续 3.x 机制（RTT / ftrace / coredump / live watch / 比数契约 …）都依赖"主机侧拿到被测固件全局变量的地址"。这层能力**先于所有机制存在**，单独设计。
+
+#### 候选方案
+
+| # | 方案 | 输入 | 何时选 |
+|---|---|---|---|
+| 1 | **ELF 符号表解析（首选）** | 编译产物 `.elf`，未 strip | 默认方案。`pyelftools` / `nm` / `objdump` 直接读符号表；DWARF 还能给类型信息。能用就优先用 |
+| 2 | **MAP 文件解析** | 链接器输出 `.map` | CI 环境不带 pyelftools / 想避免 ELF 库依赖时用。文本格式 `符号 地址 大小`，grep 即可 |
+| 3 | **链接脚本 / scatter file 钉死地址** | `__attribute__((section(".fixed_dbg")))` + ld script `.fixed_dbg : { . = 0xXXXX; ... }` | 用于"地址必须固定"的 magic 区（RTT 控制块、bug check buffer），方法 1/2 可能产生不同 build 不同地址 |
+| 4 | **锚点表（anchor table）** | 固定地址放一个 `{magic, name, addr, size}[]` 目录 | 符号特别多 / 想避免 N 个 section 时用。RTT 控制块本质就是这套（`DUT_RTT_MAGIC` + `RTT_CB`）。host 先读目录再跳转 |
+| 5 | **Section 边界符号** | `__attribute__((section("xxx")))` + `__start_xxx` / `__stop_xxx` | 适合"一类注册项"（事件 ID 表、探针表、测试 case 表），让链接器自动给边界。本文档 § 3.3 ftrace 静态事件登记走这个 |
+| 6 | **Boot 日志 emit + 主机解析** | 启动时 `printf("&g_xxx=0x%p", &g_xxx)` | 兜底。前面方案都不可用 / debug 期临时插入时 |
+
+#### 选型矩阵
+
+| 场景 | 推荐方案 | 理由 |
+|---|---|---|
+| 普通业务全局变量（`g_compareBuf*` / 普通状态字 / `g_bug_check_buf`）| **方案 1** | 编译产物自带，无需固件配合 |
+| Magic 控制块（RTT_CB / DBG_REGION_HEADER / Crash Beacon）| **方案 3** | 固定地址 = 跨 build 稳定 = host 可硬编码 |
+| 同类批量项（事件 ID / 探针 / 软断点表）| **方案 5** | 链接器自动给边界，新增项不动 host 代码 |
+| 大量符号 + 不想多个 section | **方案 4** | 一处目录、host 一次读取 |
+| 符号被 strip / 没有 ELF | **方案 2** | MAP 通常仍保留；再不济 6 |
+| 调试期临时验证 | **方案 6** | 改个 printf 即可，不重新出包 |
+
+#### 不推荐 / 仅兜底
+
+- **Magic 扫内存**：没符号没 boot 日志才用，慢且脆。
+- **GDB/JTAG MI 查符号**：需要 debugger 始终在线，不适合自动化。
+
+后续 3.x 机制描述里出现的"主机侧已知 `g_xxx` 地址"全部依赖本节，**不再重复说明地址来源**。
 
 ### 3.1 命令通道与函数调用门（引用 6B）
 
@@ -281,107 +315,17 @@ kprobes 的核心：**把目标指令的首字节改成 trap 指令，trap handl
 - ✅ 被测有 trap handler
 - ⚠️ 没有"单步执行"硬件——需要技巧
 
-#### 简化版：一次性断点 + dispatcher 模拟
+#### 简化版：一次性断点
 
-```c
-/* 被测 FPGA trap handler（已有的异常处理函数中扩展）*/
-void trap_handler(uint32_t pc, uint32_t *regs)
-{
-    sw_breakpoint_t *bp = bp_lookup_by_pc(pc);
-    if (bp == NULL) {
-        original_trap_handler(pc, regs);
-        return;
-    }
+实现思路：桩 CPU 备份目标地址原指令 → 写 trap 指令（RISC-V `ebreak` / ARM `BKPT`）→ 刷 I-cache → 被测 trap handler 通过 call_gate 上报现场（PC + 通用寄存器）→ 桩 CPU 调 callback → 恢复原指令并 ack。
 
-    /* 写 beacon：哪个断点命中、寄存器现场 */
-    g_call_gate.magic = 0xB9010000U;
-    g_call_gate.func_addr = pc;
-    memcpy(&g_call_gate.scratch_out, regs, 32 * 4);
+**局限明显**：一次性（恢复后失效；永久断点需单步硬件或指令模拟器，复杂度陡升）；代码段必须可写；I-cache 一致性必须处理；多断点 thread-safe。**不做交互式断点**（那是 GDB 的工作）。多数场景**优先考虑 § 3.5 编译期 NOP padding 方案**——零运行期成本、永久 hook、不碰指令 cache。
 
-    /* 等桩 CPU ack（轮询 magic 翻成 0xB901_D0E0）*/
-    while (g_call_gate.magic != 0xB901D0E0U) { /* yield */ }
+### 3.5 函数入口 Hook（编译期 NOP padding）
 
-    /* 桩 CPU 已经把原指令恢复了（写回原首字节）；从 PC 重新执行 */
-    return_to_pc(pc);
-}
-```
+比软断点温和、永久有效、零中断开销，适合 trace / 参数 dump / 错误注入 / 性能测量。
 
-#### 桩 CPU 侧
-
-```c
-ERRNO_T DUT_BreakpointSet(const char *func_name, bp_callback_t cb)
-{
-    const dut_sym_t *sym = DUT_SymLookup(func_name);
-    BUG_RET_VAL(sym == NULL, ERR_DUT_SYM);
-
-    /* 1. 备份原指令 */
-    uint32_t orig;
-    SUT_MemRead(sym->addr, &orig, 4);
-    bp_table_add(sym->addr, orig, cb);
-
-    /* 2. 写 trap 指令（RISC-V: ebreak = 0x00100073；ARM: BKPT = 0xE1200070）*/
-    uint32_t trap = TRAP_INSTRUCTION;
-    SUT_MemWrite(sym->addr, &trap, 4);
-    SUT_MemFlushICache(sym->addr, 4);    /* 关键：刷指令 cache */
-    return OK;
-}
-
-void DUT_BreakpointPoll(void)
-{
-    uint32_t magic;
-    SUT_MemRead(DUT_CALL_MAGIC_OFF, &magic, 4);
-    if (magic != 0xB9010000U) return;
-
-    /* 取出现场 */
-    uint32_t pc;
-    SUT_MemRead(DUT_CALL_FUNC_ADDR_OFF, &pc, 4);
-    uint32_t regs[32];
-    SUT_MemRead(DUT_CALL_SCRATCH_OUT_OFF, regs, sizeof(regs));
-
-    /* 调用户 callback（拿寄存器、栈、变量都行）*/
-    bp_entry_t *bp = bp_table_lookup(pc);
-    bp->cb(pc, regs);
-
-    /* 恢复原指令 */
-    SUT_MemWrite(pc, &bp->orig, 4);
-    SUT_MemFlushICache(pc, 4);
-
-    /* 通知被测继续 */
-    uint32_t done = 0xB901D0E0U;
-    SUT_MemWrite(DUT_CALL_MAGIC_OFF, &done, 4);
-}
-```
-
-#### 局限
-
-- 一次性：恢复原指令后该断点失效。**永久断点**需要被测侧"单步硬件"或"指令模拟器"，复杂度陡升。
-- 多断点冲突：trap handler 必须 thread-safe
-- 代码段只读时不可用
-- I-cache 一致性必须处理（关键！）
-
-#### 适用场景
-
-定位类用例：在某函数入口断一次，dump 现场 → 继续。**不做交互式断点**（那是 GDB 的工作）。
-
-### 3.5 函数入口 Hook（patch prologue）
-
-比软断点温和：把目标函数前 N 字节替换为 **跳转到 hook trampoline**，trampoline 完成桩工作后跳回函数体。原 prologue 被拷贝到 trampoline 末尾再 jal 回 `target+8`。
-
-#### 收益
-
-- **永久 hook**（不像断点用一次就消失）
-- **零中断开销**（无需 trap）
-- 适合做 trace、参数 dump、错误注入、性能测量
-
-#### 风险
-
-- 函数 < N 字节直接没法 hook
-- 调用约定边界（leaf function 优化、tail call）
-- 桩 CPU 必须知道指令集 ABI 来生成正确 trampoline——**用 LLVM 的 disassembler 库或 Capstone 做**
-
-#### 简化方案：编译期保留 hook 槽
-
-如果你能改被测构建，更简单的做法：**编译期在每个函数入口插一条 NOP**：
+**实现方案**：编译期给可 hook 的函数入口预留 NOP padding，运行期由桩 CPU 改写为跳转。GCC `patchable_function_entry` 直接产出（**Linux ftrace 就是这么做的**）：
 
 ```c
 #define HOOKABLE __attribute__((patchable_function_entry(8, 0)))
@@ -389,19 +333,14 @@ void DUT_BreakpointPoll(void)
 HOOKABLE int dut_run_model(int id) { ... }
 ```
 
-GCC `patchable_function_entry` 直接产出函数前 N 字节的 NOP padding（未启用时零开销，启用时桩 CPU 改写为跳转）。**Linux ftrace 就是这么做的**。
+未启用时零开销；启用时桩 CPU 改写 NOP 为跳转到 hook trampoline，trampoline 完成桩工作后跳回 `target+N`。
+
+> 运行期反汇编原 prologue 拷贝到 trampoline 末尾的方案（Capstone / LLVM disassembler 集成）需要被测构建配合较少但桩 CPU 复杂度高，本工程**不采用**——优先编译期方案。
 
 ### 3.6 PC 采样性能分析
 
-#### 原理
+桩 CPU 没有"直接读 PC"的通道，方案是 **被测侧 timer ISR 周期写 PC 到共享 buffer**：
 
-桩 CPU 高频读取被测的 PC（程序计数器或近似值），统计落在哪些函数里——**统计意义上的性能 profile**。无需被测侧改动。
-
-#### 难点
-
-我们没有"读 PC"的直接通道。两个变通：
-
-**方案 A：被测侧周期性写 PC（需要 timer ISR）**
 ```c
 /* RISC-V timer ISR：从 mepc CSR 读出被打断时的 PC */
 void timer_isr(void)
@@ -411,39 +350,18 @@ void timer_isr(void)
     g_pc_sample_buf[g_pc_sample_idx++ & MASK] = pc;
 }
 ```
-桩 CPU 后台拉 `g_pc_sample_buf`，按符号表归类后喂 `flamegraph.pl`。
 
-**方案 B：栈追踪式采样**
-桩 CPU 触发一个软件断点 → 在 trap handler 里读栈顶（已有 PC）→ 写 sample 区 → 立刻恢复继续。低频采样（10~100Hz 足够）。
+桩 CPU 后台拉 `g_pc_sample_buf`，按符号表归类后喂 `flamegraph.pl`，得到统计意义的性能 profile。**有 ISR 侵入成本**（每次中断 ~10 cycle），ISR 频率与采样精度权衡按用例需要决定。
 
 ### 3.7 代码覆盖率收集
 
-#### 原理：gcov 注入 + 共享内存
+被测编译时加 `-fprofile-arcs -ftest-coverage`，每条 edge 一个 counter。把 counter 区放进一个固定 section（`.cov_counters`），用 § 3.0 方案 5（section 边界符号）让链接器给出 start/end，桩 CPU teardown 时整段读出，结合 ELF line info 走标准 lcov 工具链生成报告。
 
-被测编译时加 `-fprofile-arcs -ftest-coverage`，每条 edge 一个 counter。**默认 gcov 把数据写文件——我们改成写共享内存区**。
+**收益**：用例集覆盖率报告（首用例验收阈值），几乎零运行时开销（只是 counter 自增）。
 
-```c
-/* 替换 gcov runtime */
-extern uint64_t __llvm_profile_counters_start[];
-extern uint64_t __llvm_profile_counters_end[];
+### 3.8 栈金丝雀
 
-/* 编译期把 counter 区放在共享内存段 */
-__attribute__((section(".cov_counters"))) uint64_t g_cov_counters[N_COUNTERS];
-```
-
-桩 CPU teardown 时整段读出 `.cov_counters`，结合 ELF 的 line info 生成 lcov 报告。
-
-#### 收益
-
-- 用例集 coverage 报告（哪些代码路径被覆盖、哪些没碰）
-- 非常适合首用例验收：覆盖率达到阈值才认为"准入通过"
-- 几乎零运行时开销（只是 counter 自增）
-
-### 3.8 内存红区与栈金丝雀
-
-#### 栈金丝雀
-
-被测固件链接脚本里，每个 task 的栈底部预留 32 字节"金丝雀"：
+被测固件每个 task 的栈底预留 32 字节固定 pattern，桩 CPU 周期性读栈底，pattern 不一致 → 栈溢出告警：
 
 ```c
 __attribute__((section(".canary"))) uint8_t g_canary_pattern[] = {
@@ -455,20 +373,7 @@ void task_init(void) {
 }
 ```
 
-桩 CPU 周期性读栈底，pattern 不一致 → 栈溢出告警。
-
-#### 堆红区（穷人的 ASAN）
-
-```c
-void *my_malloc(size_t size) {
-    void *p = real_malloc(size + 16 + 16);
-    memset(p, 0xFD, 16);                 /* head red zone */
-    memset(p + 16 + size, 0xFD, 16);     /* tail red zone */
-    return p + 16;
-}
-```
-
-桩 CPU 后台扫描已知 alloc 列表，红区被改 → 越界访问告警。
+> 堆红区（穷人 ASAN）需要包装 malloc / free，侵入面较大，本工程**不实现**——堆问题用厂商 RTOS 自带 heap-check 或 valgrind 风格离线工具兜底。
 
 ### 3.9 黑匣子 Crash Beacon
 
@@ -622,19 +527,9 @@ void main_loop(void) {
 
 桩 CPU 写新值 → 写新 version → 被测下次 tick 自动应用。
 
-#### 函数级热补丁（高级）
+#### 函数级热补丁
 
-如果用例需要"打个补丁修改某函数行为，不重启被测"：
-
-```
-1. 桩 CPU 编译 patch.c → patch.elf（同 ABI）
-2. 把 patch 函数写入被测的 .text_patch 区（预留地址段）
-3. 改写原函数首字节为 jump 到 patch 地址（用 § 3.5 的技术）
-4. I-cache flush
-5. 验证：调一次老函数，看是否走到了 patch
-```
-
-类似 Linux **kpatch / livepatch** 思路。生产环境少用，原型测试做注入测试很实用（"patch 让 alloc 失败 50% 概率，看用例是否处理"）。
+思路类似 Linux kpatch / livepatch：单独编译 patch.elf → 写入 `.text_patch` 预留区 → 用 § 3.5 的 hook 改写原函数入口跳到 patch → flush I-cache。**仅用于故障注入场景**（"让 alloc 失败 50% 概率"），实施前需 ISP 团队评估 ABI / 链接段 / cache 一致性细节，本文档不展开。
 
 ---
 
