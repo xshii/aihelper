@@ -6,7 +6,7 @@ requires-python = ">=3.10"
 dependencies = ["libclang>=16", "click>=8.1"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0"]
+dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0", "mypy>=1.8"]
 
 [project.scripts]
 pa-debug = "pa_debug.cli:main"
@@ -35,7 +35,6 @@ select = ["E", "F", "I", "UP", "B"]
 root_package = "pa_debug"
 
 [[tool.importlinter.contracts]]
-name = "组合根唯一:下层不得 import CLI 装配层"
-type = "forbidden"
-source_modules = ["pa_debug.l1_transformer"]
-forbidden_modules = ["pa_debug.cli"]
+name = "单向分层依赖(组合根 cli 在上,l1_transformer 在下)"
+type = "layers"
+layers = ["pa_debug.cli", "pa_debug.l1_transformer"]

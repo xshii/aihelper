@@ -39,7 +39,7 @@ def _indent_of(source_bytes: bytes, offset: int) -> str:
     return " " * (offset - (source_bytes.rfind(b"\n", 0, offset) + 1))
 
 
-def _at_statement_position(source_bytes: bytes, start: int) -> bool:
+def at_statement_position(source_bytes: bytes, start: int) -> bool:
     """宏是否"独立成句":跳过前导空白后,前一个非空白字符是 ; { } 或文件首。
 
     保守起见,表达式位置(如 x = MACRO(...))不插桩,避免生成非法 C(评审 H)。
@@ -92,8 +92,8 @@ def instrument(
     edits: list[Edit] = []
     manifest: list[Site] = []
     for rule in rules:
-        for call in find_macro_calls(tu, path, rule.macro, aliases):
-            if not _at_statement_position(data, call.start_offset):
+        for call in find_macro_calls(tu, data, rule.macro, aliases):
+            if not at_statement_position(data, call.start_offset):
                 continue
             if skip_funcs and _enclosing_function(spans, call.start_offset) in skip_funcs:
                 continue

@@ -12,7 +12,7 @@ def test_extract_one_call(tmp_path, stub_include_args):
     src = tmp_path / "f.c"
     src.write_text(SRC)
     tu = parse_source(str(src), args=stub_include_args)
-    calls = find_macro_calls(tu, str(src), "PA_INSTR_CONV")
+    calls = find_macro_calls(tu, src.read_bytes(), "PA_INSTR_CONV")
     assert len(calls) == 1
     c = calls[0]
     assert c.name == "PA_INSTR_CONV"
@@ -32,6 +32,8 @@ def test_alias_is_matched_as_canonical_macro(tmp_path, stub_include_args):
     src = tmp_path / "f.c"
     src.write_text(ALIAS_SRC)
     tu = parse_source(str(src), args=stub_include_args)
-    calls = find_macro_calls(tu, str(src), "PA_INSTR_CONV", aliases={"PA_CONV": "PA_INSTR_CONV"})
+    calls = find_macro_calls(
+        tu, src.read_bytes(), "PA_INSTR_CONV", aliases={"PA_CONV": "PA_INSTR_CONV"}
+    )
     assert len(calls) == 1
     assert calls[0].args == ["c0", "in", "w", "out", "s1", "s2", "s3"]

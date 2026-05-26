@@ -18,18 +18,12 @@ class MacroCall:
     end_offset: int  # 右括号后一字节
 
 
-def _read_bytes(path: str) -> bytes:
-    with open(path, "rb") as fh:
-        return fh.read()
-
-
 def find_macro_calls(
     tu: ci.TranslationUnit,
-    path: str,
+    data: bytes,
     macro_name: str,
     aliases: dict[str, str] | None = None,
 ) -> list[MacroCall]:
-    data = _read_bytes(path)
     aliases = aliases or {}
     calls: list[MacroCall] = []
     for cur in macro_instantiations(tu):
@@ -38,6 +32,10 @@ def find_macro_calls(
         start = cur.extent.start.offset
         i = data.find(b"(", start)
         if i < 0:
+            continue
+        # 要求 ( 紧跟宏名(其间只允许空白),否则可能是对象式宏 / 抓到远处括号,跳过。
+        name_end = start + len(cur.spelling)
+        if data[name_end:i].strip():
             continue
         depth = 0
         j = i

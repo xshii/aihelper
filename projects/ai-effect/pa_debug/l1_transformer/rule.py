@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
+
+Role = Literal["id", "in", "out", "meta"]
 
 
 @dataclass
 class Arg:
     name: str
-    role: str  # "id" | "in" | "out" | "meta"
+    role: Role
     dtype: str | None = None
     shape_from: str | None = None  # 引用另一参数名作为 shape 来源
 
@@ -23,7 +26,7 @@ class Rule:
     op: str
     args: list[Arg] = field(default_factory=list)
 
-    def _indices(self, role: str) -> list[int]:
+    def _indices(self, role: Role) -> list[int]:
         return [i for i, a in enumerate(self.args) if a.role == role]
 
     def input_indices(self) -> list[int]:

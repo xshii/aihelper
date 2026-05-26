@@ -1,6 +1,6 @@
 import pytest
 
-from pa_debug.l1_transformer.transformer import _at_statement_position
+from pa_debug.l1_transformer.transformer import at_statement_position
 
 # before = 宏名之前的源码片段;guard 判断宏是否"独立成句"
 STATEMENT = [
@@ -22,10 +22,10 @@ NOT_STATEMENT = [
 @pytest.mark.parametrize("before", [b for b, _ in STATEMENT], ids=[d for _, d in STATEMENT])
 def test_statement_position_accepted(before):
     data = (before + "PA_X(a)").encode()
-    assert _at_statement_position(data, len(before.encode())) is True
+    assert at_statement_position(data, len(before.encode())) is True
 
 
 @pytest.mark.parametrize("before", [b for b, _ in NOT_STATEMENT], ids=[d for _, d in NOT_STATEMENT])
 def test_non_statement_position_rejected(before):
     data = (before + "PA_X(a)").encode()
-    assert _at_statement_position(data, len(before.encode())) is False
+    assert at_statement_position(data, len(before.encode())) is False
