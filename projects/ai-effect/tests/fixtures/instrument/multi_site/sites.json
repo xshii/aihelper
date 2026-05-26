@@ -1,0 +1,18 @@
+[
+  {
+    "site_id": "CONV@input.c:4",
+    "op": "CONV",
+    "macro": "PA_INSTR_CONV",
+    "file": "input.c",
+    "line": 4,
+    "args": ["c0", "x", "y", "z", "s1", "s2", "s3"]
+  },
+  {
+    "site_id": "CONV@input.c:8",
+    "op": "CONV",
+    "macro": "PA_INSTR_CONV",
+    "file": "input.c",
+    "line": 8,
+    "args": ["c1", "x", "y", "z", "s1", "s2", "s3"]
+  }
+]

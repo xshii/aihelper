@@ -1,0 +1,11 @@
+name: ai-effect
+type: demo
+description: 算子调试与对照工具 (pa-debug) — Clang AST 源到源插桩 + 运行时 hook + 离线 paired per-op 对照,定位首个发散算子
+language: python
+tags: [libclang, clang-ast, instrumentation, source-to-source, accelerator, debugging, numpy, reference, trace, diff]
+difficulty: advanced
+status: experimental
+created: 2026-05-26
+
+run: pa-debug --help
+test: pytest -q tests/

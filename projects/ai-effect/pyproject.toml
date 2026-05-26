@@ -1,0 +1,41 @@
+[project]
+name = "pa-debug"
+version = "0.0.1"
+description = "算子调试与对照工具 (L1 transformer)"
+requires-python = ">=3.10"
+dependencies = ["libclang>=16", "click>=8.1"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "import-linter>=2.0"]
+
+[project.scripts]
+pa-debug = "pa_debug.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["pa_debug*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: 需要 libclang / 端到端的集成测试",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+# import-linter:强制 NFR-4 单向依赖。随 L2/L3/L4 落地逐步扩展 layers 契约。
+[tool.importlinter]
+root_package = "pa_debug"
+
+[[tool.importlinter.contracts]]
+name = "组合根唯一:下层不得 import CLI 装配层"
+type = "forbidden"
+source_modules = ["pa_debug.l1_transformer"]
+forbidden_modules = ["pa_debug.cli"]
