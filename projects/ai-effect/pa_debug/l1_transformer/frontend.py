@@ -8,9 +8,12 @@ from typing import NamedTuple
 
 import clang.cindex as ci
 
+from .arg_splitter import extract_words
 from .config import DiscoveryConfig
 from .discovery import is_intrinsic
-from .model import Arg, Call, FieldSpec
+from .model import Arg, Call, FieldSpec, MacroCall
+
+_WS = (b" ", b"\t", b"\n", b"\r")
 
 _UNSIGNED = {
     ci.TypeKind.UCHAR,
@@ -58,9 +61,9 @@ def parse_source(path: str, args: list[str] | None = None) -> ci.TranslationUnit
 
 
 def function_spans(tu: ci.TranslationUnit, path: str) -> list[FuncSpan]:
-    """主文件内的函数**定义**的源码区间(供 blacklist 判断宏属于哪个函数)。
+    """主文件内函数**定义**的源码区间(供判断某调用/宏属于哪个外层函数)。
 
-    只取有函数体的定义;函数原型(如 stub header 里的声明)不计入。
+    只取有函数体的定义;纯声明(函数原型)不计入。
     """
     target = Path(path).name
     spans: list[FuncSpan] = []
@@ -136,4 +139,21 @@ def iter_calls(tu: ci.TranslationUnit, data: bytes, cfg: DiscoveryConfig) -> lis
                 args=args,
             )
         )
+    return calls
+
+
+def iter_macro_calls(tu: ci.TranslationUnit, data: bytes, names: list[str]) -> list[MacroCall]:
+    """所有命中清单的硬件宏调用(在任意 inline 函数体内,含嵌套辅助),按源码顺序。"""
+    name_set = set(names)
+    calls: list[MacroCall] = []
+    for cur in tu.cursor.walk_preorder():
+        if cur.kind != ci.CursorKind.MACRO_INSTANTIATION or cur.spelling not in name_set:
+            continue
+        start = cur.extent.start.offset
+        j = start + len(cur.spelling)
+        while j < len(data) and data[j : j + 1] in _WS:
+            j += 1
+        if data[j : j + 1] != b"(":  # 对象式用法(非函数调用),跳过
+            continue
+        calls.append(MacroCall(name=cur.spelling, start=start, words=extract_words(data, start)))
     return calls

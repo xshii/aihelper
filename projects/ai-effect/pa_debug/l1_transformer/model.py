@@ -34,6 +34,13 @@ class Call:
 
 
 @dataclass
+class MacroCall:
+    name: str  # 硬件宏名
+    start: int  # 宏名起始字节
+    words: list[str] = field(default_factory=list)  # 各 word 的源码文本(原始,不解析语义)
+
+
+@dataclass
 class SiteArg:
     name: str
     role: Role

@@ -1,6 +1,11 @@
 """dump 代码生成 + 语句定位(纯函数,验证精确输出)。"""
 
-from pa_debug.l1_transformer.codegen import indent_of, render_dump_call, statement_start
+from pa_debug.l1_transformer.codegen import (
+    indent_of,
+    render_dump_call,
+    render_dump_macro,
+    statement_start,
+)
 from pa_debug.l1_transformer.config import DiscoveryConfig
 from pa_debug.l1_transformer.model import Arg, FieldSpec
 
@@ -19,6 +24,23 @@ def test_render_dump_call_struct_opaque_meta():
         '\\"fn\\":\\"layer3\\",\\"h\\":{\\"opid\\":%u,\\"aopid\\":%u},'
         '\\"in\\":\\"%p\\",\\"ish\\":%d}\\n", '
         "(&h)->opid, (&h)->aopid, (void*)(in_buf), 56);"
+    )
+
+
+def test_render_dump_macro_dumps_raw_words_no_opid():
+    out = render_dump_macro("hac_3r", ["MK_W0(h->opid)", "ish", "0"], CFG)
+    assert out == (
+        'if (pa_dump_enabled) printf("{\\"kind\\":\\"macro\\",\\"macro\\":\\"hac_3r\\",'
+        '\\"words\\":[%u,%u,%u]}\\n", '
+        "(unsigned)(MK_W0(h->opid)), (unsigned)(ish), (unsigned)(0));"
+    )
+
+
+def test_render_dump_macro_no_words():
+    out = render_dump_macro("barrier", [], CFG)
+    assert out == (
+        'if (pa_dump_enabled) printf("{\\"kind\\":\\"macro\\",\\"macro\\":\\"barrier\\",'
+        '\\"words\\":[]}\\n");'
     )
 
 

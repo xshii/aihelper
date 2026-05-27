@@ -1,17 +1,18 @@
-"""编排:解析 → 发现 intrinsic 调用 → 生成 dump 语句 Edit → 倒序应用 → 输出 .c + 站点清单。
+"""编排:解析 → 发现调用/硬件宏 → 生成受门控的 dump 语句 Edit → 倒序应用 → 输出 + 站点清单。
 
-V0 first-level:在每个 intrinsic 调用所在语句前插一条 `if (flag) print(...)`,dump
-名字/父函数/结构体展开字段/指针/标量,落一行 JSONL。第二级(宏)与离线对照不在本里程碑。
+- instrument(第一级):用户 .c 的 intrinsic 调用点,dump 名字/父函数/结构体字段/指针/标量。
+- instrument_macros(第二级):头文件 inline 体内的硬件宏,dump 原始 word(不识别 opid)。
+两者都在所在语句前插一条 `if (pa_dump_enabled) print(...)`,落一行 JSONL。离线对照(L3)另算。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from .codegen import indent_of, render_dump_call, statement_start
+from .codegen import indent_of, render_dump_call, render_dump_macro, statement_start
 from .config import DiscoveryConfig
 from .edits import Edit, apply_edits
-from .frontend import FuncSpan, function_spans, iter_calls, parse_source
+from .frontend import FuncSpan, function_spans, iter_calls, iter_macro_calls, parse_source
 from .model import Site, SiteArg
 
 
@@ -52,6 +53,42 @@ def instrument(
                 file=filename,
                 line=_line_of(data, call.start),
                 args=[SiteArg(a.name, a.role) for a in call.args],
+            )
+        )
+
+    result = apply_edits(data.decode(), edits)
+    if sites:
+        result = f"extern int {cfg.dump_flag};\n{result}"
+    return result, sites
+
+
+def instrument_macros(
+    path: str,
+    cfg: DiscoveryConfig,
+    clang_args: list[str] | None = None,
+) -> tuple[str, list[Site]]:
+    """第二级:对头文件 inline 体内的硬件宏插桩,dump 原始 word(不识别 opid)。"""
+    data = Path(path).read_bytes()
+    filename = Path(path).name
+    tu = parse_source(path, args=["-x", "c", *(clang_args or [])])
+    spans = function_spans(tu, path)
+
+    edits: list[Edit] = []
+    sites: list[Site] = []
+    for mc in iter_macro_calls(tu, data, cfg.hardware_macros):
+        fn = _enclosing_function(spans, mc.start)
+        stmt = statement_start(data, mc.start)
+        indent = indent_of(data, stmt)
+        dump = render_dump_macro(mc.name, mc.words, cfg)
+        edits.append(Edit(offset=stmt, length=0, replacement=f"{dump}\n{indent}"))
+        sites.append(
+            Site(
+                kind="macro",
+                op=mc.name,
+                fn=fn,
+                file=filename,
+                line=_line_of(data, mc.start),
+                args=[SiteArg(f"word{i}", "meta") for i in range(len(mc.words))],
             )
         )
 

@@ -1,0 +1,25 @@
+[
+  {
+    "kind": "macro",
+    "op": "hac_3r",
+    "fn": "pa_conv",
+    "file": "input.h",
+    "line": 5,
+    "args": [
+      {"name": "word0", "role": "meta"},
+      {"name": "word1", "role": "meta"},
+      {"name": "word2", "role": "meta"}
+    ]
+  },
+  {
+    "kind": "macro",
+    "op": "hac_2r",
+    "fn": "pa_conv",
+    "file": "input.h",
+    "line": 6,
+    "args": [
+      {"name": "word0", "role": "meta"},
+      {"name": "word1", "role": "meta"}
+    ]
+  }
+]

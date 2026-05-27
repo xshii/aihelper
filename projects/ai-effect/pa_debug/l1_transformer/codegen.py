@@ -30,6 +30,16 @@ def render_dump_call(op: str, fn: str | None, args: list[Arg], cfg: DiscoveryCon
     return f"{prefix}{body});"
 
 
+def render_dump_macro(name: str, words: list[str], cfg: DiscoveryConfig) -> str:
+    """一条 dump 原始 word 的 print。第二级不识别 opid(透传值),只落 word 数值。"""
+    specs = ",".join("%u" for _ in words)
+    content = f'{{\\"kind\\":\\"macro\\",\\"macro\\":\\"{name}\\",\\"words\\":[{specs}]}}\\n'
+    prefix = f'if ({cfg.dump_flag}) {cfg.print_fn}("{content}"'
+    values = ", ".join(f"(unsigned)({w})" for w in words)
+    body = f", {values}" if values else ""
+    return f"{prefix}{body});"
+
+
 def statement_start(data: bytes, call_start: int) -> int:
     """包含该调用的语句的首个非空白字符偏移(向前找到 ;{} 边界,再跳过空白)。"""
     i = call_start - 1

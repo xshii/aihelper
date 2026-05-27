@@ -13,5 +13,6 @@ class DiscoveryConfig:
     allow: list[str] = field(default_factory=list)  # 名字白名单(正则;空=全放行)
     deny: list[str] = field(default_factory=list)  # 名字黑名单(正则;优先于白名单)
     struct_field_deny: dict[str, list[str]] = field(default_factory=dict)  # 结构体类型→不读的字段
+    hardware_macros: list[str] = field(default_factory=list)  # 第二级要插桩的硬件宏名
     print_fn: str = "printf"  # dump 用的 printf 风格函数名(目标机换平台函数名)
     dump_flag: str = "pa_dump_enabled"  # 运行时全局开关变量名
