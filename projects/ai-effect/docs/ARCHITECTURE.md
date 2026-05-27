@@ -275,11 +275,18 @@ report: { format: [json, html], output: ./reports/ }
 
 CLI 入口,串起 pipeline。
 
-- `pa-debug instrument <src>`:跑 L1,产出插桩后源码 + 站点清单
+- `pa-debug instrument <src>`:跑 L1,**就地改写源码**插入 hook;站点清单按源文件写到 `--meta-dir/<src>.sites.json`(默认 `.pa-debug/`,每文件一份避免覆盖)
 - `pa-debug build`:编译插桩版本(调自研编译器)
 - `pa-debug run`:跑硬件,收集 trace
 - `pa-debug diff <hw_trace>`:跑 L3(内部调 reference),产出报告
 - `pa-debug full <model>`:一条龙
+
+**就地插桩 + git 安全(FR-5.4/5.5)**:instrument 改写源码本身,用 **git 作为撤销**。
+工作流:`git commit(干净)→ instrument(就地)→ 常规构建+跑 → git checkout 还原`。两道防护:
+1. **git 守卫**(`git_guard.ensure_clean`):插桩前查目标文件 git 状态,脏 / 未跟踪 / 非仓库则中止;`--allow-dirty` 逃生。
+2. **幂等 marker**:已插桩文件头部写哨兵注释,再次插桩直接拒绝(覆盖 `--allow-dirty` 与误提交)。
+
+marker 的加/查在 CLI(就地写入层),transformer 纯函数不碰 —— 因此 L1 的 fixture 不受影响。
 
 配置文件 `pa-debug.yaml`:
 
