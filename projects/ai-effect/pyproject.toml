@@ -35,6 +35,6 @@ select = ["E", "F", "I", "UP", "B"]
 root_package = "pa_debug"
 
 [[tool.importlinter.contracts]]
-name = "单向分层依赖(组合根 cli 在上,l1_transformer 在下)"
+name = "单向分层依赖(组合根 cli 在上,l1/l3 同层独立)"
 type = "layers"
-layers = ["pa_debug.cli", "pa_debug.l1_transformer"]
+layers = ["pa_debug.cli", "pa_debug.l1_transformer | pa_debug.l3_analyzer"]
