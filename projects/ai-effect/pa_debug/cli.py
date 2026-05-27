@@ -104,7 +104,9 @@ def instrument(
     type=click.Path(exists=True),
     help="clang include 目录",
 )
-@click.option("--macro", "macros", multiple=True, required=True, help="硬件宏名(可多次)")
+@click.option(
+    "--macro", "macros", multiple=True, required=True, help="硬件宏名/正则(可多次,如 hac_\\d+r)"
+)
 @click.option("--print-fn", default="printf", help="dump 用的 printf 风格函数名")
 @click.option("--meta-dir", type=click.Path(), default="./.pa-debug", help="站点清单输出目录")
 @click.option("--allow-dirty", is_flag=True, help="跳过 git 干净检查(不安全)")

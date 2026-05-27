@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import NamedTuple
 
@@ -142,12 +143,17 @@ def iter_calls(tu: ci.TranslationUnit, data: bytes, cfg: DiscoveryConfig) -> lis
     return calls
 
 
-def iter_macro_calls(tu: ci.TranslationUnit, data: bytes, names: list[str]) -> list[MacroCall]:
-    """所有命中清单的硬件宏调用(在任意 inline 函数体内,含嵌套辅助),按源码顺序。"""
-    name_set = set(names)
+def iter_macro_calls(tu: ci.TranslationUnit, data: bytes, patterns: list[str]) -> list[MacroCall]:
+    """命中清单的硬件宏调用(在任意 inline 函数体内,含嵌套辅助),按源码顺序。
+
+    patterns 是**正则**(fullmatch),一条 `hac_\\d+r` 即可覆盖整个 hac_Nr 家族;字面名也是合法正则。
+    """
+    matchers = [re.compile(p) for p in patterns]
     calls: list[MacroCall] = []
     for cur in tu.cursor.walk_preorder():
-        if cur.kind != ci.CursorKind.MACRO_INSTANTIATION or cur.spelling not in name_set:
+        if cur.kind != ci.CursorKind.MACRO_INSTANTIATION:
+            continue
+        if not any(m.fullmatch(cur.spelling) for m in matchers):
             continue
         start = cur.extent.start.offset
         j = start + len(cur.spelling)

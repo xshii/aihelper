@@ -39,3 +39,10 @@ def test_ignores_macros_not_in_list(tmp_path):
     tu, data = _parse(tmp_path)
     calls = iter_macro_calls(tu, data, ["hac_2r"])
     assert [c.name for c in calls] == ["hac_2r"]  # MK_W0 / hac_3r 不在清单
+
+
+def test_matches_macro_family_by_regex(tmp_path):
+    # hac_Nr 家族很多,按 word 数区分 —— 用一条正则覆盖,不逐个列
+    tu, data = _parse(tmp_path)
+    calls = iter_macro_calls(tu, data, [r"hac_\d+r"])
+    assert [c.name for c in calls] == ["hac_3r", "hac_2r"]  # MK_W0 不匹配
