@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.14, `libclang`(PyPI,绑定 + 内置 libclang.dylib),`pytest`,`click`(CLI)。
 
-**范围边界(对齐 ADR 0001):**
+**范围边界(对齐 ARCHITECTURE §3):**
 - 只 `DUMP_AND_RUN`,无 SKIP → 生成的 hook 调用**不需要 `if` 包裹**,纯前后插入即可。
 - 只处理**语句位置**的宏(独立成句);表达式位置的宏进黑名单(评审 H)。
 - 生成的 hook 调用采用**简化可读形式**(`pa_hook_before("CONV", site_id, in, w, out)`),

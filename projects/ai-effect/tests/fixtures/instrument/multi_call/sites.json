@@ -1,0 +1,27 @@
+[
+  {
+    "kind": "call",
+    "op": "pa_load",
+    "fn": "layer3",
+    "file": "input.c",
+    "line": 5,
+    "args": [
+      {"name": "h", "role": "struct"},
+      {"name": "dst", "role": "opaque"},
+      {"name": "n", "role": "meta"}
+    ]
+  },
+  {
+    "kind": "call",
+    "op": "pa_conv",
+    "fn": "layer3",
+    "file": "input.c",
+    "line": 6,
+    "args": [
+      {"name": "h", "role": "struct"},
+      {"name": "in", "role": "opaque"},
+      {"name": "out", "role": "opaque"},
+      {"name": "n", "role": "meta"}
+    ]
+  }
+]

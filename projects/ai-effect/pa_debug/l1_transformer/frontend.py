@@ -3,11 +3,23 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple
 
 import clang.cindex as ci
+
+from .config import DiscoveryConfig
+from .discovery import is_intrinsic
+from .model import Arg, Call, FieldSpec
+
+_UNSIGNED = {
+    ci.TypeKind.UCHAR,
+    ci.TypeKind.USHORT,
+    ci.TypeKind.UINT,
+    ci.TypeKind.ULONG,
+    ci.TypeKind.ULONGLONG,
+}
+_FLOATING = {ci.TypeKind.FLOAT, ci.TypeKind.DOUBLE, ci.TypeKind.LONGDOUBLE}
 
 
 class FuncSpan(NamedTuple):
@@ -45,12 +57,6 @@ def parse_source(path: str, args: list[str] | None = None) -> ci.TranslationUnit
     )
 
 
-def macro_instantiations(tu: ci.TranslationUnit) -> Iterator[ci.Cursor]:
-    for cur in tu.cursor.walk_preorder():
-        if cur.kind == ci.CursorKind.MACRO_INSTANTIATION:
-            yield cur
-
-
 def function_spans(tu: ci.TranslationUnit, path: str) -> list[FuncSpan]:
     """主文件内的函数**定义**的源码区间(供 blacklist 判断宏属于哪个函数)。
 
@@ -66,3 +72,68 @@ def function_spans(tu: ci.TranslationUnit, path: str) -> list[FuncSpan]:
             continue
         spans.append(FuncSpan(cur.spelling, extent.start.offset, extent.end.offset))
     return spans
+
+
+def _fmt_for(t: ci.Type) -> str:
+    kind = t.get_canonical().kind
+    if kind == ci.TypeKind.POINTER:
+        return "%p"
+    if kind in _FLOATING:
+        return "%f"
+    if kind in _UNSIGNED:
+        return "%u"
+    return "%d"
+
+
+def _fields(record: ci.Type) -> list[FieldSpec]:
+    decl = record.get_declaration()
+    return [
+        FieldSpec(f.spelling, _fmt_for(f.type))
+        for f in decl.get_children()
+        if f.kind == ci.CursorKind.FIELD_DECL
+    ]
+
+
+def _arg_of(name: str, expr: str, ptype: ci.Type) -> Arg:
+    can = ptype.get_canonical()
+    if can.kind == ci.TypeKind.POINTER:
+        pointee = can.get_pointee().get_canonical()
+        if pointee.kind == ci.TypeKind.RECORD:
+            return Arg(name, expr, "struct", fields=_fields(pointee), deref="->")
+        return Arg(name, expr, "opaque", fmt="%p")
+    if can.kind == ci.TypeKind.RECORD:
+        return Arg(name, expr, "struct", fields=_fields(can), deref=".")
+    return Arg(name, expr, "meta", fmt=_fmt_for(ptype))
+
+
+def _arg_text(data: bytes, cur: ci.Cursor) -> str:
+    extent = cur.extent
+    return data[extent.start.offset : extent.end.offset].decode()
+
+
+def iter_calls(tu: ci.TranslationUnit, data: bytes, cfg: DiscoveryConfig) -> list[Call]:
+    """主文件里所有 intrinsic 调用(经发现过滤),参数角色由类型推断。"""
+    calls: list[Call] = []
+    for cur in tu.cursor.walk_preorder():
+        if cur.kind != ci.CursorKind.CALL_EXPR:
+            continue
+        ref = cur.referenced
+        if ref is None:
+            continue
+        decl_file = ref.location.file.name if ref.location.file else None
+        if not is_intrinsic(decl_file, ref.spelling, cfg):
+            continue
+        args = [
+            _arg_of(param.spelling, _arg_text(data, arg), param.type)
+            for arg, param in zip(cur.get_arguments(), ref.get_arguments(), strict=False)
+        ]
+        calls.append(
+            Call(
+                op=ref.spelling,
+                decl_file=decl_file,
+                start=cur.extent.start.offset,
+                end=cur.extent.end.offset,
+                args=args,
+            )
+        )
+    return calls

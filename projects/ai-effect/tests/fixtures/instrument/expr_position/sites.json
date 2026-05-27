@@ -1,0 +1,12 @@
+[
+  {
+    "kind": "call",
+    "op": "pa_query",
+    "fn": "layer3",
+    "file": "input.c",
+    "line": 4,
+    "args": [
+      {"name": "h", "role": "struct"}
+    ]
+  }
+]

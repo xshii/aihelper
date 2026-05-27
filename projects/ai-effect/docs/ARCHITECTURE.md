@@ -1,8 +1,7 @@
 # 算子调试与对照工具 — 架构设计
 
-> 本文已纳入评审修订(2026-05-26)。三项承重决策见
-> [adr/0001-paired-per-op-and-v0-scope.md](adr/0001-paired-per-op-and-v0-scope.md)。
-> 与初稿的主要差异在 §3 用方框标出。
+> 本文已纳入评审修订(2026-05-26)。三项承重决策(A/B/C)见 §3,用方框标出。
+> L1 的 inline intrinsic 设计见 [specs/0001-l1-inline-intrinsic-redesign.md](specs/0001-l1-inline-intrinsic-redesign.md)。
 
 ## 1. 概述
 

@@ -1,4 +1,4 @@
-"""pa-debug CLI。V0 只提供 instrument 子命令。"""
+"""pa-debug CLI。V0 只提供 instrument 子命令(就地改写 + git 守卫 + 幂等 marker)。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 
 from .git_guard import DirtyWorkingTree, ensure_clean
-from .l1_transformer.rules_loader import load_aliases, load_blacklist, load_rules
+from .l1_transformer.config import DiscoveryConfig
 from .l1_transformer.transformer import instrument as _instrument
 
 # 幂等哨兵:已插桩文件头部写这行,再次运行直接拒绝,防重复插桩(覆盖 --allow-dirty / 误提交)。
@@ -23,11 +23,36 @@ def main() -> None:
 
 @main.command()
 @click.argument("src", type=click.Path(exists=True))
-@click.option("--stub-dir", type=click.Path(exists=True), required=True, help="stub header 目录")
-@click.option("--rules-dir", type=click.Path(exists=True), default="./rules", help="规则目录")
+@click.option(
+    "-I",
+    "--include",
+    "includes",
+    multiple=True,
+    type=click.Path(exists=True),
+    help="clang include 目录",
+)
+@click.option(
+    "--intrinsic-header",
+    "intrinsic_headers",
+    multiple=True,
+    required=True,
+    help="算 intrinsic 的头文件名",
+)
+@click.option("--allow", multiple=True, help="名字白名单(正则)")
+@click.option("--deny", multiple=True, help="名字黑名单(正则)")
+@click.option("--print-fn", default="printf", help="dump 用的 printf 风格函数名")
 @click.option("--meta-dir", type=click.Path(), default="./.pa-debug", help="站点清单输出目录")
 @click.option("--allow-dirty", is_flag=True, help="跳过 git 干净检查(不安全)")
-def instrument(src: str, stub_dir: str, rules_dir: str, meta_dir: str, allow_dirty: bool) -> None:
+def instrument(
+    src: str,
+    includes: tuple[str, ...],
+    intrinsic_headers: tuple[str, ...],
+    allow: tuple[str, ...],
+    deny: tuple[str, ...],
+    print_fn: str,
+    meta_dir: str,
+    allow_dirty: bool,
+) -> None:
     """就地对 SRC 插桩(git 当撤销),站点清单写到 meta-dir。"""
     if INSTRUMENTED_MARK in Path(src).read_text():
         raise click.ClickException(f"{src} 已插桩;先 git checkout {src} 还原后再运行")
@@ -37,12 +62,14 @@ def instrument(src: str, stub_dir: str, rules_dir: str, meta_dir: str, allow_dir
         except DirtyWorkingTree as e:
             raise click.ClickException(str(e)) from e
 
-    rules = load_rules(rules_dir)
-    aliases = load_aliases(rules_dir)
-    blacklist = load_blacklist(rules_dir)
-    out_c, manifest = _instrument(
-        src, rules=rules, clang_args=["-I", stub_dir], aliases=aliases, blacklist=blacklist
+    cfg = DiscoveryConfig(
+        intrinsic_headers=list(intrinsic_headers),
+        allow=list(allow),
+        deny=list(deny),
+        print_fn=print_fn,
     )
+    clang_args = [arg for inc in includes for arg in ("-I", str(inc))]
+    out_c, manifest = _instrument(src, cfg, clang_args=clang_args)
 
     Path(src).write_text(INSTRUMENTED_MARK + "\n" + out_c)
     meta = Path(meta_dir)
