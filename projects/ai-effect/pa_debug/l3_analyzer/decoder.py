@@ -2,28 +2,10 @@
 
 from __future__ import annotations
 
+from .bits import BitReader
 from .model import DecodeError, OpRecord
 from .resolver import BlobResolver
 from .schema import Atom, Dispatch, I, Ref, U
-
-
-class _BitReader:
-    """word 流拉平成一个大整数,LSB-first:word[0] 在低位。"""
-
-    def __init__(self, words: list[int], word_bits: int) -> None:
-        self._value = 0
-        mask = (1 << word_bits) - 1
-        for k, w in enumerate(words):
-            self._value |= (w & mask) << (k * word_bits)
-        self._total = len(words) * word_bits
-        self._pos = 0
-
-    def read(self, n: int) -> int:
-        if self._pos + n > self._total:
-            raise DecodeError(f"word 流不足:需 {n} 位,剩 {self._total - self._pos} 位")
-        value = (self._value >> self._pos) & ((1 << n) - 1)
-        self._pos += n
-        return value
 
 
 def _dig(fields: dict, path: str) -> object:
@@ -36,7 +18,7 @@ def _dig(fields: dict, path: str) -> object:
 
 
 def _decode_field(
-    ftype: object, reader: _BitReader, resolver: BlobResolver | None, word_bits: int
+    ftype: object, reader: BitReader, resolver: BlobResolver | None, word_bits: int
 ) -> int | dict:
     match ftype:
         case U(bits=b):
@@ -48,14 +30,14 @@ def _decode_field(
             if resolver is None:
                 raise DecodeError("遇到 REF 字段但未注入 resolver")
             addr = reader.read(b)
-            sub_reader = _BitReader(resolver.fetch(blob, addr), word_bits)
+            sub_reader = BitReader(resolver.fetch(blob, addr), word_bits)
             return {a.name: _decode_atom(a, sub_reader, resolver, word_bits) for a in sub.atoms}
         case _:
             raise DecodeError(f"不支持的字段类型: {ftype!r}")
 
 
 def _decode_atom(
-    atom: Atom, reader: _BitReader, resolver: BlobResolver | None, word_bits: int
+    atom: Atom, reader: BitReader, resolver: BlobResolver | None, word_bits: int
 ) -> dict:
     return {f.name: _decode_field(f.type, reader, resolver, word_bits) for f in atom.fields}
 
@@ -71,6 +53,6 @@ def decode_op(
         raise DecodeError(f"未知 op-kind: {kind!r}")
     layout = dispatch.table[kind]
     words = [w for m in op.macros for w in m.words]
-    reader = _BitReader(words, word_bits)
+    reader = BitReader(words, word_bits)
     config = {a.name: _decode_atom(a, reader, resolver, word_bits) for a in layout.atoms}
     return {"op": op.op, "fn": op.fn, "fields": op.fields, "config": config}
